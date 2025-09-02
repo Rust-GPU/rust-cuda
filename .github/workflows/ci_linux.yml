@@ -158,6 +158,13 @@ jobs:
             image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12:latest"
             runner: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # random command that forces rustup to install stuff in rust-toolchain
+      - name: Install rust-toolchain
+        run: cargo version
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -172,7 +179,8 @@ jobs:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: |
-          echo "Stubbed out"
+          export PATH="$PATH:$GITHUB_WORKSPACE/.ci"
+          cargo --config .ci/config.toml test --workspace --exclude "optix*" --exclude "path_tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*" --exclude "blastoff"
   compiletest:
     name: Compile tests
     runs-on: ubuntu-latest
