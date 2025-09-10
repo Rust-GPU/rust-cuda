@@ -449,5 +449,11 @@ impl<'ll> CodegenCx<'ll, '_> {
             "__nv_ynf",
             fn(t_i32, t_f32) -> t_f32
         );
+        // Address space checks
+        ifn!(map, "llvm.nvvm.isspacep.const", fn(i8p) -> i1);
+        ifn!(map, "llvm.nvvm.isspacep.global", fn(i8p) -> i1);
+        ifn!(map, "llvm.nvvm.isspacep.local", fn(i8p) -> i1);
+        ifn!(map, "llvm.nvvm.isspacep.shared", fn(i8p) -> i1);
+  
     }
 }

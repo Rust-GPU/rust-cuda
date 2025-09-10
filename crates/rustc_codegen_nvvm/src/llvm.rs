@@ -16,7 +16,7 @@
 // but likely will use in the future, so we ignore any unused functions
 // in case we need them in the future for things like debug info or LTO.
 #![allow(dead_code)]
-
+use rustc_codegen_ssa::common::AtomicRmwBinOp;
 use libc::{c_char, c_uint, c_void, size_t};
 use libc::{c_int, c_ulonglong};
 use std::ffi::{CStr, CString};
@@ -1947,4 +1947,50 @@ unsafe extern "C" {
     pub(crate) fn LLVMRustAddDereferenceableOrNullAttr(Fn: &Value, index: c_uint, bytes: u64);
 
     pub(crate) fn LLVMRustPositionBuilderAtStart<'a>(B: &Builder<'a>, BB: &'a BasicBlock);
+    // Atomics
+    pub fn LLVMRustBuildAtomicCmpXchg<'a>(
+        B: &Builder<'a>,
+        LHS: &Value,
+        CMP: &Value,
+        RHS: &Value,
+        Order: AtomicOrdering,
+        FailureOrder: AtomicOrdering,
+        Weak: Bool,
+    ) -> &'a Value;
+
+    pub fn LLVMBuildAtomicRMW<'a>(
+        B: &Builder<'a>,
+        Op: AtomicRmwBinOp,
+        LHS: &Value,
+        RHS: &Value,
+        Order: AtomicOrdering,
+        SingleThreaded: Bool,
+    ) -> &'a Value;
+}
+/// LLVMAtomicOrdering
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub(crate) enum AtomicOrdering {
+    #[allow(dead_code)]
+    NotAtomic = 0,
+    #[allow(dead_code)]
+    Unordered = 1,
+    Monotonic = 2,
+    // Consume = 3,  // Not specified yet.
+    Acquire = 4,
+    Release = 5,
+    AcquireRelease = 6,
+    SequentiallyConsistent = 7,
+}
+impl AtomicOrdering {
+    pub(crate) fn from_generic(ao: rustc_middle::ty::AtomicOrdering) -> Self {
+        use rustc_middle::ty::AtomicOrdering as Common;
+        match ao {
+            Common::Relaxed => Self::Monotonic,
+            Common::Acquire => Self::Acquire,
+            Common::Release => Self::Release,
+            Common::AcqRel => Self::AcquireRelease,
+            Common::SeqCst => Self::SequentiallyConsistent,
+        }
+    }
 }

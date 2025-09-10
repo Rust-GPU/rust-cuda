@@ -1134,16 +1134,64 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     // Atomic Operations
     fn atomic_cmpxchg(
         &mut self,
-        _dst: &'ll Value,
-        _cmp: &'ll Value,
-        _src: &'ll Value,
-        _order: AtomicOrdering,
-        _failure_order: AtomicOrdering,
-        _weak: bool,
+        dst: &'ll Value,
+        cmp: &'ll Value,
+        src: &'ll Value,
+        order: AtomicOrdering,
+        failure_order: AtomicOrdering,
+        weak: bool,
     ) -> (&'ll Value, &'ll Value) {
-        // allowed but only for some things and with restrictions
-        // https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html#cmpxchg-instruction
-        self.fatal("atomic cmpxchg is not supported")
+        // LLVM verifier rejects cases where the `failure_order` is stronger than `order`
+        match (order,failure_order){
+            (AtomicOrdering::SeqCst, _)=>(),
+            (_, AtomicOrdering::Relaxed)=>(),
+            (AtomicOrdering::Release, AtomicOrdering::Release) |  (AtomicOrdering::Release, AtomicOrdering::Acquire) | (AtomicOrdering::Acquire, AtomicOrdering::Acquire)=>(),
+            (AtomicOrdering::AcqRel,AtomicOrdering::Acquire)  => (),
+            (AtomicOrdering::Relaxed, _) | (_, AtomicOrdering::Release | AtomicOrdering::AcqRel | AtomicOrdering::SeqCst)=>{
+                // Invalid cmpxchg - `failure_order` is stronger than `order`! So, we abort.
+                self.abort();
+                return (self.const_undef(self.val_ty(cmp)),self.const_undef(self.type_i1()));
+            }
+        };
+        let res = self.atomic_op(
+            dst,
+             |builder, dst| {
+                // We are in a supported address space - just use ordinary atomics
+                unsafe {
+                    llvm::LLVMRustBuildAtomicCmpXchg(
+                        builder.llbuilder,
+                        dst,
+                        cmp,
+                        src,
+                       crate::llvm::AtomicOrdering::from_generic( order),
+                        crate::llvm::AtomicOrdering::from_generic(failure_order),
+                        weak as u32,
+                    )
+                }
+            },
+         |builder, dst| {
+                // Local space is only accessible to the current thread.
+                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store. 
+                let load:&'ll Value = unsafe{ llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
+                let compare = builder.icmp(IntPredicate::IntEQ, load, cmp);
+                // We can do something smart & branchless here:
+                // We select either the current value(if the comparison fails), or a new value. 
+                // We then *undconditionally* write that back to local memory(which is very, very cheap).
+                // TODO: measure if this has a positive impact, or if we should just use more blocks, and conditional writes.
+                let value = builder.select(compare, src, load);
+                unsafe { llvm::LLVMBuildStore(builder.llbuilder, value, dst)};
+                let res_type = builder.type_struct(&[builder.val_ty(cmp),builder.type_ix(1)], false);
+                // We pack the result, to match the behaviour of proper atomics / emulated thread-local atomics. 
+                let res = builder.const_undef(res_type);
+                let res = builder.insert_value(res, load, 0);
+                let res = builder.insert_value(res, compare, 1);
+                res
+            },
+        );
+        // Unpack the result
+        let val = self.extract_value(res, 0);
+        let success = self.extract_value(res, 1);
+        (val, success)
     }
     fn atomic_rmw(
         &mut self,
@@ -1607,5 +1655,100 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         unsafe {
             llvm::LLVMAddIncoming(phi, &val, &bb, 1);
         }
+    }
+}
+impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
+    /// Implements a standard atomic, using LLVM intrinsics(in `atomic_supported`, if `dst` is in a supported address space)
+    /// or emulation(with `emulate_local`, if `dst` points to a thread-local address space).
+    fn atomic_op(
+        &mut self,
+        dst: &'ll Value,
+        atomic_supported: impl FnOnce(&mut Builder<'a,'ll ,'tcx>, &'ll Value) -> &'ll Value,
+        emulate_local: impl FnOnce(&mut Builder<'a,'ll ,'tcx>, &'ll Value) -> &'ll Value,
+    ) -> &'ll Value {
+        // (FractalFir) Atomics in CUDA have some limitations, and we have to work around them.
+        // For example, they are restricted in what address space they operate on.
+        // CUDA has 4 address spaces(and a generic one, which is an union of all of those).
+        // An atomic instruction can soundly operate on:
+        // 1. The global address space
+        // 2. The shared(cluster) address space.
+        // It can't operate on:
+        // 1. The const address space(atomics on consts are UB anyway)
+        // 2. The thread address space(which should be only accessible to 1 thread, anyway?)
+        // So, we do the following:
+        // 1. Check if the pointer is in one of the address spaces atomics support.
+        //  a) if so, we perform an atomic operation
+        // 2. Check if the pointer is in the thread-local address space. If it is, we use non-atomic ops here,
+        // **ASSUMING** only the current thread can access thread-local memory. (FIXME: is this sound?)
+        // 3. If the pointer is not in a supported address space, and is not thread-local, then we bail, and trap.
+
+        // We check if the `dst` pointer is in the `global` address space.
+        let (isspacep_global_ty, isspacep_global_fn) =
+            self.get_intrinsic("llvm.nvvm.isspacep.global");
+        let isspacep_global = self.call(
+            isspacep_global_ty,
+            None,
+            None,
+            isspacep_global_fn,
+            &[dst],
+            None,
+            None,
+        );
+        // We check if the `dst` pointer is in the `shared` address space.
+        let (isspacep_shared_ty, isspacep_shared_fn) =
+            self.get_intrinsic("llvm.nvvm.isspacep.shared");
+        let isspacep_shared = self.call(
+            isspacep_shared_ty,
+            None,
+            None,
+            isspacep_shared_fn,
+            &[dst],
+            None,
+            None,
+        );
+        // Combine those to check if we are in a supported address space.
+        let atomic_supported_addrspace = self.or(isspacep_shared, isspacep_global);
+        // We create 2 blocks here: one we branch to if atomic is in the right address space, and one we branch to otherwise.
+        let supported_bb = self.append_sibling_block("atomic_space_supported");
+        let unsupported_bb = self.append_sibling_block("atomic_space_unsupported");
+        self.cond_br(atomic_supported_addrspace, supported_bb, unsupported_bb);
+        //  We also create a "merge" block we will jump to, after the the atomic ops finish.
+        let merge_bb = self.append_sibling_block("atomic_op_done");
+        // Execute atomic op if supported, then jump to merge
+        self.switch_to_block(supported_bb);
+        let supported_res = atomic_supported(self, dst);
+        self.br(merge_bb);
+        // Check if the pointer is in the thread space. If so, we can emulate it.
+        self.switch_to_block(unsupported_bb);
+        let (isspacep_local_ty, isspacep_local_fn) = self.get_intrinsic("llvm.nvvm.isspacep.local");
+        let isspacep_local = self.call(
+            isspacep_local_ty,
+            None,
+            None,
+            isspacep_local_fn,
+            &[dst],
+            None,
+            None,
+        );
+        let local_bb = self.append_sibling_block("atomic_local_space");
+        let atomic_ub_bb = self.append_sibling_block("atomic_space_ub");
+        self.cond_br(isspacep_local, local_bb, atomic_ub_bb);
+        // The pointer is in the thread(local) space.
+        self.switch_to_block(local_bb);
+        let local_res = emulate_local(self, dst);
+        self.br(merge_bb);
+        // The pointer is neither in the supported address space, nor the local space.
+        // This is very likely UB. So, we trap here.
+        // TODO: should we print some kind of a message here? NVVM supports printf.
+        self.switch_to_block(atomic_ub_bb);
+        self.abort();
+        self.unreachable();
+        // Atomic is impl has finished, and we can now switch to the merge_bb
+        self.switch_to_block(merge_bb);
+        self.phi(
+            self.val_ty(local_res),
+            &[supported_res, local_res],
+            &[supported_bb, local_bb],
+        )
     }
 }
