@@ -125,9 +125,10 @@ pub fn codegen_bitcode_modules(
     let res = match prog.compile(&args.nvvm_options) {
         Ok(b) => b,
         Err(error) => {
+            let log = prog.compiler_log().unwrap().unwrap_or_default();
             // this should never happen, if it does, something went really bad or its a bug on libnvvm's end
             panic!(
-                "libnvvm returned an error that was not previously caught by the verifier: {error:?}"
+                "libnvvm returned an error that was not previously caught by the verifier: {error:?} {log:?}"
             );
         }
     };

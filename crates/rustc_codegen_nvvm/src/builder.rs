@@ -6,7 +6,7 @@ use libc::{c_char, c_uint};
 use rustc_abi as abi;
 use rustc_abi::{AddressSpace, Align, HasDataLayout, Size, TargetDataLayout, WrappingRange};
 use rustc_codegen_ssa::MemFlags;
-use rustc_codegen_ssa::common::{IntPredicate, RealPredicate, TypeKind};
+use rustc_codegen_ssa::common::{IntPredicate, RealPredicate, TypeKind,AtomicRmwBinOp};
 use rustc_codegen_ssa::mir::operand::{OperandRef, OperandValue};
 use rustc_codegen_ssa::mir::place::PlaceRef;
 use rustc_codegen_ssa::traits::*;
@@ -546,30 +546,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn atomic_load(
         &mut self,
-        _ty: &'ll Type,
+        ty: &'ll Type,
         ptr: &'ll Value,
-        _order: AtomicOrdering,
-        _size: Size,
+        order: AtomicOrdering,
+        size: Size,
     ) -> &'ll Value {
-        // core seems to think that nvptx has atomic loads, which is not true for NVVM IR,
-        // therefore our only option is to print that this is not supported then trap.
-        // i have heard of cursed things such as emulating this with __threadfence and volatile loads
-        // but that needs to be experimented with in terms of safety and behavior.
-        // NVVM has explicit intrinsics for adding and subtracting floats which we expose elsewhere
-
-        // TODO(RDambrosio016): is there a way we can just generate a panic with a message instead
-        // of doing this ourselves? since all panics will be aborts, it should be equivalent
-        // let message = "Atomic Loads are not supported in CUDA.\0";
-
-        // let vprintf = self.get_intrinsic("vprintf");
-        // let formatlist = self.const_str(Symbol::intern(message)).0;
-        // let valist = self.const_null(self.type_void());
-
-        // self.call(vprintf, &[formatlist, valist], None);
-
-        let (ty, f) = self.get_intrinsic("llvm.trap");
-        self.call(ty, None, None, f, &[], None, None);
-        unsafe { llvm::LLVMBuildLoad(self.llbuilder, ptr, unnamed()) }
+        // Since for any A, A | 0 = A, and performing atomics on constant memory is UB in Rust, we can abuse or to perform atomic reads.
+        self.atomic_rmw(AtomicRmwBinOp::AtomicOr, ptr, self.const_int(ty, 0), order)
     }
 
     fn load_operand(&mut self, place: PlaceRef<'tcx, &'ll Value>) -> OperandRef<'tcx, &'ll Value> {
@@ -796,24 +779,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn atomic_store(
         &mut self,
-        _val: &'ll Value,
+        val: &'ll Value,
         ptr: &'ll Value,
-        _order: AtomicOrdering,
-        _size: Size,
+        order: AtomicOrdering,
+        size: Size,
     ) {
-        // see comment in atomic_load
-
-        // let message = "Atomic Stores are not supported in CUDA.\0";
-
-        // let vprintf = self.get_intrinsic("vprintf");
-        // let formatlist = self.const_str(Symbol::intern(message)).0;
-        // let valist = self.const_null(self.type_void());
-
-        // self.call(vprintf, &[formatlist, valist], None);
-        self.abort();
-        unsafe {
-            llvm::LLVMBuildLoad(self.llbuilder, ptr, UNNAMED);
-        }
+        // We can exchange *ptr with val, and then discard the result.
+        self.atomic_rmw(AtomicRmwBinOp::AtomicXchg, ptr, val, order);
     }
 
     fn gep(&mut self, ty: &'ll Type, ptr: &'ll Value, indices: &[&'ll Value]) -> &'ll Value {
@@ -1195,13 +1167,65 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
     fn atomic_rmw(
         &mut self,
-        _op: rustc_codegen_ssa::common::AtomicRmwBinOp,
-        _dst: &'ll Value,
-        _src: &'ll Value,
-        _order: AtomicOrdering,
+        op: AtomicRmwBinOp,
+        dst: &'ll Value,
+        src: &'ll Value,
+        order: AtomicOrdering,
     ) -> &'ll Value {
-        // see cmpxchg comment
-        self.fatal("atomic rmw is not supported")
+        if matches!(op,AtomicRmwBinOp::AtomicNand){
+            self.fatal("Atomic NAND not supported yet!")
+        }
+        self.atomic_op(
+            dst,
+             |builder, dst| {
+                // We are in a supported address space - just use ordinary atomics
+                unsafe {
+                    llvm::LLVMBuildAtomicRMW(
+                        builder.llbuilder,
+                        op,
+                        dst,
+                        src,
+                       crate::llvm::AtomicOrdering::from_generic( order),
+                        0,
+                    )
+                }
+            },
+         |builder, dst| {
+                // Local space is only accessible to the current thread.
+                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store. 
+                let load:&'ll Value = unsafe{ llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
+                let next_val = match op{
+                    AtomicRmwBinOp::AtomicXchg => src,
+                    AtomicRmwBinOp::AtomicAdd => builder.add(load, src),
+                    AtomicRmwBinOp::AtomicSub => builder.sub(load, src),
+                    AtomicRmwBinOp::AtomicAnd => builder.and(load, src),
+                    AtomicRmwBinOp::AtomicNand => {
+                        let and = builder.and(load, src);
+                        builder.not(and)
+                    },
+                    AtomicRmwBinOp::AtomicOr => builder.or(load, src),
+                    AtomicRmwBinOp::AtomicXor => builder.xor(load, src),
+                    AtomicRmwBinOp::AtomicMax => {
+                        let is_src_bigger = builder.icmp(IntPredicate::IntSGT, src, load);
+                        builder.select(is_src_bigger,src,load)
+                    }
+                    AtomicRmwBinOp::AtomicMin => {
+                        let is_src_smaller = builder.icmp(IntPredicate::IntSLT, src, load);
+                        builder.select(is_src_smaller,src,load)
+                    }
+                    AtomicRmwBinOp::AtomicUMax =>  {
+                        let is_src_bigger = builder.icmp(IntPredicate::IntUGT, src, load);
+                        builder.select(is_src_bigger,src,load)
+                    },
+                    AtomicRmwBinOp::AtomicUMin => {
+                        let is_src_smaller = builder.icmp(IntPredicate::IntULT, src, load);
+                        builder.select(is_src_smaller,src,load)
+                    }
+                };
+                unsafe { llvm::LLVMBuildStore(builder.llbuilder, next_val, dst)};
+                load
+            },
+        )
     }
 
     fn atomic_fence(
