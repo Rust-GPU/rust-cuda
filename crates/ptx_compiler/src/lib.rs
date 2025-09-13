@@ -102,11 +102,8 @@ impl CompilerFailure {
                 .to_result()?;
             let size = size.assume_init();
             let mut vec = Vec::with_capacity(size);
-            nvptx_compiler_sys::nvPTXCompilerGetErrorLog(
-                self.handle,
-                vec.as_mut_ptr() as *mut c_char,
-            )
-            .to_result()?;
+            nvptx_compiler_sys::nvPTXCompilerGetErrorLog(self.handle, vec.as_mut_ptr())
+                .to_result()?;
             vec.set_len(size);
             Ok(String::from_utf8_lossy(&vec).to_string())
         }
@@ -138,11 +135,8 @@ impl CompiledProgram {
                 .to_result()?;
             let size = size.assume_init();
             let mut vec = Vec::with_capacity(size);
-            nvptx_compiler_sys::nvPTXCompilerGetInfoLog(
-                self.handle,
-                vec.as_mut_ptr() as *mut c_char,
-            )
-            .to_result()?;
+            nvptx_compiler_sys::nvPTXCompilerGetInfoLog(self.handle, vec.as_mut_ptr())
+                .to_result()?;
             vec.set_len(size);
             Ok(String::from_utf8_lossy(&vec).to_string())
         }

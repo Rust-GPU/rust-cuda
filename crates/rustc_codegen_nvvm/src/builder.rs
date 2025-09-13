@@ -549,7 +549,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         ty: &'ll Type,
         ptr: &'ll Value,
         order: AtomicOrdering,
-        size: Size,
+        _size: Size,
     ) -> &'ll Value {
         // Since for any A, A | 0 = A, and performing atomics on constant memory is UB in Rust, we can abuse or to perform atomic reads.
         self.atomic_rmw(AtomicRmwBinOp::AtomicOr, ptr, self.const_int(ty, 0), order)
@@ -782,7 +782,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         val: &'ll Value,
         ptr: &'ll Value,
         order: AtomicOrdering,
-        size: Size,
+        _size: Size,
     ) {
         // We can exchange *ptr with val, and then discard the result.
         self.atomic_rmw(AtomicRmwBinOp::AtomicXchg, ptr, val, order);
@@ -1164,8 +1164,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 // We pack the result, to match the behaviour of proper atomics / emulated thread-local atomics.
                 let res = builder.const_undef(res_type);
                 let res = builder.insert_value(res, load, 0);
-                let res = builder.insert_value(res, compare, 1);
-                res
+                builder.insert_value(res, compare, 1)
             },
         );
         // Unpack the result
@@ -1190,7 +1189,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 unsafe {
                     llvm::LLVMBuildAtomicRMW(
                         builder.llbuilder,
-                        op,
+                        op.into(),
                         dst,
                         src,
                         crate::llvm::AtomicOrdering::from_generic(order),

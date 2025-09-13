@@ -1960,7 +1960,7 @@ unsafe extern "C" {
 
     pub fn LLVMBuildAtomicRMW<'a>(
         B: &Builder<'a>,
-        Op: AtomicRmwBinOp,
+        Op: LLVMAtomicRmwBinOp,
         LHS: &Value,
         RHS: &Value,
         Order: AtomicOrdering,
@@ -1991,6 +1991,41 @@ impl AtomicOrdering {
             Common::Release => Self::Release,
             Common::AcqRel => Self::AcquireRelease,
             Common::SeqCst => Self::SequentiallyConsistent,
+        }
+    }
+}
+
+/// FFI-safe mirror of LLVMAtomicRMWBinOp from the LLVM C API.
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub enum LLVMAtomicRmwBinOp {
+    AtomicXchg = 0,
+    AtomicAdd = 1,
+    AtomicSub = 2,
+    AtomicAnd = 3,
+    AtomicNand = 4,
+    AtomicOr = 5,
+    AtomicXor = 6,
+    AtomicMax = 7,
+    AtomicMin = 8,
+    AtomicUMax = 9,
+    AtomicUMin = 10,
+}
+
+impl From<AtomicRmwBinOp> for LLVMAtomicRmwBinOp {
+    fn from(op: AtomicRmwBinOp) -> Self {
+        match op {
+            AtomicRmwBinOp::AtomicXchg => Self::AtomicXchg,
+            AtomicRmwBinOp::AtomicAdd => Self::AtomicAdd,
+            AtomicRmwBinOp::AtomicSub => Self::AtomicSub,
+            AtomicRmwBinOp::AtomicAnd => Self::AtomicAnd,
+            AtomicRmwBinOp::AtomicNand => Self::AtomicNand,
+            AtomicRmwBinOp::AtomicOr => Self::AtomicOr,
+            AtomicRmwBinOp::AtomicXor => Self::AtomicXor,
+            AtomicRmwBinOp::AtomicMax => Self::AtomicMax,
+            AtomicRmwBinOp::AtomicMin => Self::AtomicMin,
+            AtomicRmwBinOp::AtomicUMax => Self::AtomicUMax,
+            AtomicRmwBinOp::AtomicUMin => Self::AtomicUMin,
         }
     }
 }
