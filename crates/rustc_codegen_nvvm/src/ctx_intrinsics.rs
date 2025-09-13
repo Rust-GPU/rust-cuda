@@ -454,6 +454,5 @@ impl<'ll> CodegenCx<'ll, '_> {
         ifn!(map, "llvm.nvvm.isspacep.global", fn(i8p) -> i1);
         ifn!(map, "llvm.nvvm.isspacep.local", fn(i8p) -> i1);
         ifn!(map, "llvm.nvvm.isspacep.shared", fn(i8p) -> i1);
-  
     }
 }

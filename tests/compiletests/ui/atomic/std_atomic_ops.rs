@@ -1,13 +1,13 @@
 // Test CUDA atomic operations compile correctly
 // build-pass
-// compile-flags: -Z verify-llvm-ir 
-use core::sync::atomic::{AtomicUsize,Ordering};
+// compile-flags: -Z verify-llvm-ir
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use cuda_std::atomic::{
     AtomicF32, AtomicF64, BlockAtomicF32, BlockAtomicF64, SystemAtomicF32, SystemAtomicF64,
 };
 use cuda_std::kernel;
-static GLOBAL:AtomicUsize = AtomicUsize::new(0);
+static GLOBAL: AtomicUsize = AtomicUsize::new(0);
 #[kernel]
 pub unsafe fn test_cuda_atomic_floats() {
     let local = AtomicUsize::new(0);
@@ -27,7 +27,7 @@ pub unsafe fn test_cuda_atomic_floats() {
     local.fetch_sub(1, Ordering::Relaxed);
     GLOBAL.fetch_sub(1, Ordering::Relaxed);
     local.fetch_and(1, Ordering::Relaxed);
-   GLOBAL.fetch_and(1, Ordering::Relaxed);
+    GLOBAL.fetch_and(1, Ordering::Relaxed);
     local.fetch_and(1, Ordering::Relaxed);
     GLOBAL.fetch_and(1, Ordering::Relaxed);
     local.fetch_or(1, Ordering::Relaxed);

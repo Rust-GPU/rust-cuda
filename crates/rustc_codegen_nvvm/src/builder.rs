@@ -6,7 +6,7 @@ use libc::{c_char, c_uint};
 use rustc_abi as abi;
 use rustc_abi::{AddressSpace, Align, HasDataLayout, Size, TargetDataLayout, WrappingRange};
 use rustc_codegen_ssa::MemFlags;
-use rustc_codegen_ssa::common::{IntPredicate, RealPredicate, TypeKind,AtomicRmwBinOp};
+use rustc_codegen_ssa::common::{AtomicRmwBinOp, IntPredicate, RealPredicate, TypeKind};
 use rustc_codegen_ssa::mir::operand::{OperandRef, OperandValue};
 use rustc_codegen_ssa::mir::place::PlaceRef;
 use rustc_codegen_ssa::traits::*;
@@ -1114,20 +1114,26 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         weak: bool,
     ) -> (&'ll Value, &'ll Value) {
         // LLVM verifier rejects cases where the `failure_order` is stronger than `order`
-        match (order,failure_order){
-            (AtomicOrdering::SeqCst, _)=>(),
-            (_, AtomicOrdering::Relaxed)=>(),
-            (AtomicOrdering::Release, AtomicOrdering::Release) |  (AtomicOrdering::Release, AtomicOrdering::Acquire) | (AtomicOrdering::Acquire, AtomicOrdering::Acquire)=>(),
-            (AtomicOrdering::AcqRel,AtomicOrdering::Acquire)  => (),
-            (AtomicOrdering::Relaxed, _) | (_, AtomicOrdering::Release | AtomicOrdering::AcqRel | AtomicOrdering::SeqCst)=>{
+        match (order, failure_order) {
+            (AtomicOrdering::SeqCst, _) => (),
+            (_, AtomicOrdering::Relaxed) => (),
+            (AtomicOrdering::Release, AtomicOrdering::Release)
+            | (AtomicOrdering::Release, AtomicOrdering::Acquire)
+            | (AtomicOrdering::Acquire, AtomicOrdering::Acquire) => (),
+            (AtomicOrdering::AcqRel, AtomicOrdering::Acquire) => (),
+            (AtomicOrdering::Relaxed, _)
+            | (_, AtomicOrdering::Release | AtomicOrdering::AcqRel | AtomicOrdering::SeqCst) => {
                 // Invalid cmpxchg - `failure_order` is stronger than `order`! So, we abort.
                 self.abort();
-                return (self.const_undef(self.val_ty(cmp)),self.const_undef(self.type_i1()));
+                return (
+                    self.const_undef(self.val_ty(cmp)),
+                    self.const_undef(self.type_i1()),
+                );
             }
         };
         let res = self.atomic_op(
             dst,
-             |builder, dst| {
+            |builder, dst| {
                 // We are in a supported address space - just use ordinary atomics
                 unsafe {
                     llvm::LLVMRustBuildAtomicCmpXchg(
@@ -1135,25 +1141,27 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                         dst,
                         cmp,
                         src,
-                       crate::llvm::AtomicOrdering::from_generic( order),
+                        crate::llvm::AtomicOrdering::from_generic(order),
                         crate::llvm::AtomicOrdering::from_generic(failure_order),
                         weak as u32,
                     )
                 }
             },
-         |builder, dst| {
+            |builder, dst| {
                 // Local space is only accessible to the current thread.
-                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store. 
-                let load:&'ll Value = unsafe{ llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
+                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
+                let load: &'ll Value =
+                    unsafe { llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
                 let compare = builder.icmp(IntPredicate::IntEQ, load, cmp);
                 // We can do something smart & branchless here:
-                // We select either the current value(if the comparison fails), or a new value. 
+                // We select either the current value(if the comparison fails), or a new value.
                 // We then *undconditionally* write that back to local memory(which is very, very cheap).
                 // TODO: measure if this has a positive impact, or if we should just use more blocks, and conditional writes.
                 let value = builder.select(compare, src, load);
-                unsafe { llvm::LLVMBuildStore(builder.llbuilder, value, dst)};
-                let res_type = builder.type_struct(&[builder.val_ty(cmp),builder.type_ix(1)], false);
-                // We pack the result, to match the behaviour of proper atomics / emulated thread-local atomics. 
+                unsafe { llvm::LLVMBuildStore(builder.llbuilder, value, dst) };
+                let res_type =
+                    builder.type_struct(&[builder.val_ty(cmp), builder.type_ix(1)], false);
+                // We pack the result, to match the behaviour of proper atomics / emulated thread-local atomics.
                 let res = builder.const_undef(res_type);
                 let res = builder.insert_value(res, load, 0);
                 let res = builder.insert_value(res, compare, 1);
@@ -1172,12 +1180,12 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         src: &'ll Value,
         order: AtomicOrdering,
     ) -> &'ll Value {
-        if matches!(op,AtomicRmwBinOp::AtomicNand){
+        if matches!(op, AtomicRmwBinOp::AtomicNand) {
             self.fatal("Atomic NAND not supported yet!")
         }
         self.atomic_op(
             dst,
-             |builder, dst| {
+            |builder, dst| {
                 // We are in a supported address space - just use ordinary atomics
                 unsafe {
                     llvm::LLVMBuildAtomicRMW(
@@ -1185,16 +1193,17 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                         op,
                         dst,
                         src,
-                       crate::llvm::AtomicOrdering::from_generic( order),
+                        crate::llvm::AtomicOrdering::from_generic(order),
                         0,
                     )
                 }
             },
-         |builder, dst| {
+            |builder, dst| {
                 // Local space is only accessible to the current thread.
-                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store. 
-                let load:&'ll Value = unsafe{ llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
-                let next_val = match op{
+                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
+                let load: &'ll Value =
+                    unsafe { llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
+                let next_val = match op {
                     AtomicRmwBinOp::AtomicXchg => src,
                     AtomicRmwBinOp::AtomicAdd => builder.add(load, src),
                     AtomicRmwBinOp::AtomicSub => builder.sub(load, src),
@@ -1202,27 +1211,27 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     AtomicRmwBinOp::AtomicNand => {
                         let and = builder.and(load, src);
                         builder.not(and)
-                    },
+                    }
                     AtomicRmwBinOp::AtomicOr => builder.or(load, src),
                     AtomicRmwBinOp::AtomicXor => builder.xor(load, src),
                     AtomicRmwBinOp::AtomicMax => {
                         let is_src_bigger = builder.icmp(IntPredicate::IntSGT, src, load);
-                        builder.select(is_src_bigger,src,load)
+                        builder.select(is_src_bigger, src, load)
                     }
                     AtomicRmwBinOp::AtomicMin => {
                         let is_src_smaller = builder.icmp(IntPredicate::IntSLT, src, load);
-                        builder.select(is_src_smaller,src,load)
+                        builder.select(is_src_smaller, src, load)
                     }
-                    AtomicRmwBinOp::AtomicUMax =>  {
+                    AtomicRmwBinOp::AtomicUMax => {
                         let is_src_bigger = builder.icmp(IntPredicate::IntUGT, src, load);
-                        builder.select(is_src_bigger,src,load)
-                    },
+                        builder.select(is_src_bigger, src, load)
+                    }
                     AtomicRmwBinOp::AtomicUMin => {
                         let is_src_smaller = builder.icmp(IntPredicate::IntULT, src, load);
-                        builder.select(is_src_smaller,src,load)
+                        builder.select(is_src_smaller, src, load)
                     }
                 };
-                unsafe { llvm::LLVMBuildStore(builder.llbuilder, next_val, dst)};
+                unsafe { llvm::LLVMBuildStore(builder.llbuilder, next_val, dst) };
                 load
             },
         )
@@ -1687,8 +1696,8 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
     fn atomic_op(
         &mut self,
         dst: &'ll Value,
-        atomic_supported: impl FnOnce(&mut Builder<'a,'ll ,'tcx>, &'ll Value) -> &'ll Value,
-        emulate_local: impl FnOnce(&mut Builder<'a,'ll ,'tcx>, &'ll Value) -> &'ll Value,
+        atomic_supported: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value) -> &'ll Value,
+        emulate_local: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value) -> &'ll Value,
     ) -> &'ll Value {
         // (FractalFir) Atomics in CUDA have some limitations, and we have to work around them.
         // For example, they are restricted in what address space they operate on.

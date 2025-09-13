@@ -16,9 +16,9 @@
 // but likely will use in the future, so we ignore any unused functions
 // in case we need them in the future for things like debug info or LTO.
 #![allow(dead_code)]
-use rustc_codegen_ssa::common::AtomicRmwBinOp;
 use libc::{c_char, c_uint, c_void, size_t};
 use libc::{c_int, c_ulonglong};
+use rustc_codegen_ssa::common::AtomicRmwBinOp;
 use std::ffi::{CStr, CString};
 use std::fmt;
 use std::hash::{Hash, Hasher};
