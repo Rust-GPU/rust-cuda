@@ -7,11 +7,11 @@
   </p>
 
   <h3>
-    <a href="https://rust-gpu.github.io/Rust-CUDA/guide/index.html">Guide</a>
+    <a href="https://rust-gpu.github.io/rust-cuda/index.html">Guide</a>
     <span> | </span>
-    <a href="guide/src/guide/getting_started.md">Getting Started</a>
+    <a href="https://rust-gpu.github.io/rust-cuda/guide/getting_started.html">Getting Started</a>
     <span> | </span>
-    <a href="guide/src/features.md">Features</a>
+    <a href="https://rust-gpu.github.io/rust-cuda/features.html">Features</a>
   </h3>
 <strong>⚠️ The project is still in early development, expect bugs, safety issues, and things that don't work ⚠️</strong>
 </div>
