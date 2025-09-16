@@ -1115,15 +1115,36 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     ) -> (&'ll Value, &'ll Value) {
         // LLVM verifier rejects cases where the `failure_order` is stronger than `order`
         match (order, failure_order) {
-            (AtomicOrdering::SeqCst, _) => (),
-            (_, AtomicOrdering::Relaxed) => (),
-            (AtomicOrdering::Release, AtomicOrdering::Release)
-            | (AtomicOrdering::Release, AtomicOrdering::Acquire)
+            // Failure order `Release` & `AcqRel` is simply invalid.
+            (_, AtomicOrdering::Release | AtomicOrdering::AcqRel) => {
+                self.abort();
+                return (
+                    self.const_undef(self.val_ty(cmp)),
+                    self.const_undef(self.type_i1()),
+                );
+            }
+            // Success & failure ordering are the same - OK.
+            (AtomicOrdering::SeqCst, AtomicOrdering::SeqCst)
+            | (AtomicOrdering::Relaxed, AtomicOrdering::Relaxed)
             | (AtomicOrdering::Acquire, AtomicOrdering::Acquire) => (),
+            // Failure is `SeqCst`(strongest) & success is anything else(weaker) - reject.
+            (_, AtomicOrdering::SeqCst) => {
+                self.abort();
+                return (
+                    self.const_undef(self.val_ty(cmp)),
+                    self.const_undef(self.type_i1()),
+                );
+            }
+            // Failure is Relaxed(weakest), and success is anything - OK.
+            (_, AtomicOrdering::Relaxed) => (),
+            // Failure is anything, and success is SeqCest(strongest) - OK.
+            (AtomicOrdering::SeqCst, _) => (),
+            // Failure is Acquire, and success is Release - OK.
+            (AtomicOrdering::Release, AtomicOrdering::Acquire) => (),
+            // Success is AcqRel & failure is Acquire - OK
             (AtomicOrdering::AcqRel, AtomicOrdering::Acquire) => (),
-            (AtomicOrdering::Relaxed, _)
-            | (_, AtomicOrdering::Release | AtomicOrdering::AcqRel | AtomicOrdering::SeqCst) => {
-                // Invalid cmpxchg - `failure_order` is stronger than `order`! So, we abort.
+            // Success is weaker than failure - reject.
+            (AtomicOrdering::Relaxed, AtomicOrdering::Acquire) => {
                 self.abort();
                 return (
                     self.const_undef(self.val_ty(cmp)),
@@ -1692,6 +1713,7 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
 impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
     /// Implements a standard atomic, using LLVM intrinsics(in `atomic_supported`, if `dst` is in a supported address space)
     /// or emulation(with `emulate_local`, if `dst` points to a thread-local address space).
+    /// FIXME(FractalFir): this code assumess all pointers are generic. Adjust it once we support address spaces.
     fn atomic_op(
         &mut self,
         dst: &'ll Value,
