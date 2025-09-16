@@ -12,7 +12,6 @@ concurrency:
 jobs:
   deploy:
     # Only run on the main repository, not on forks
-    if: github.repository == 'rust-gpu/Rust-CUDA'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
