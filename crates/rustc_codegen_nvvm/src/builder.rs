@@ -303,6 +303,23 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             if changed {
                 v = transmute_llval(self.llbuilder, self.cx, v, new_ty);
             }
+            // Get the return type.
+            let sig = llvm::LLVMGetElementType(self.val_ty(self.llfn()));
+            let return_ty = llvm::LLVMGetReturnType(sig);
+            // Check if new_ty & return_ty are different pointers.
+            // FIXME: get rid of this nonsense once we are past LLVM 7 and don't have
+            // to suffer from typed pointers.
+            if return_ty != new_ty
+                && llvm::LLVMRustGetTypeKind(return_ty) == llvm::TypeKind::Pointer
+                && llvm::LLVMRustGetTypeKind(new_ty) == llvm::TypeKind::Pointer
+            {
+                v = llvm::LLVMBuildBitCast(
+                    self.llbuilder,
+                    v,
+                    return_ty,
+                    c"return pointer adjust".as_ptr(),
+                );
+            }
             llvm::LLVMBuildRet(self.llbuilder, v);
         }
     }
@@ -923,9 +940,17 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     /* Comparisons */
-    fn icmp(&mut self, op: IntPredicate, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
+    fn icmp(&mut self, op: IntPredicate, mut lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
         trace!("Icmp lhs: `{:?}`, rhs: `{:?}`", lhs, rhs);
-
+        // FIXME(FractalFir): Once again, a bunch of nosense to make the LLVM typed pointers happy.
+        // Get rid of this as soon as we move past typed pointers.
+        let lhs_ty = self.val_ty(lhs);
+        let rhs_ty = self.val_ty(rhs);
+        if lhs_ty != rhs_ty {
+            lhs = unsafe {
+                llvm::LLVMBuildBitCast(self.llbuilder, lhs, rhs_ty, c"icmp_cast".as_ptr())
+            };
+        }
         unsafe {
             let op = llvm::IntPredicate::from_generic(op);
             llvm::LLVMBuildICmp(self.llbuilder, op as c_uint, lhs, rhs, unnamed())
