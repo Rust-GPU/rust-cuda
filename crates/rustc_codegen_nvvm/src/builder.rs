@@ -1358,7 +1358,11 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
     // Helper function to check if a value is 128-bit integer
     fn is_i128(&self, val: &'ll Value) -> bool {
         let ty = self.val_ty(val);
-        unsafe { llvm::LLVMGetIntTypeWidth(ty) == 128 }
+        if unsafe { llvm::LLVMRustGetTypeKind(ty) == llvm::TypeKind::Integer } {
+            unsafe { llvm::LLVMGetIntTypeWidth(ty) == 128 }
+        } else {
+            false
+        }
     }
 
     // Helper to split i128 into low and high u64 parts
