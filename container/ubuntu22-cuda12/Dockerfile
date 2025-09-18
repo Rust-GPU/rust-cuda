@@ -1,6 +1,6 @@
 FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
+RUN apt-get -o Acquire::Retries=3 update && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -qq -y install \
     build-essential \
     curl \
     clang \
@@ -12,7 +12,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     rm -rf /var/lib/apt/lists/*
 
 # Needed to build `path_tracer`, `optix/ex03_window` example
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
+RUN apt-get -o Acquire::Retries=3 update && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -qq -y install \
     cmake \
     libfontconfig-dev \
     libx11-xcb-dev \
@@ -26,7 +26,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
 WORKDIR /data/llvm7
 
 # Install dependencies for building LLVM
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
+RUN apt-get -o Acquire::Retries=3 update && DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -qq -y install \
     libffi-dev \
     libedit-dev \
     libncurses5-dev \
@@ -79,4 +79,3 @@ RUN --mount=type=bind,source=rust-toolchain.toml,target=/data/rust-cuda/rust-too
 ENV LD_LIBRARY_PATH="/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
 ENV LLVM_LINK_STATIC=1
 ENV RUST_LOG=info
-
