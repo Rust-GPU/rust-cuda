@@ -237,7 +237,10 @@ impl<'ll, 'tcx> BaseTypeCodegenMethods for CodegenCx<'ll, 'tcx> {
     }
 
     fn int_width(&self, ty: &'ll Type) -> u64 {
-        unsafe { llvm::LLVMGetIntTypeWidth(ty) as u64 }
+        match self.type_kind(ty) {
+            TypeKind::Integer => unsafe { llvm::LLVMGetIntTypeWidth(ty) as u64 },
+            _ => bug!("llvm_int_width called on a non-integer type"),
+        }
     }
 
     fn val_ty(&self, v: &'ll Value) -> &'ll Type {
