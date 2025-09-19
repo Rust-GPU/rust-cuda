@@ -8,8 +8,12 @@ description = "Builder for easily building rustc_codegen_nvvm crates"
 repository = "https://github.com/Rust-GPU/rust-cuda"
 readme = "../../README.md"
 
+[features]
+default = ["codegen-backend"]
+codegen-backend = ["rustc_codegen_nvvm"]
+
 [dependencies]
-rustc_codegen_nvvm = { version = "0.3", path = "../rustc_codegen_nvvm" }
+rustc_codegen_nvvm = { version = "0.3", path = "../rustc_codegen_nvvm", optional = true }
 nvvm = { path = "../nvvm", version = "0.1" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"

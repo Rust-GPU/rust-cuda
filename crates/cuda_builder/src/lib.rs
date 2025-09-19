@@ -4,9 +4,13 @@ pub use nvvm::*;
 use serde::Deserialize;
 use std::{
     borrow::Borrow,
-    env, fmt,
+    env,
+    ffi::OsStr,
+    fmt, fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    thread,
+    time::{Duration, SystemTime},
 };
 
 #[derive(Debug)]
@@ -14,6 +18,8 @@ use std::{
 pub enum CudaBuilderError {
     CratePathDoesntExist(PathBuf),
     FailedToCopyPtxFile(std::io::Error),
+    FailedToPrepareCodegenBackend(std::io::Error),
+    CodegenBackendDidNotStabilize,
     BuildFailed,
 }
 
@@ -27,6 +33,12 @@ impl fmt::Display for CudaBuilderError {
             CudaBuilderError::FailedToCopyPtxFile(err) => {
                 f.write_str(&format!("Failed to copy PTX file: {err:?}"))
             }
+            CudaBuilderError::FailedToPrepareCodegenBackend(err) => f.write_str(&format!(
+                "Failed to prepare rustc_codegen_nvvm backend: {err:?}"
+            )),
+            CudaBuilderError::CodegenBackendDidNotStabilize => f.write_str(
+                "Failed to prepare rustc_codegen_nvvm backend: artifact never stabilized",
+            ),
         }
     }
 }
@@ -402,7 +414,7 @@ fn dylib_path() -> Vec<PathBuf> {
     }
 }
 
-fn find_rustc_codegen_nvvm() -> PathBuf {
+fn find_rustc_codegen_nvvm() -> Option<PathBuf> {
     let filename = format!(
         "{}rustc_codegen_nvvm{}",
         env::consts::DLL_PREFIX,
@@ -411,10 +423,52 @@ fn find_rustc_codegen_nvvm() -> PathBuf {
     for mut path in dylib_path() {
         path.push(&filename);
         if path.is_file() {
-            return path;
+            return Some(path);
         }
     }
-    panic!("Could not find {filename} in library path");
+
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".into());
+    let workspace_target_dir = workspace_target_dir();
+    let mut fallback_dirs = vec![
+        workspace_target_dir.join(&profile),
+        workspace_target_dir.join(&profile).join("deps"),
+        workspace_target_dir.join("cuda-builder"),
+        workspace_target_dir.join("cuda-builder").join(&profile),
+        workspace_target_dir
+            .join("cuda-builder")
+            .join(&profile)
+            .join("deps"),
+    ];
+
+    if let Some(target) = env::var_os("TARGET") {
+        let target_dir = workspace_target_dir.join(target);
+        fallback_dirs.push(target_dir.join(&profile));
+        fallback_dirs.push(target_dir.join(&profile).join("deps"));
+    }
+
+    fallback_dirs.push(workspace_target_dir.join("codegen-backends"));
+    fallback_dirs.push(
+        workspace_target_dir
+            .join("cuda-builder")
+            .join("host")
+            .join(&profile),
+    );
+    fallback_dirs.push(
+        workspace_target_dir
+            .join("cuda-builder")
+            .join("host")
+            .join(&profile)
+            .join("deps"),
+    );
+
+    for dir in fallback_dirs {
+        let candidate = dir.join(&filename);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+
+    None
 }
 
 /// Joins strings together while ensuring none of the strings contain the separator.
@@ -429,7 +483,14 @@ fn join_checking_for_separators(strings: Vec<impl Borrow<str>>, sep: &str) -> St
 fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
     // see https://github.com/EmbarkStudios/rust-gpu/blob/main/crates/spirv-builder/src/lib.rs#L385-L392
     // on what this does
-    let rustc_codegen_nvvm = find_rustc_codegen_nvvm();
+    let workspace_target_dir = workspace_target_dir();
+    let rustc_codegen_nvvm =
+        prepare_rustc_codegen_nvvm(&workspace_target_dir).map_err(|err| match err {
+            PrepareBackendError::Io(io_err) => {
+                CudaBuilderError::FailedToPrepareCodegenBackend(io_err)
+            }
+            PrepareBackendError::DidNotStabilize => CudaBuilderError::CodegenBackendDidNotStabilize,
+        })?;
 
     let mut rustflags = vec![
         format!("-Zcodegen-backend={}", rustc_codegen_nvvm.display()),
@@ -519,32 +580,30 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
     // to avoid waiting on the same lock (which effectively dead-locks us).
     // This also helps with e.g. RLS, which uses `--target target/rls`,
     // so we'll have a separate `target/rls/cuda-builder` for it.
-    if let (Ok(profile), Some(mut dir)) = (
-        env::var("PROFILE"),
-        env::var_os("OUT_DIR").map(PathBuf::from),
-    ) {
-        // Strip `$profile/build/*/out`.
-        if dir.ends_with("out")
-            && dir.pop()
-            && dir.pop()
-            && dir.ends_with("build")
-            && dir.pop()
-            && dir.ends_with(profile)
-            && dir.pop()
-        {
-            cargo.arg("--target-dir").arg(dir.join("cuda-builder"));
-        }
-    }
+    cargo
+        .arg("--target-dir")
+        .arg(workspace_target_dir.join("cuda-builder"));
 
     let arch = format!("{:?}0", builder.arch);
     cargo.env("CUDA_ARCH", arch.strip_prefix("Compute").unwrap());
 
     let cargo_encoded_rustflags = join_checking_for_separators(rustflags, "\x1f");
 
+    let mut dylib_paths = dylib_path();
+    if let Some(parent) = rustc_codegen_nvvm.parent() {
+        if !dylib_paths.iter().any(|path| path == parent) {
+            dylib_paths.insert(0, parent.to_path_buf());
+        }
+    }
+
     let build = cargo
         .stderr(Stdio::inherit())
         .current_dir(&builder.path_to_crate)
         .env("CARGO_ENCODED_RUSTFLAGS", cargo_encoded_rustflags)
+        .env(
+            dylib_path_envvar(),
+            env::join_paths(dylib_paths).expect("failed to join library paths"),
+        )
         .output()
         .expect("failed to execute cargo build");
 
@@ -558,6 +617,190 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
     } else {
         Err(CudaBuilderError::BuildFailed)
     }
+}
+
+fn workspace_target_dir() -> PathBuf {
+    if let Some(path) = env::var_os("CARGO_TARGET_DIR") {
+        return PathBuf::from(path);
+    }
+
+    if let Some(out_dir) = env::var_os("OUT_DIR") {
+        let mut dir = PathBuf::from(out_dir);
+        while dir.file_name().is_some() && dir.file_name() != Some(OsStr::new("target")) {
+            if !dir.pop() {
+                break;
+            }
+        }
+        if dir.file_name() == Some(OsStr::new("target")) {
+            return dir;
+        }
+    }
+
+    env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .map(|path| path.join("target"))
+        .unwrap_or_else(|| PathBuf::from("target"))
+}
+
+enum PrepareBackendError {
+    Io(std::io::Error),
+    DidNotStabilize,
+}
+
+fn wait_for_backend_path() -> Result<PathBuf, PrepareBackendError> {
+    const MAX_ATTEMPTS: usize = 600;
+    let sleep_duration = Duration::from_millis(100);
+
+    for _ in 0..MAX_ATTEMPTS {
+        if let Some(path) = find_rustc_codegen_nvvm() {
+            return Ok(path);
+        }
+        thread::sleep(sleep_duration);
+    }
+
+    Err(PrepareBackendError::DidNotStabilize)
+}
+
+fn wait_for_stable_backend(
+    source: &Path,
+) -> Result<(u64, Option<SystemTime>), PrepareBackendError> {
+    const MAX_ATTEMPTS: usize = 600;
+    let sleep_duration = Duration::from_millis(100);
+
+    for _ in 0..MAX_ATTEMPTS {
+        let first = match fs::metadata(source) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                thread::sleep(sleep_duration);
+                continue;
+            }
+            Err(err) => return Err(PrepareBackendError::Io(err)),
+        };
+
+        if first.len() == 0 {
+            thread::sleep(sleep_duration);
+            continue;
+        }
+
+        let first_modified = first.modified().ok();
+
+        thread::sleep(sleep_duration);
+
+        let second = match fs::metadata(source) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                thread::sleep(sleep_duration);
+                continue;
+            }
+            Err(err) => return Err(PrepareBackendError::Io(err)),
+        };
+
+        if second.len() == 0 {
+            thread::sleep(sleep_duration);
+            continue;
+        }
+
+        let second_modified = second.modified().ok();
+
+        if second.len() == first.len() && second_modified == first_modified {
+            return Ok((second.len(), second_modified));
+        }
+    }
+
+    Err(PrepareBackendError::DidNotStabilize)
+}
+
+fn prepare_rustc_codegen_nvvm(target_dir: &Path) -> Result<PathBuf, PrepareBackendError> {
+    let source = wait_for_backend_path()?;
+
+    let destination_dir = target_dir.join("codegen-backends");
+    fs::create_dir_all(&destination_dir).map_err(PrepareBackendError::Io)?;
+    let filename = source
+        .file_name()
+        .expect("rustc_codegen_nvvm backend should have a filename")
+        .to_owned();
+    let destination = destination_dir.join(&filename);
+
+    const MAX_COPY_ATTEMPTS: usize = 8;
+    let sleep_duration = Duration::from_millis(100);
+
+    for attempt in 0..MAX_COPY_ATTEMPTS {
+        let (expected_size, expected_modified) = wait_for_stable_backend(&source)?;
+
+        let temp_path = destination_dir.join(format!(
+            "{}.{}-{}.tmp",
+            filename.to_string_lossy(),
+            std::process::id(),
+            attempt
+        ));
+
+        let _ = fs::remove_file(&temp_path);
+
+        fs::copy(&source, &temp_path).map_err(PrepareBackendError::Io)?;
+
+        let temp_size = match fs::metadata(&temp_path) {
+            Ok(metadata) => metadata.len(),
+            Err(err) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(PrepareBackendError::Io(err));
+            }
+        };
+
+        if temp_size != expected_size {
+            let _ = fs::remove_file(&temp_path);
+            thread::sleep(sleep_duration);
+            continue;
+        }
+
+        let current_source = match fs::metadata(&source) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                let _ = fs::remove_file(&temp_path);
+                thread::sleep(sleep_duration);
+                continue;
+            }
+            Err(err) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(PrepareBackendError::Io(err));
+            }
+        };
+
+        if current_source.len() != expected_size
+            || current_source.modified().ok() != expected_modified
+        {
+            let _ = fs::remove_file(&temp_path);
+            thread::sleep(sleep_duration);
+            continue;
+        }
+
+        if let Err(err) = fs::remove_file(&destination) {
+            if err.kind() != std::io::ErrorKind::NotFound {
+                let _ = fs::remove_file(&temp_path);
+                return Err(PrepareBackendError::Io(err));
+            }
+        }
+
+        match fs::rename(&temp_path, &destination) {
+            Ok(()) => return Ok(destination),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // Destination directory was removed after we created it; try again.
+                let _ = fs::remove_file(&temp_path);
+                fs::create_dir_all(&destination_dir).map_err(PrepareBackendError::Io)?;
+                thread::sleep(sleep_duration);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                let _ = fs::remove_file(&destination);
+                fs::rename(&temp_path, &destination).map_err(PrepareBackendError::Io)?;
+                return Ok(destination);
+            }
+            Err(err) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(PrepareBackendError::Io(err));
+            }
+        }
+    }
+
+    Err(PrepareBackendError::DidNotStabilize)
 }
 
 #[derive(Deserialize)]
