@@ -13,4 +13,4 @@ anyhow = "1.0.44"
 device = { path = "./device" }
 
 [build-dependencies]
-cuda_builder = { version = "0.3", path = "../../../cuda_builder" }
+cuda_builder = { workspace = true, default-features = false }

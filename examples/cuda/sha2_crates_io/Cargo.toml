@@ -9,4 +9,4 @@ sha2_crates_io_kernels = { path = "kernels" }
 sha2 = "0.10"
 
 [build-dependencies]
-cuda_builder = { path = "../../../crates/cuda_builder" }
+cuda_builder = { workspace = true, default-features = false }

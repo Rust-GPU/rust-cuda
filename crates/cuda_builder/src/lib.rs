@@ -4,7 +4,8 @@ pub use nvvm::*;
 use serde::Deserialize;
 use std::{
     borrow::Borrow,
-    env, fmt,
+    collections::HashSet,
+    env, fmt, fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -402,19 +403,217 @@ fn dylib_path() -> Vec<PathBuf> {
     }
 }
 
-fn find_rustc_codegen_nvvm() -> PathBuf {
-    let filename = format!(
+fn codegen_filename() -> String {
+    format!(
         "{}rustc_codegen_nvvm{}",
         env::consts::DLL_PREFIX,
         env::consts::DLL_SUFFIX
+    )
+}
+
+fn find_rustc_codegen_nvvm() -> PathBuf {
+    let filename = codegen_filename();
+
+    if let Some(path) = search_backend_artifact(&filename) {
+        return path;
+    }
+
+    if let Some(path) = find_in_library_path(&filename) {
+        return path;
+    }
+
+    if let Some(path) = build_backend_and_find(&filename) {
+        return path;
+    }
+
+    panic!(
+        "Could not find {filename}. Enable the \"rustc_codegen_nvvm\" feature on cuda_builder to build it automatically."
     );
-    for mut path in dylib_path() {
-        path.push(&filename);
-        if path.is_file() {
-            return path;
+}
+
+fn workspace_target_dir() -> PathBuf {
+    if let Some(dir) = env::var_os("CARGO_TARGET_DIR") {
+        return PathBuf::from(dir);
+    }
+
+    if let Some(dir) = target_dir_from_out_dir() {
+        return dir;
+    }
+
+    if let Some(dir) = env::var_os("CARGO_WORKSPACE_DIR") {
+        return PathBuf::from(dir).join("target");
+    }
+
+    PathBuf::from("target")
+}
+
+fn target_dir_from_out_dir() -> Option<PathBuf> {
+    let out_dir = env::var_os("OUT_DIR")?;
+    let mut path = PathBuf::from(out_dir);
+    while let Some(component) = path.file_name() {
+        if component == "target" {
+            return Some(path);
+        }
+        path.pop();
+    }
+    None
+}
+
+fn gather_dirs_from_out_dir(dirs: &mut Vec<PathBuf>, profile: &str, seen: &mut HashSet<PathBuf>) {
+    if let Some(out_dir) = env::var_os("OUT_DIR") {
+        let mut path = PathBuf::from(out_dir);
+        while let Some(component) = path.file_name() {
+            if component == profile {
+                push_dir(path.clone(), dirs, seen);
+                push_dir(path.join("deps"), dirs, seen);
+            }
+            path.pop();
         }
     }
-    panic!("Could not find {filename} in library path");
+}
+
+fn find_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {
+    let candidate = dir.join(filename);
+    if candidate.is_file() {
+        return Some(candidate);
+    }
+
+    let dll_suffix = env::consts::DLL_SUFFIX;
+    let base_name = format!("{}rustc_codegen_nvvm", env::consts::DLL_PREFIX);
+    let hashed_prefix = format!("{base_name}-");
+
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if (name == filename)
+                    || (name.starts_with(&hashed_prefix) && name.ends_with(dll_suffix))
+                {
+                    return Some(path);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn find_in_library_path(filename: &str) -> Option<PathBuf> {
+    for mut path in dylib_path() {
+        path.push(filename);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn search_backend_artifact(filename: &str) -> Option<PathBuf> {
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+
+    if let Some(dep_out_dir) = env::var_os("DEP_RUSTC_CODEGEN_NVVM_OUT_DIR") {
+        push_dir(PathBuf::from(dep_out_dir), &mut dirs, &mut seen);
+    }
+
+    let target_dir = workspace_target_dir();
+
+    let mut profiles = Vec::new();
+    if let Ok(profile) = env::var("PROFILE") {
+        profiles.push(profile);
+    }
+    profiles.push("debug".into());
+    profiles.push("release".into());
+    profiles.sort();
+    profiles.dedup();
+
+    if let Some(target_triple) = env::var_os("TARGET") {
+        for profile in &profiles {
+            let triple_dir = target_dir.join(&target_triple).join(profile);
+            push_dir(triple_dir.clone(), &mut dirs, &mut seen);
+            push_dir(triple_dir.join("deps"), &mut dirs, &mut seen);
+        }
+    }
+
+    for profile in &profiles {
+        let profile_dir = target_dir.join(profile);
+        push_dir(profile_dir.clone(), &mut dirs, &mut seen);
+        push_dir(profile_dir.join("deps"), &mut dirs, &mut seen);
+        gather_dirs_from_out_dir(&mut dirs, profile, &mut seen);
+    }
+
+    if let Some(root) = workspace_root_dir() {
+        let custom_target = root.join("target").join("cuda-builder-codegen");
+        for profile in &profiles {
+            let profile_dir = custom_target.join(profile);
+            push_dir(profile_dir.clone(), &mut dirs, &mut seen);
+            push_dir(profile_dir.join("deps"), &mut dirs, &mut seen);
+        }
+    }
+
+    for dir in dirs {
+        if let Some(found) = find_in_dir(&dir, filename) {
+            return Some(found);
+        }
+    }
+
+    None
+}
+
+fn build_backend_and_find(filename: &str) -> Option<PathBuf> {
+    let workspace_dir = workspace_root_dir()?;
+
+    println!("cargo:warning=Building rustc_codegen_nvvm to satisfy cuda_builder requirements");
+
+    let target_dir = workspace_dir.join("target").join("cuda-builder-codegen");
+
+    let status = Command::new("cargo")
+        .args(["build", "-p", "rustc_codegen_nvvm"])
+        .arg("--target-dir")
+        .arg(&target_dir)
+        .current_dir(&workspace_dir)
+        .status()
+        .ok()?;
+
+    if !status.success() {
+        return None;
+    }
+
+    search_backend_artifact(filename)
+}
+
+fn workspace_root_dir() -> Option<PathBuf> {
+    if let Some(dir) = env::var_os("CARGO_WORKSPACE_DIR") {
+        return Some(PathBuf::from(dir));
+    }
+
+    if let Some(dir) = env::var_os("CARGO_WORKSPACE_ROOT") {
+        return Some(PathBuf::from(dir));
+    }
+
+    let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")?;
+    let mut path = PathBuf::from(manifest_dir);
+
+    loop {
+        let candidate = path.join("Cargo.toml");
+        if candidate.is_file() {
+            if let Ok(contents) = fs::read_to_string(&candidate) {
+                if contents.contains("[workspace]") {
+                    return Some(path.clone());
+                }
+            }
+        }
+
+        if !path.pop() {
+            break;
+        }
+    }
+
+    None
 }
 
 /// Joins strings together while ensuring none of the strings contain the separator.
@@ -426,10 +625,99 @@ fn join_checking_for_separators(strings: Vec<impl Borrow<str>>, sep: &str) -> St
     strings.join(sep)
 }
 
+fn extend_library_path_env(cmd: &mut Command, dirs: &[PathBuf]) {
+    let var = dylib_path_envvar();
+    let mut paths: Vec<PathBuf> = dirs.iter().filter(|dir| dir.is_dir()).cloned().collect();
+
+    if paths.is_empty() {
+        return;
+    }
+
+    if let Some(existing) = env::var_os(var) {
+        paths.extend(env::split_paths(&existing));
+    }
+
+    let joined = env::join_paths(paths).expect("failed to join library search paths");
+    cmd.env(var, joined);
+}
+
+fn backend_library_dirs(backend: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+
+    if let Some(parent) = backend.parent() {
+        push_dir(parent.to_path_buf(), &mut dirs, &mut seen);
+
+        if let Some(grand) = parent.parent() {
+            push_dir(grand.to_path_buf(), &mut dirs, &mut seen);
+        }
+
+        let deps_dir = if parent.file_name().and_then(|s| s.to_str()) == Some("deps") {
+            parent.parent().map(|grand| grand.join("deps"))
+        } else {
+            Some(parent.join("deps"))
+        };
+
+        if let Some(deps_dir) = deps_dir {
+            push_dir(deps_dir, &mut dirs, &mut seen);
+        }
+    }
+
+    for sysroot_dir in rustc_sysroot_lib_dirs() {
+        push_dir(sysroot_dir, &mut dirs, &mut seen);
+    }
+
+    dirs
+}
+
+fn push_dir(path: PathBuf, dirs: &mut Vec<PathBuf>, seen: &mut HashSet<PathBuf>) {
+    if seen.insert(path.clone()) {
+        dirs.push(path);
+    }
+}
+
+fn rustc_sysroot_lib_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    let sysroot = match Command::new("rustc").args(["--print", "sysroot"]).output() {
+        Ok(output) if output.status.success() => {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        }
+        _ => return dirs,
+    };
+
+    let sysroot = PathBuf::from(sysroot);
+    dirs.push(sysroot.join("lib"));
+
+    if let Some(target_triple) = env::var_os("TARGET") {
+        dirs.push(
+            sysroot
+                .join("lib")
+                .join("rustlib")
+                .join(target_triple)
+                .join("lib"),
+        );
+    }
+
+    if let Some(host_triple) = env::var_os("HOST") {
+        dirs.push(
+            sysroot
+                .join("lib")
+                .join("rustlib")
+                .join(host_triple)
+                .join("lib"),
+        );
+    }
+
+    dirs
+}
+
 fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
     // see https://github.com/EmbarkStudios/rust-gpu/blob/main/crates/spirv-builder/src/lib.rs#L385-L392
     // on what this does
     let rustc_codegen_nvvm = find_rustc_codegen_nvvm();
+
+    let library_dirs = backend_library_dirs(&rustc_codegen_nvvm);
 
     let mut rustflags = vec![
         format!("-Zcodegen-backend={}", rustc_codegen_nvvm.display()),
@@ -490,6 +778,7 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
     }
 
     let mut cargo = Command::new("cargo");
+    extend_library_path_env(&mut cargo, &library_dirs);
     cargo.args([
         "build",
         "--lib",
@@ -567,23 +856,24 @@ struct RustcOutput {
 }
 
 fn get_last_artifact(out: &str) -> Option<PathBuf> {
-    let last = out
-        .lines()
-        .filter_map(|line| match serde_json::from_str::<RustcOutput>(line) {
-            Ok(line) => Some(line),
-            Err(_) => {
-                // Pass through invalid lines
-                println!("{line}");
-                None
-            }
-        })
+    let artifacts =
+        out.lines()
+            .filter_map(|line| match serde_json::from_str::<RustcOutput>(line) {
+                Ok(line) => Some(line),
+                Err(_) => {
+                    // Pass through invalid lines
+                    println!("{line}");
+                    None
+                }
+            });
+
+    let last = artifacts
         .filter(|line| line.reason == "compiler-artifact")
-        .next_back()
-        .expect("Did not find output file in rustc output");
+        .next_back()?;
 
     let mut filenames = last
         .filenames
-        .unwrap()
+        .unwrap_or_default()
         .into_iter()
         .filter(|v| v.ends_with(".ptx"));
     let filename = filenames.next()?;

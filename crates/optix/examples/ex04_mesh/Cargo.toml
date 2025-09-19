@@ -15,4 +15,4 @@ num-traits = "0.2.14"
 glam = { version = "0.30", features = ["cuda"] }
 
 [build-dependencies]
-cuda_builder = { version = "0.3", path = "../../../cuda_builder" }
+cuda_builder = { workspace = true, default-features = false }

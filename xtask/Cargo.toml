@@ -8,4 +8,3 @@ license = "MIT"
 pico-args = "0.4.2"
 rayon = "1.10"
 regex = "1.11.1"
-rustc_codegen_nvvm = { path = "../crates/rustc_codegen_nvvm" }

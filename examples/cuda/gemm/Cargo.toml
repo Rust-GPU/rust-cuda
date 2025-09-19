@@ -13,4 +13,4 @@ ndarray-rand = "0.15.0"
 rand = "0.9"
 
 [build-dependencies]
-cuda_builder = { path = "../../../crates/cuda_builder" }
+cuda_builder = { workspace = true, default-features = false }

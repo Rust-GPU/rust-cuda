@@ -23,4 +23,4 @@ sysinfo = "0.33.1"
 anyhow = "1.0.53"
 
 [build-dependencies]
-cuda_builder = { version = "0.3", path = "../../../crates/cuda_builder" }
+cuda_builder = { workspace = true, default-features = false }

@@ -8,4 +8,4 @@ cust = { path = "../../../crates/cust" }
 nanorand = "0.7"
 
 [build-dependencies]
-cuda_builder = { path = "../../../crates/cuda_builder" }
+cuda_builder = { workspace = true, default-features = false }
