@@ -614,8 +614,12 @@ fn struct_llfields<'a, 'tcx>(
             assert_eq!(offset.align_to(padding_align) + padding, target_offset);
             result.push(cx.type_padding_filler(padding, padding_align));
         }
+        match field.ty.kind() {
+            // This is a workaround for recursive types.
+            rustc_middle::ty::TyKind::FnPtr(_, _) => result.push(cx.type_i8p()),
+            _ => result.push(field.llvm_type(cx)),
+        }
 
-        result.push(field.llvm_type(cx));
         offset = target_offset + field.size;
         prev_effective_align = effective_field_align;
     }
