@@ -595,9 +595,24 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                 // We have copied the value to `result` already.
                 return Ok(());
             }
+
             // is this even supported by nvvm? i did not find a definitive answer
             _ if name_str.starts_with("simd_") => todo!("simd intrinsics"),
-            _ => bug!("unknown intrinsic '{}'", name),
+            // Fall back to a fallback intrinsic implementation, if possible
+            _ => {
+                // This piece of code was adapted from `rustc_codegen_cranelift`.
+                let intrinsic = self.tcx.intrinsic(instance.def_id()).unwrap();
+                if intrinsic.must_be_overridden {
+                    bug!(
+                        "intrinsic {} must be overridden by codegen_nvvm, but isn't",
+                        intrinsic.name,
+                    );
+                }
+                return Err(rustc_middle::ty::Instance::new_raw(
+                    instance.def_id(),
+                    instance.args,
+                ));
+            }
         };
         trace!("Finish intrinsic call: `{:?}`", llval);
         if !fn_abi.ret.is_ignore() {
