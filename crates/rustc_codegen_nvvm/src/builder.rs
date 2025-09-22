@@ -130,108 +130,34 @@ impl<'ll, 'tcx> Deref for Builder<'_, 'll, 'tcx> {
     }
 }
 
-macro_rules! math_builder_methods {
-    ($($name:ident($($arg:ident),*) => $llvm_capi:ident),+ $(,)?) => {
-        $(fn $name(&mut self, $($arg: &'ll Value),*) -> &'ll Value {
-            // Check if we're dealing with 128-bit integers and need emulation
-            #[allow(unused_variables)]
-            let needs_i128_emulation = false $(|| self.is_i128($arg))*;
-
-            if needs_i128_emulation {
-
-                // Collect arguments into a vector for easier handling
-                let args_vec: Vec<&'ll Value> = vec![$($arg),*];
-
-                // Dispatch to i128 emulation or `compiler_builtins`-based intrinsic
-                match stringify!($name) {
-                    "add" | "unchecked_uadd" | "unchecked_sadd" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.emulate_i128_add(args_vec[0], args_vec[1]);
-                    }
-                    "sub" | "unchecked_usub" | "unchecked_ssub" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.emulate_i128_sub(args_vec[0], args_vec[1]);
-                    }
-                    "mul" | "unchecked_umul" | "unchecked_smul" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.call_intrinsic("__nvvm_multi3", &[args_vec[0], args_vec[1]]);
-                    }
-                    "and" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.emulate_i128_and(args_vec[0], args_vec[1]);
-                    }
-                    "or" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.emulate_i128_or(args_vec[0], args_vec[1]);
-                    }
-                    "xor" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.emulate_i128_xor(args_vec[0], args_vec[1]);
-                    }
-                    "shl" => {
-                        assert_eq!(args_vec.len(), 2);
-                        // Convert shift amount to i32 for compiler-builtins
-                        let shift_amt = self.trunc(args_vec[1], self.type_i32());
-                        return self.call_intrinsic("__nvvm_ashlti3", &[args_vec[0], shift_amt]);
-                    }
-                    "lshr" => {
-                        assert_eq!(args_vec.len(), 2);
-                        // Convert shift amount to i32 for compiler-builtins
-                        let shift_amt = self.trunc(args_vec[1], self.type_i32());
-                        return self.call_intrinsic("__nvvm_lshrti3", &[args_vec[0], shift_amt]);
-                    }
-                    "ashr" => {
-                        assert_eq!(args_vec.len(), 2);
-                        // Convert shift amount to i32 for compiler-builtins
-                        let shift_amt = self.trunc(args_vec[1], self.type_i32());
-                        return self.call_intrinsic("__nvvm_ashrti3", &[args_vec[0], shift_amt]);
-                    }
-                    "neg" => {
-                        assert_eq!(args_vec.len(), 1);
-                        return self.emulate_i128_neg(args_vec[0]);
-                    }
-                    "not" => {
-                        assert_eq!(args_vec.len(), 1);
-                        return self.emulate_i128_not(args_vec[0]);
-                    }
-                    "udiv" | "exactudiv" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.call_intrinsic("__nvvm_udivti3", &[args_vec[0], args_vec[1]]);
-                    }
-                    "sdiv" | "exactsdiv" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.call_intrinsic("__nvvm_divti3", &[args_vec[0], args_vec[1]]);
-                    }
-                    "urem" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.call_intrinsic("__nvvm_umodti3", &[args_vec[0], args_vec[1]]);
-                    }
-                    "srem" => {
-                        assert_eq!(args_vec.len(), 2);
-                        return self.call_intrinsic("__nvvm_modti3", &[args_vec[0], args_vec[1]]);
-                    }
-                    _ => {
-                        self.cx.fatal(format!(
-                            "Unimplemented 128-bit integer operation '{}' with {} arguments. \
-                             This operation is not yet supported in Rust CUDA. \
-                             Consider using 64-bit integers or filing an issue at \
-                             https://github.com/Rust-GPU/rust-cuda/issues",
-                            stringify!($name),
-                            args_vec.len()
-                        ));
-                    }
+macro_rules! imath_builder_methods {
+    ($($self_:ident.$name:ident($($arg:ident),*) => $llvm_capi:ident => $op:block)+) => {
+        $(fn $name(&mut $self_, $($arg: &'ll Value),*) -> &'ll Value {
+            // Dispatch to i128 emulation or `compiler_builtins`-based intrinsic
+            if $($self_.is_i128($arg))||*
+                $op
+            else {
+                unsafe {
+                    trace!("binary expr: {:?} with args {:?}", stringify!($name), [$($arg),*]);
+                    llvm::$llvm_capi($self_.llbuilder, $($arg,)* UNNAMED)
                 }
-            }
-
-            unsafe {
-                trace!("binary expr: {:?} with args {:?}", stringify!($name), [$($arg),*]);
-                llvm::$llvm_capi(self.llbuilder, $($arg,)* UNNAMED)
             }
         })+
     }
 }
 
-macro_rules! set_math_builder_methods {
+macro_rules! fmath_builder_methods {
+    ($($self_:ident.$name:ident($($arg:ident),*) => $llvm_capi:ident)+) => {
+        $(fn $name(&mut $self_, $($arg: &'ll Value),*) -> &'ll Value {
+            unsafe {
+                trace!("binary expr: {:?} with args {:?}", stringify!($name), [$($arg),*]);
+                llvm::$llvm_capi($self_.llbuilder, $($arg,)* UNNAMED)
+            }
+        })+
+    }
+}
+
+macro_rules! set_fmath_builder_methods {
     ($($name:ident($($arg:ident),*) => ($llvm_capi:ident, $llvm_set_math:ident)),+ $(,)?) => {
         $(fn $name(&mut self, $($arg: &'ll Value),*) -> &'ll Value {
             unsafe {
@@ -367,39 +293,66 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
-    math_builder_methods! {
-        add(a, b) => LLVMBuildAdd,
-        fadd(a, b) => LLVMBuildFAdd,
-        sub(a, b) => LLVMBuildSub,
-        fsub(a, b) => LLVMBuildFSub,
-        mul(a, b) => LLVMBuildMul,
-        fmul(a, b) => LLVMBuildFMul,
-        udiv(a, b) => LLVMBuildUDiv,
-        exactudiv(a, b) => LLVMBuildExactUDiv,
-        sdiv(a, b) => LLVMBuildSDiv,
-        exactsdiv(a, b) => LLVMBuildExactSDiv,
-        fdiv(a, b) => LLVMBuildFDiv,
-        urem(a, b) => LLVMBuildURem,
-        srem(a, b) => LLVMBuildSRem,
-        frem(a, b) => LLVMBuildFRem,
-        shl(a, b) => LLVMBuildShl,
-        lshr(a, b) => LLVMBuildLShr,
-        ashr(a, b) => LLVMBuildAShr,
-        and(a, b) => LLVMBuildAnd,
-        or(a, b) => LLVMBuildOr,
-        xor(a, b) => LLVMBuildXor,
-        neg(x) => LLVMBuildNeg,
-        fneg(x) => LLVMBuildFNeg,
-        not(x) => LLVMBuildNot,
-        unchecked_sadd(x, y) => LLVMBuildNSWAdd,
-        unchecked_uadd(x, y) => LLVMBuildNUWAdd,
-        unchecked_ssub(x, y) => LLVMBuildNSWSub,
-        unchecked_usub(x, y) => LLVMBuildNUWSub,
-        unchecked_smul(x, y) => LLVMBuildNSWMul,
-        unchecked_umul(x, y) => LLVMBuildNUWMul,
+    imath_builder_methods! {
+        self.add(a, b) => LLVMBuildAdd => { self.emulate_i128_add(a, b) }
+        self.unchecked_uadd(a, b) => LLVMBuildNUWAdd => { self.emulate_i128_add(a, b) }
+        self.unchecked_sadd(a, b) => LLVMBuildNSWAdd => { self.emulate_i128_add(a, b) }
+
+        self.sub(a, b) => LLVMBuildSub => { self.emulate_i128_sub(a, b) }
+        self.unchecked_usub(a, b) => LLVMBuildNUWSub => { self.emulate_i128_sub(a, b) }
+        self.unchecked_ssub(a, b) => LLVMBuildNSWSub => { self.emulate_i128_sub(a, b) }
+
+        self.mul(a, b) => LLVMBuildMul => { self.call_intrinsic("__nvvm_multi3", &[a, b]) }
+        self.unchecked_umul(a, b) => LLVMBuildNUWMul => {
+            self.call_intrinsic("__nvvm_multi3", &[a, b])
+        }
+        self.unchecked_smul(a, b) => LLVMBuildNSWMul => {
+            self.call_intrinsic("__nvvm_multi3", &[a, b])
+        }
+
+        self.udiv(a, b) => LLVMBuildUDiv => { self.call_intrinsic("__nvvm_udivti3", &[a, b]) }
+        self.exactudiv(a, b) => LLVMBuildExactUDiv => {
+            self.call_intrinsic("__nvvm_udivti3", &[a, b])
+        }
+        self.sdiv(a, b) => LLVMBuildSDiv => { self.call_intrinsic("__nvvm_divti3", &[a, b]) }
+        self.exactsdiv(a, b) => LLVMBuildExactSDiv => {
+            self.call_intrinsic("__nvvm_divti3", &[a, b])
+        }
+        self.urem(a, b) => LLVMBuildURem => { self.call_intrinsic("__nvvm_umodti3", &[a, b]) }
+        self.srem(a, b) => LLVMBuildSRem => { self.call_intrinsic("__nvvm_modti3", &[a, b]) }
+
+        self.shl(a, b) => LLVMBuildShl => {
+            // Convert shift amount to i32 for compiler-builtins.
+            let b = self.trunc(b, self.type_i32());
+            self.call_intrinsic("__nvvm_ashlti3", &[a, b])
+        }
+        self.lshr(a, b) => LLVMBuildLShr => {
+            // Convert shift amount to i32 for compiler-builtins.
+            let b = self.trunc(b, self.type_i32());
+            self.call_intrinsic("__nvvm_lshrti3", &[a, b])
+        }
+        self.ashr(a, b) => LLVMBuildAShr => {
+            // Convert shift amount to i32 for compiler-builtins.
+            let b = self.trunc(b, self.type_i32());
+            self.call_intrinsic("__nvvm_ashrti3", &[a, b])
+        }
+        self.and(a, b) => LLVMBuildAnd => { self.emulate_i128_and(a, b) }
+        self.or(a, b) => LLVMBuildOr => { self.emulate_i128_or(a, b) }
+        self.xor(a, b) => LLVMBuildXor => { self.emulate_i128_xor(a, b) }
+        self.neg(a) => LLVMBuildNeg => { self.emulate_i128_neg(a) }
+        self.not(a) => LLVMBuildNot => { self.emulate_i128_not(a) }
     }
 
-    set_math_builder_methods! {
+    fmath_builder_methods! {
+        self.fadd(a, b) => LLVMBuildFAdd
+        self.fsub(a, b) => LLVMBuildFSub
+        self.fmul(a, b) => LLVMBuildFMul
+        self.fdiv(a, b) => LLVMBuildFDiv
+        self.frem(a, b) => LLVMBuildFRem
+        self.fneg(a) => LLVMBuildFNeg
+    }
+
+    set_fmath_builder_methods! {
         fadd_fast(x, y) => (LLVMBuildFAdd, LLVMRustSetFastMath),
         fsub_fast(x, y) => (LLVMBuildFSub, LLVMRustSetFastMath),
         fmul_fast(x, y) => (LLVMBuildFMul, LLVMRustSetFastMath),
