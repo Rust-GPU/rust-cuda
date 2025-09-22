@@ -1,0 +1,10 @@
+[package]
+name = "i128-demo-kernels"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cuda_std = { path = "../../../../crates/cuda_std" }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
