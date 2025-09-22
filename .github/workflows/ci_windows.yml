@@ -88,13 +88,13 @@ jobs:
       - name: Build all bindings
         run: cargo build --all-features -p cust_raw
 
-      - name: Build workspace
-        run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex0*" --exclude "cudnn*" --exclude "sha2*"
+      - name: Build
+        run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex*" --exclude "cudnn*" --exclude "sha2*" --exclude "i128*"
 
       - name: Clippy
         env:
           RUSTFLAGS: -Dwarnings
-        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex0*" --exclude "cudnn*" --exclude "sha2*"
+        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex*" --exclude "cudnn*" --exclude "sha2*" --exclude "i128*"
 
       # Very limited testing because we can only run tests that don't rely on having a CUDA GPU.
       - name: Test
@@ -103,8 +103,7 @@ jobs:
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex0*" --exclude "cudnn*" --exclude "sha2*" --exclude "cust_raw"
-
-      # Disabled due to dll issues, someone with Windows knowledge needed
+        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex*" --exclude "cudnn*" --exclude "sha2*" --exclude "i128*" --exclude "cust_raw"
+      # Disabled due to dll issues, someone with  Windows knowledge needed
       # - name: Compiletest
       #  run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90

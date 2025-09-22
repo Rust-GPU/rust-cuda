@@ -32,6 +32,8 @@ use crate::int_replace::{get_transformed_type, transmute_llval};
 use crate::llvm::{self, BasicBlock, Type, Value};
 use crate::ty::LayoutLlvmExt;
 
+mod emulate_i128;
+
 pub(crate) enum CountZerosKind {
     Leading,
     Trailing,
@@ -133,7 +135,7 @@ impl<'ll, 'tcx> Deref for Builder<'_, 'll, 'tcx> {
 macro_rules! imath_builder_methods {
     ($($self_:ident.$name:ident($($arg:ident),*) => $llvm_capi:ident => $op:block)+) => {
         $(fn $name(&mut $self_, $($arg: &'ll Value),*) -> &'ll Value {
-            // Dispatch to i128 emulation or `compiler_builtins`-based intrinsic
+            // Dispatch to i128 emulation when any operand is 128 bits wide.
             if $($self_.is_i128($arg))||*
                 $op
             else {
@@ -319,40 +321,30 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         self.unchecked_usub(a, b) => LLVMBuildNUWSub => { self.emulate_i128_sub(a, b) }
         self.unchecked_ssub(a, b) => LLVMBuildNSWSub => { self.emulate_i128_sub(a, b) }
 
-        self.mul(a, b) => LLVMBuildMul => { self.call_intrinsic("__nvvm_multi3", &[a, b]) }
-        self.unchecked_umul(a, b) => LLVMBuildNUWMul => {
-            self.call_intrinsic("__nvvm_multi3", &[a, b])
-        }
-        self.unchecked_smul(a, b) => LLVMBuildNSWMul => {
-            self.call_intrinsic("__nvvm_multi3", &[a, b])
-        }
+        self.mul(a, b) => LLVMBuildMul => { self.emulate_i128_mul(a, b) }
+        self.unchecked_umul(a, b) => LLVMBuildNUWMul => { self.emulate_i128_mul(a, b) }
+        self.unchecked_smul(a, b) => LLVMBuildNSWMul => { self.emulate_i128_mul(a, b) }
 
-        self.udiv(a, b) => LLVMBuildUDiv => { self.call_intrinsic("__nvvm_udivti3", &[a, b]) }
-        self.exactudiv(a, b) => LLVMBuildExactUDiv => {
-            self.call_intrinsic("__nvvm_udivti3", &[a, b])
-        }
-        self.sdiv(a, b) => LLVMBuildSDiv => { self.call_intrinsic("__nvvm_divti3", &[a, b]) }
-        self.exactsdiv(a, b) => LLVMBuildExactSDiv => {
-            self.call_intrinsic("__nvvm_divti3", &[a, b])
-        }
-        self.urem(a, b) => LLVMBuildURem => { self.call_intrinsic("__nvvm_umodti3", &[a, b]) }
-        self.srem(a, b) => LLVMBuildSRem => { self.call_intrinsic("__nvvm_modti3", &[a, b]) }
+        self.udiv(a, b) => LLVMBuildUDiv => { self.emulate_i128_udiv(a, b) }
+        self.exactudiv(a, b) => LLVMBuildExactUDiv => { self.emulate_i128_udiv(a, b) }
+        self.sdiv(a, b) => LLVMBuildSDiv => { self.emulate_i128_sdiv(a, b) }
+        self.exactsdiv(a, b) => LLVMBuildExactSDiv => { self.emulate_i128_sdiv(a, b) }
+        self.urem(a, b) => LLVMBuildURem => { self.emulate_i128_urem(a, b) }
+        self.srem(a, b) => LLVMBuildSRem => { self.emulate_i128_srem(a, b) }
 
         self.shl(a, b) => LLVMBuildShl => {
-            // Convert shift amount to i32 for compiler-builtins.
             let b = self.trunc(b, self.type_i32());
-            self.call_intrinsic("__nvvm_ashlti3", &[a, b])
+            self.emulate_i128_shl(a, b)
         }
         self.lshr(a, b) => LLVMBuildLShr => {
-            // Convert shift amount to i32 for compiler-builtins.
             let b = self.trunc(b, self.type_i32());
-            self.call_intrinsic("__nvvm_lshrti3", &[a, b])
+            self.emulate_i128_lshr(a, b)
         }
         self.ashr(a, b) => LLVMBuildAShr => {
-            // Convert shift amount to i32 for compiler-builtins.
             let b = self.trunc(b, self.type_i32());
-            self.call_intrinsic("__nvvm_ashrti3", &[a, b])
+            self.emulate_i128_ashr(a, b)
         }
+
         self.and(a, b) => LLVMBuildAnd => { self.emulate_i128_and(a, b) }
         self.or(a, b) => LLVMBuildOr => { self.emulate_i128_or(a, b) }
         self.xor(a, b) => LLVMBuildXor => { self.emulate_i128_xor(a, b) }
@@ -404,19 +396,39 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             _ => panic!("tried to get overflow intrinsic for op applied to non-int type"),
         };
 
+        match (oop, new_kind) {
+            (OverflowOp::Add, Int(I128)) => {
+                return self.emulate_i128_add_with_overflow(lhs, rhs, true);
+            }
+            (OverflowOp::Add, Uint(U128)) => {
+                return self.emulate_i128_add_with_overflow(lhs, rhs, false);
+            }
+            (OverflowOp::Sub, Int(I128)) => {
+                return self.emulate_i128_sub_with_overflow(lhs, rhs, true);
+            }
+            (OverflowOp::Sub, Uint(U128)) => {
+                return self.emulate_i128_sub_with_overflow(lhs, rhs, false);
+            }
+            (OverflowOp::Mul, Int(I128)) => {
+                return self.emulate_i128_mul_with_overflow(lhs, rhs, true);
+            }
+            (OverflowOp::Mul, Uint(U128)) => {
+                return self.emulate_i128_mul_with_overflow(lhs, rhs, false);
+            }
+            _ => {}
+        }
+
         let name = match oop {
             OverflowOp::Add => match new_kind {
                 Int(I8) => "__nvvm_i8_addo",
                 Int(I16) => "llvm.sadd.with.overflow.i16",
                 Int(I32) => "llvm.sadd.with.overflow.i32",
                 Int(I64) => "llvm.sadd.with.overflow.i64",
-                Int(I128) => "__nvvm_i128_addo",
 
                 Uint(U8) => "__nvvm_u8_addo",
                 Uint(U16) => "llvm.uadd.with.overflow.i16",
                 Uint(U32) => "llvm.uadd.with.overflow.i32",
                 Uint(U64) => "llvm.uadd.with.overflow.i64",
-                Uint(U128) => "__nvvm_u128_addo",
                 _ => unreachable!(),
             },
             OverflowOp::Sub => match new_kind {
@@ -424,13 +436,11 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 Int(I16) => "llvm.ssub.with.overflow.i16",
                 Int(I32) => "llvm.ssub.with.overflow.i32",
                 Int(I64) => "llvm.ssub.with.overflow.i64",
-                Int(I128) => "__nvvm_i128_subo",
 
                 Uint(U8) => "__nvvm_u8_subo",
                 Uint(U16) => "llvm.usub.with.overflow.i16",
                 Uint(U32) => "llvm.usub.with.overflow.i32",
                 Uint(U64) => "llvm.usub.with.overflow.i64",
-                Uint(U128) => "__nvvm_u128_subo",
 
                 _ => unreachable!(),
             },
@@ -439,13 +449,11 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 Int(I16) => "llvm.smul.with.overflow.i16",
                 Int(I32) => "llvm.smul.with.overflow.i32",
                 Int(I64) => "llvm.smul.with.overflow.i64",
-                Int(I128) => "__nvvm_i128_mulo",
 
                 Uint(U8) => "__nvvm_u8_mulo",
                 Uint(U16) => "llvm.umul.with.overflow.i16",
                 Uint(U32) => "llvm.umul.with.overflow.i32",
                 Uint(U64) => "llvm.umul.with.overflow.i64",
-                Uint(U128) => "__nvvm_u128_mulo",
 
                 _ => unreachable!(),
             },
@@ -1384,244 +1392,6 @@ impl<'ll> StaticBuilderMethods for Builder<'_, 'll, '_> {
 }
 
 impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
-    // Helper function to check if a value is 128-bit integer
-    fn is_i128(&self, val: &'ll Value) -> bool {
-        let ty = self.val_ty(val);
-        if unsafe { llvm::LLVMRustGetTypeKind(ty) == llvm::TypeKind::Integer } {
-            unsafe { llvm::LLVMGetIntTypeWidth(ty) == 128 }
-        } else {
-            false
-        }
-    }
-
-    // Helper to split i128 into low and high u64 parts
-    fn split_i128(&mut self, val: &'ll Value) -> (&'ll Value, &'ll Value) {
-        let i64_ty = self.type_i64();
-        let const_64 = self.const_u128(64);
-
-        let lo = self.trunc(val, i64_ty);
-        let shifted = unsafe { llvm::LLVMBuildLShr(self.llbuilder, val, const_64, UNNAMED) };
-        let hi = self.trunc(shifted, i64_ty);
-
-        (lo, hi)
-    }
-
-    // Helper to combine two u64 values into i128
-    fn combine_i128(&mut self, lo: &'ll Value, hi: &'ll Value) -> &'ll Value {
-        let i128_ty = self.type_i128();
-        let const_64 = self.const_u128(64);
-
-        let lo_ext = self.zext(lo, i128_ty);
-        let hi_ext = self.zext(hi, i128_ty);
-        let hi_shifted = unsafe { llvm::LLVMBuildShl(self.llbuilder, hi_ext, const_64, UNNAMED) };
-        unsafe { llvm::LLVMBuildOr(self.llbuilder, lo_ext, hi_shifted, UNNAMED) }
-    }
-
-    // Emulate 128-bit addition using two 64-bit additions with carry
-    fn emulate_i128_add(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let i64_ty = self.type_i64();
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        // Add low parts
-        let sum_lo = unsafe { llvm::LLVMBuildAdd(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-
-        // Check for carry from low addition
-        let carry = self.icmp(IntPredicate::IntULT, sum_lo, lhs_lo);
-        let carry_ext = self.zext(carry, i64_ty);
-
-        // Add high parts with carry
-        let sum_hi_temp = unsafe { llvm::LLVMBuildAdd(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-        let sum_hi = unsafe { llvm::LLVMBuildAdd(self.llbuilder, sum_hi_temp, carry_ext, UNNAMED) };
-
-        self.combine_i128(sum_lo, sum_hi)
-    }
-
-    // Emulate 128-bit subtraction
-    fn emulate_i128_sub(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let i64_ty = self.type_i64();
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        // Subtract low parts
-        let diff_lo = unsafe { llvm::LLVMBuildSub(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-
-        // Check for borrow
-        let borrow = self.icmp(IntPredicate::IntUGT, rhs_lo, lhs_lo);
-        let borrow_ext = self.zext(borrow, i64_ty);
-
-        // Subtract high parts with borrow
-        let diff_hi_temp = unsafe { llvm::LLVMBuildSub(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-        let diff_hi =
-            unsafe { llvm::LLVMBuildSub(self.llbuilder, diff_hi_temp, borrow_ext, UNNAMED) };
-
-        self.combine_i128(diff_lo, diff_hi)
-    }
-
-    // Emulate 128-bit bitwise AND
-    fn emulate_i128_and(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        let and_lo = unsafe { llvm::LLVMBuildAnd(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-        let and_hi = unsafe { llvm::LLVMBuildAnd(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-
-        self.combine_i128(and_lo, and_hi)
-    }
-
-    // Emulate 128-bit bitwise OR
-    fn emulate_i128_or(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        let or_lo = unsafe { llvm::LLVMBuildOr(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-        let or_hi = unsafe { llvm::LLVMBuildOr(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-
-        self.combine_i128(or_lo, or_hi)
-    }
-
-    // Emulate 128-bit bitwise XOR
-    fn emulate_i128_xor(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        let xor_lo = unsafe { llvm::LLVMBuildXor(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-        let xor_hi = unsafe { llvm::LLVMBuildXor(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-
-        self.combine_i128(xor_lo, xor_hi)
-    }
-
-    // Emulate 128-bit bitwise NOT
-    fn emulate_i128_not(&mut self, val: &'ll Value) -> &'ll Value {
-        let (lo, hi) = self.split_i128(val);
-
-        let not_lo = unsafe { llvm::LLVMBuildNot(self.llbuilder, lo, UNNAMED) };
-        let not_hi = unsafe { llvm::LLVMBuildNot(self.llbuilder, hi, UNNAMED) };
-
-        self.combine_i128(not_lo, not_hi)
-    }
-
-    // Emulate 128-bit negation (two's complement)
-    fn emulate_i128_neg(&mut self, val: &'ll Value) -> &'ll Value {
-        // Two's complement: ~val + 1
-        let not_val = self.emulate_i128_not(val);
-        let one = self.const_u128(1);
-        self.emulate_i128_add(not_val, one)
-    }
-
-    pub(crate) fn emulate_i128_bswap(&mut self, val: &'ll Value) -> &'ll Value {
-        // Split the 128-bit value into two 64-bit halves
-        let (lo, hi) = self.split_i128(val);
-
-        // Byte-swap each 64-bit half using the LLVM intrinsic (which exists in LLVM 7.1)
-        let swapped_lo = self.call_intrinsic("llvm.bswap.i64", &[lo]);
-        let swapped_hi = self.call_intrinsic("llvm.bswap.i64", &[hi]);
-
-        // Swap the halves: the high part becomes low and vice versa
-        self.combine_i128(swapped_hi, swapped_lo)
-    }
-
-    pub(crate) fn emulate_i128_count_zeros(
-        &mut self,
-        val: &'ll Value,
-        kind: CountZerosKind,
-        is_nonzero: bool,
-    ) -> &'ll Value {
-        // Split the 128-bit value into two 64-bit halves
-        let (lo, hi) = self.split_i128(val);
-
-        match kind {
-            CountZerosKind::Leading => {
-                // Count leading zeros: check high part first
-                let hi_is_zero = self.icmp(IntPredicate::IntEQ, hi, self.const_u64(0));
-                let hi_ctlz =
-                    self.call_intrinsic("llvm.ctlz.i64", &[hi, self.const_bool(is_nonzero)]);
-                let lo_ctlz =
-                    self.call_intrinsic("llvm.ctlz.i64", &[lo, self.const_bool(is_nonzero)]);
-
-                // If high part is zero, result is 64 + ctlz(lo), otherwise ctlz(hi)
-                let lo_ctlz_plus_64 = self.add(lo_ctlz, self.const_u64(64));
-                let result_64 = self.select(hi_is_zero, lo_ctlz_plus_64, hi_ctlz);
-
-                // Zero-extend to i128
-                self.zext(result_64, self.type_i128())
-            }
-            CountZerosKind::Trailing => {
-                // Count trailing zeros: check low part first
-                let lo_is_zero = self.icmp(IntPredicate::IntEQ, lo, self.const_u64(0));
-                let lo_cttz =
-                    self.call_intrinsic("llvm.cttz.i64", &[lo, self.const_bool(is_nonzero)]);
-                let hi_cttz =
-                    self.call_intrinsic("llvm.cttz.i64", &[hi, self.const_bool(is_nonzero)]);
-
-                // If low part is zero, result is 64 + cttz(hi), otherwise cttz(lo)
-                let hi_cttz_plus_64 = self.add(hi_cttz, self.const_u64(64));
-                let result_64 = self.select(lo_is_zero, hi_cttz_plus_64, lo_cttz);
-
-                // Zero-extend to i128
-                self.zext(result_64, self.type_i128())
-            }
-        }
-    }
-
-    pub(crate) fn emulate_i128_ctpop(&mut self, val: &'ll Value) -> &'ll Value {
-        // Split the 128-bit value into two 64-bit halves
-        let (lo, hi) = self.split_i128(val);
-
-        // Count population (number of 1 bits) in each half
-        let lo_popcount = self.call_intrinsic("llvm.ctpop.i64", &[lo]);
-        let hi_popcount = self.call_intrinsic("llvm.ctpop.i64", &[hi]);
-
-        // Add the two counts
-        let total_64 = self.add(lo_popcount, hi_popcount);
-
-        // Zero-extend to i128
-        self.zext(total_64, self.type_i128())
-    }
-
-    pub(crate) fn emulate_i128_rotate(
-        &mut self,
-        val: &'ll Value,
-        shift: &'ll Value,
-        is_left: bool,
-    ) -> &'ll Value {
-        // Rotate is implemented as: (val << shift) | (val >> (128 - shift))
-        // For rotate right: (val >> shift) | (val << (128 - shift))
-
-        // Ensure shift is i128
-        let shift_128 = if self.val_ty(shift) == self.type_i128() {
-            shift
-        } else {
-            self.zext(shift, self.type_i128())
-        };
-
-        // Calculate 128 - shift for the complementary shift
-        let bits_128 = self.const_u128(128);
-        let shift_complement = self.sub(bits_128, shift_128);
-
-        // Perform the two shifts
-        let (first_shift, second_shift) = if is_left {
-            (self.shl(val, shift_128), self.lshr(val, shift_complement))
-        } else {
-            (self.lshr(val, shift_128), self.shl(val, shift_complement))
-        };
-
-        // Combine with OR
-        self.or(first_shift, second_shift)
-    }
-
-    pub(crate) fn emulate_i128_bitreverse(&mut self, val: &'ll Value) -> &'ll Value {
-        // Split the 128-bit value into two 64-bit halves
-        let (lo, hi) = self.split_i128(val);
-
-        // Reverse bits in each half using the 64-bit intrinsic
-        let reversed_lo = self.call_intrinsic("llvm.bitreverse.i64", &[lo]);
-        let reversed_hi = self.call_intrinsic("llvm.bitreverse.i64", &[hi]);
-
-        // Swap the halves: reversed high becomes low and vice versa
-        self.combine_i128(reversed_hi, reversed_lo)
-    }
-
     fn with_cx(cx: &'a CodegenCx<'ll, 'tcx>) -> Self {
         // Create a fresh builder from the crate context.
         let llbuilder = unsafe { llvm::LLVMCreateBuilderInContext(cx.llcx) };

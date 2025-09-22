@@ -428,6 +428,15 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                 let pair = self.insert_value(pair, low, 0);
                 self.insert_value(pair, high, 1)
             }
+            sym::unchecked_shl => self.shl(args[0].immediate(), args[1].immediate()),
+            sym::unchecked_shr => {
+                let lhs = args[0].immediate();
+                let rhs = args[1].immediate();
+                match arg_tys[0].kind() {
+                    ty::Int(_) => self.ashr(lhs, rhs),
+                    _ => self.lshr(lhs, rhs),
+                }
+            }
             sym::ctlz
             | sym::ctlz_nonzero
             | sym::cttz

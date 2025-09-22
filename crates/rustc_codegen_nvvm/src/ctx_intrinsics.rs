@@ -14,7 +14,6 @@ impl<'ll> CodegenCx<'ll, '_> {
     #[rustfmt::skip] // stop rustfmt from making this 2k lines
     pub(crate) fn build_intrinsics_map(&mut self) {
         let mut map = self.intrinsics_map.borrow_mut();
-        let mut remapped = self.remapped_integer_args.borrow_mut();
 
         macro_rules! ifn {
             ($map:expr, $($name:literal)|*, fn($($arg:expr),*) -> $ret:expr) => {
@@ -24,9 +23,6 @@ impl<'ll> CodegenCx<'ll, '_> {
             };
         }
 
-        let real_t_i128 = self.type_i128();
-        let real_t_i128_i1 = self.type_struct(&[real_t_i128, self.type_i1()], false);
-
         let i8p = self.type_i8p();
         let void = self.type_void();
         let i1 = self.type_i1();
@@ -34,7 +30,6 @@ impl<'ll> CodegenCx<'ll, '_> {
         let t_i16 = self.type_i16();
         let t_i32 = self.type_i32();
         let t_i64 = self.type_i64();
-        let t_i128 = self.type_vector(t_i64, 2);
         let t_f32 = self.type_f32();
         let t_f64 = self.type_f64();
         let t_isize = self.type_isize();
@@ -43,7 +38,6 @@ impl<'ll> CodegenCx<'ll, '_> {
         let t_i16_i1 = self.type_struct(&[t_i16, i1], false);
         let t_i32_i1 = self.type_struct(&[t_i32, i1], false);
         let t_i64_i1 = self.type_struct(&[t_i64, i1], false);
-        let t_i128_i1 = self.type_struct(&[t_i128, i1], false);
 
         let voidp = self.voidp();
 
@@ -75,34 +69,6 @@ impl<'ll> CodegenCx<'ll, '_> {
         ifn!(map, "llvm.umul.with.overflow.i32", fn(t_i32, t_i32) -> t_i32_i1);
         ifn!(map, "llvm.umul.with.overflow.i64", fn(t_i64, t_i64) -> t_i64_i1);
 
-        let i128_checked_binops = [
-            "__nvvm_i128_addo",
-            "__nvvm_u128_addo",
-            "__nvvm_i128_subo",
-            "__nvvm_u128_subo",
-            "__nvvm_i128_mulo",
-            "__nvvm_u128_mulo"
-        ];
-
-        for binop in i128_checked_binops {
-            map.insert(binop, (vec![t_i128, t_i128], t_i128_i1));
-            let llfn_ty = self.type_func(&[t_i128, t_i128], t_i128_i1);
-            remapped.insert(llfn_ty, (Some(real_t_i128_i1), vec![(0, real_t_i128), (1, real_t_i128)]));
-        }
-
-        let i128_saturating_ops = [
-            "llvm.sadd.sat.i128",
-            "llvm.uadd.sat.i128",
-            "llvm.ssub.sat.i128",
-            "llvm.usub.sat.i128",
-        ];
-
-        for binop in i128_saturating_ops {
-            map.insert(binop, (vec![t_i128, t_i128], t_i128));
-            let llfn_ty = self.type_func(&[t_i128, t_i128], t_i128);
-            remapped.insert(llfn_ty, (Some(real_t_i128), vec![(0, real_t_i128), (1, real_t_i128)]));
-        }
-
         // for some very strange reason, they arent supported for i8 either, but that case
         // is easy to handle and we declare our own functions for that which just
         // zext to i16, use the i16 intrinsic, then trunc back to i8
@@ -114,34 +80,6 @@ impl<'ll> CodegenCx<'ll, '_> {
         ifn!(map, "__nvvm_u8_subo", fn(t_i8, t_i8) -> t_i8_i1);
         ifn!(map, "__nvvm_i8_mulo", fn(t_i8, t_i8) -> t_i8_i1);
         ifn!(map, "__nvvm_u8_mulo", fn(t_i8, t_i8) -> t_i8_i1);
-
-        // i128 arithmetic operations from compiler-builtins
-        // Division and remainder
-        ifn!(map, "__nvvm_divti3", fn(t_i128, t_i128) -> t_i128);
-        ifn!(map, "__nvvm_udivti3", fn(t_i128, t_i128) -> t_i128);
-        ifn!(map, "__nvvm_modti3", fn(t_i128, t_i128) -> t_i128);
-        ifn!(map, "__nvvm_umodti3", fn(t_i128, t_i128) -> t_i128);
-
-        // Multiplication
-        ifn!(map, "__nvvm_multi3", fn(t_i128, t_i128) -> t_i128);
-
-        // Shift operations
-        ifn!(map, "__nvvm_ashlti3", fn(t_i128, t_i32) -> t_i128);
-        ifn!(map, "__nvvm_ashrti3", fn(t_i128, t_i32) -> t_i128);
-        ifn!(map, "__nvvm_lshrti3", fn(t_i128, t_i32) -> t_i128);
-
-        // Add remapping for i128 binary operations (division, remainder, multiplication)
-        // All have the same signature: (i128, i128) -> i128
-        let i128_binary_llfn_ty = self.type_func(&[t_i128, t_i128], t_i128);
-        remapped.insert(i128_binary_llfn_ty, (Some(real_t_i128), vec![(0, real_t_i128), (1, real_t_i128)]));
-
-        // Add remapping for i128 shift operations
-        // All have the same signature: (i128, i32) -> i128
-        let i128_shift_llfn_ty = self.type_func(&[t_i128, t_i32], t_i128);
-        remapped.insert(i128_shift_llfn_ty, (Some(real_t_i128), vec![(0, real_t_i128), (1, t_i32)]));
-
-        // see comment in libintrinsics.ll
-        // ifn!(map, "__nvvm_i128_trap", fn(t_i128, t_i128) -> t_i128);
 
         ifn!(map, "llvm.sadd.sat.i8", fn(t_i8, t_i8) -> t_i8);
         ifn!(map, "llvm.sadd.sat.i16", fn(t_i16, t_i16) -> t_i16);
