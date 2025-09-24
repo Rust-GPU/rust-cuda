@@ -1,7 +1,8 @@
+use rustc_abi::{Align, Size};
 use rustc_codegen_ssa::common::IntPredicate;
 use rustc_codegen_ssa::traits::*;
 
-use crate::llvm::{self, Value};
+use crate::llvm::{self, Type, Value};
 
 use super::{Builder, CountZerosKind, UNNAMED};
 
@@ -30,6 +31,42 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         };
 
         (lo, hi)
+    }
+
+    fn ensure_i128(&mut self, val: &'ll Value) -> &'ll Value {
+        if self.val_ty(val) == self.type_i128() {
+            val
+        } else {
+            unsafe { llvm::LLVMBuildBitCast(self.llbuilder, val, self.type_i128(), UNNAMED) }
+        }
+    }
+
+    fn call_compiler_builtin(
+        &mut self,
+        name: &str,
+        ret_ty: &'ll Type,
+        args: &[&'ll Value],
+    ) -> &'ll Value {
+        let arg_tys: Vec<_> = args.iter().map(|&arg| self.val_ty(arg)).collect();
+        let fn_ty = self.type_func(&arg_tys, ret_ty);
+        let llfn = self.cx.declare_fn(name, fn_ty, None);
+        self.call(fn_ty, None, None, llfn, args, None, None)
+    }
+
+    fn trap_if(&mut self, cond: &'ll Value, label: &str) {
+        let trap_label = format!("{label}_trap");
+        let cont_label = format!("{label}_cont");
+        let trap_bb = self.append_sibling_block(&trap_label);
+        let cont_bb = self.append_sibling_block(&cont_label);
+
+        self.cond_br(cond, trap_bb, cont_bb);
+
+        let mut trap_bx = Self::build(self.cx, trap_bb);
+        trap_bx.call_intrinsic("llvm.trap", &[]);
+        trap_bx.unreachable();
+
+        let cont_bx = Self::build(self.cx, cont_bb);
+        *self = cont_bx;
     }
 
     fn uadd_with_overflow_i64(
@@ -109,45 +146,20 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         (lo, hi)
     }
 
-    // Emulate 128-bit addition using two 64-bit additions with carry
+    // Emulate 128-bit addition using compiler-builtins
     pub(super) fn emulate_i128_add(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let i64_ty = self.type_i64();
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        // Add low parts
-        let sum_lo = unsafe { llvm::LLVMBuildAdd(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-
-        // Check for carry from low addition
-        let carry = self.icmp(IntPredicate::IntULT, sum_lo, lhs_lo);
-        let carry_ext = self.zext(carry, i64_ty);
-
-        // Add high parts with carry
-        let sum_hi_temp = unsafe { llvm::LLVMBuildAdd(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-        let sum_hi = unsafe { llvm::LLVMBuildAdd(self.llbuilder, sum_hi_temp, carry_ext, UNNAMED) };
-
-        self.combine_i128(sum_lo, sum_hi)
+        let lhs = self.ensure_i128(lhs);
+        let rhs = self.ensure_i128(rhs);
+        let args = [lhs, rhs];
+        self.call_compiler_builtin("__rust_i128_add", self.type_i128(), &args)
     }
 
-    // Emulate 128-bit subtraction
+    // Emulate 128-bit subtraction using compiler-builtins
     pub(super) fn emulate_i128_sub(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let i64_ty = self.type_i64();
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        // Subtract low parts
-        let diff_lo = unsafe { llvm::LLVMBuildSub(self.llbuilder, lhs_lo, rhs_lo, UNNAMED) };
-
-        // Check for borrow
-        let borrow = self.icmp(IntPredicate::IntUGT, rhs_lo, lhs_lo);
-        let borrow_ext = self.zext(borrow, i64_ty);
-
-        // Subtract high parts with borrow
-        let diff_hi_temp = unsafe { llvm::LLVMBuildSub(self.llbuilder, lhs_hi, rhs_hi, UNNAMED) };
-        let diff_hi =
-            unsafe { llvm::LLVMBuildSub(self.llbuilder, diff_hi_temp, borrow_ext, UNNAMED) };
-
-        self.combine_i128(diff_lo, diff_hi)
+        let lhs = self.ensure_i128(lhs);
+        let rhs = self.ensure_i128(rhs);
+        let args = [lhs, rhs];
+        self.call_compiler_builtin("__rust_i128_sub", self.type_i128(), &args)
     }
 
     // Emulate 128-bit bitwise AND
@@ -183,30 +195,12 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         self.combine_i128(xor_lo, xor_hi)
     }
 
-    // Emulate 128-bit multiplication using 64-bit partial products
+    // Emulate 128-bit multiplication using compiler-builtins
     pub(super) fn emulate_i128_mul(&mut self, lhs: &'ll Value, rhs: &'ll Value) -> &'ll Value {
-        let (lhs_lo, lhs_hi) = self.split_i128(lhs);
-        let (rhs_lo, rhs_hi) = self.split_i128(rhs);
-
-        // Compute partial products
-        let (prod_ll_lo, prod_ll_hi) = self.mul_u64_to_u128(lhs_lo, rhs_lo);
-        let partial_ll = self.combine_i128(prod_ll_lo, prod_ll_hi);
-
-        let (prod_lh_lo, prod_lh_hi) = self.mul_u64_to_u128(lhs_lo, rhs_hi);
-        let partial_lh = self.combine_i128(prod_lh_lo, prod_lh_hi);
-
-        let (prod_hl_lo, prod_hl_hi) = self.mul_u64_to_u128(lhs_hi, rhs_lo);
-        let partial_hl = self.combine_i128(prod_hl_lo, prod_hl_hi);
-
-        let shift_64 = self.cx.const_i32(64);
-
-        // Shift cross terms by 64 bits to align them within the 128-bit space
-        let partial_lh_shifted = self.emulate_i128_shl(partial_lh, shift_64);
-        let partial_hl_shifted = self.emulate_i128_shl(partial_hl, shift_64);
-
-        // Sum the partial products modulo 2^128
-        let acc = self.emulate_i128_add(partial_ll, partial_lh_shifted);
-        self.emulate_i128_add(acc, partial_hl_shifted)
+        let lhs = self.ensure_i128(lhs);
+        let rhs = self.ensure_i128(rhs);
+        let args = [lhs, rhs];
+        self.call_compiler_builtin("__multi3", self.type_i128(), &args)
     }
 
     fn emulate_i128_udivrem(
@@ -214,69 +208,22 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         num: &'ll Value,
         den: &'ll Value,
     ) -> (&'ll Value, &'ll Value) {
-        let zero_i128 = self.const_u128(0);
-        let one_i128 = self.const_u128(1);
-        let one_i32 = self.cx.const_i32(1);
-        let i32_ty = self.cx.type_i32();
-        let i128_ty = self.type_i128();
+        let num = self.ensure_i128(num);
+        let den = self.ensure_i128(den);
 
-        let trap_bb = self.append_sibling_block("i128_udiv_trap");
-        let main_bb = self.append_sibling_block("i128_udiv_main");
-        let lt_bb = self.append_sibling_block("i128_udiv_lt");
-        let loop_header_bb = self.append_sibling_block("i128_udiv_loop_header");
-        let loop_body_bb = self.append_sibling_block("i128_udiv_loop_body");
-        let exit_bb = self.append_sibling_block("i128_udiv_exit");
+        let zero = self.const_u128(0);
+        let denom_is_zero = self.icmp(IntPredicate::IntEQ, den, zero);
+        self.trap_if(denom_is_zero, "i128_udiv_zero");
 
-        let mut exit_bx = Self::build(self.cx, exit_bb);
-        let quot_res = exit_bx.phi(i128_ty, &[], &[]);
-        let rem_res = exit_bx.phi(i128_ty, &[], &[]);
+        let i128_align = Align::from_bytes(16).expect("align 16");
+        let rem_slot = self.alloca(Size::from_bits(128), i128_align);
+        let rem_ptr = self.pointercast(rem_slot, self.cx.type_ptr_to(self.type_i128()));
 
-        let den_is_zero = self.icmp(IntPredicate::IntEQ, den, zero_i128);
-        self.cond_br(den_is_zero, trap_bb, main_bb);
+        let args = [num, den, rem_ptr];
+        let quot = self.call_compiler_builtin("__udivmodti4", self.type_i128(), &args);
+        let rem = self.load(self.type_i128(), rem_ptr, i128_align);
 
-        let mut trap_bx = Self::build(self.cx, trap_bb);
-        trap_bx.call_intrinsic("llvm.trap", &[]);
-        trap_bx.unreachable();
-
-        let mut main_bx = Self::build(self.cx, main_bb);
-        let num_lt_den = main_bx.icmp(IntPredicate::IntULT, num, den);
-        let bit_init = main_bx.cx.const_int(i32_ty, 128);
-        main_bx.cond_br(num_lt_den, lt_bb, loop_header_bb);
-
-        let mut lt_bx = Self::build(self.cx, lt_bb);
-        lt_bx.br(exit_bb);
-        exit_bx.add_incoming_to_phi(quot_res, zero_i128, lt_bb);
-        exit_bx.add_incoming_to_phi(rem_res, num, lt_bb);
-
-        let mut header_bx = Self::build(self.cx, loop_header_bb);
-        let bit_phi = header_bx.phi(i32_ty, &[bit_init], &[main_bb]);
-        let quot_phi = header_bx.phi(i128_ty, &[zero_i128], &[main_bb]);
-        let rem_phi = header_bx.phi(i128_ty, &[zero_i128], &[main_bb]);
-        let bit_zero = header_bx.icmp(IntPredicate::IntEQ, bit_phi, header_bx.cx.const_i32(0));
-        header_bx.cond_br(bit_zero, exit_bb, loop_body_bb);
-        exit_bx.add_incoming_to_phi(quot_res, quot_phi, loop_header_bb);
-        exit_bx.add_incoming_to_phi(rem_res, rem_phi, loop_header_bb);
-
-        let mut body_bx = Self::build(self.cx, loop_body_bb);
-        let bit_next = body_bx.sub(bit_phi, one_i32);
-        let num_shifted = body_bx.emulate_i128_lshr(num, bit_next);
-        let bit_val = body_bx.and(num_shifted, one_i128);
-        let rem_shift = body_bx.emulate_i128_shl(rem_phi, one_i32);
-        let rem_candidate = body_bx.or(rem_shift, bit_val);
-        let rem_ge = body_bx.icmp(IntPredicate::IntUGE, rem_candidate, den);
-        let rem_sub = body_bx.emulate_i128_sub(rem_candidate, den);
-        let rem_new = body_bx.select(rem_ge, rem_sub, rem_candidate);
-        let one_shifted = body_bx.emulate_i128_shl(one_i128, bit_next);
-        let quot_candidate = body_bx.or(quot_phi, one_shifted);
-        let quot_new = body_bx.select(rem_ge, quot_candidate, quot_phi);
-        let loop_body_exit_bb = body_bx.llbb();
-        body_bx.br(loop_header_bb);
-        header_bx.add_incoming_to_phi(bit_phi, bit_next, loop_body_exit_bb);
-        header_bx.add_incoming_to_phi(quot_phi, quot_new, loop_body_exit_bb);
-        header_bx.add_incoming_to_phi(rem_phi, rem_new, loop_body_exit_bb);
-
-        *self = exit_bx;
-        (quot_res, rem_res)
+        (quot, rem)
     }
 
     pub(super) fn emulate_i128_udiv(&mut self, num: &'ll Value, den: &'ll Value) -> &'ll Value {
@@ -292,40 +239,24 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         num: &'ll Value,
         den: &'ll Value,
     ) -> (&'ll Value, &'ll Value) {
+        let num = self.ensure_i128(num);
+        let den = self.ensure_i128(den);
+
+        let zero = self.const_u128(0);
+        let denom_is_zero = self.icmp(IntPredicate::IntEQ, den, zero);
+        self.trap_if(denom_is_zero, "i128_sdiv_zero");
+
         let min_i128 = self.const_u128(1u128 << 127);
         let neg_one_i128 = self.const_u128(u128::MAX);
         let num_is_min = self.icmp(IntPredicate::IntEQ, num, min_i128);
         let den_is_neg_one = self.icmp(IntPredicate::IntEQ, den, neg_one_i128);
         let overflow_case = self.and(num_is_min, den_is_neg_one);
+        self.trap_if(overflow_case, "i128_sdiv_overflow");
 
-        let trap_bb = self.append_sibling_block("i128_sdiv_overflow_trap");
-        let cont_bb = self.append_sibling_block("i128_sdiv_overflow_cont");
+        let args = [num, den];
+        let quot = self.call_compiler_builtin("__divti3", self.type_i128(), &args);
+        let rem = self.call_compiler_builtin("__modti3", self.type_i128(), &args);
 
-        self.cond_br(overflow_case, trap_bb, cont_bb);
-
-        let mut trap_bx = Self::build(self.cx, trap_bb);
-        trap_bx.call_intrinsic("llvm.trap", &[]);
-        trap_bx.unreachable();
-
-        let mut bx = Self::build(self.cx, cont_bb);
-
-        let zero_u64 = bx.const_u64(0);
-        let (_, num_hi) = bx.split_i128(num);
-        let (_, den_hi) = bx.split_i128(den);
-        let num_neg = bx.icmp(IntPredicate::IntSLT, num_hi, zero_u64);
-        let den_neg = bx.icmp(IntPredicate::IntSLT, den_hi, zero_u64);
-        let num_negated = bx.emulate_i128_neg(num);
-        let num_abs = bx.select(num_neg, num_negated, num);
-        let den_negated = bx.emulate_i128_neg(den);
-        let den_abs = bx.select(den_neg, den_negated, den);
-        let (quot_raw, rem_raw) = bx.emulate_i128_udivrem(num_abs, den_abs);
-        let sign_diff = bx.xor(num_neg, den_neg);
-        let quot_negated = bx.emulate_i128_neg(quot_raw);
-        let quot = bx.select(sign_diff, quot_negated, quot_raw);
-        let rem_negated = bx.emulate_i128_neg(rem_raw);
-        let rem = bx.select(num_neg, rem_negated, rem_raw);
-
-        *self = bx;
         (quot, rem)
     }
 
@@ -473,198 +404,24 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
     }
 
     pub(super) fn emulate_i128_shl(&mut self, val: &'ll Value, shift: &'ll Value) -> &'ll Value {
-        let (lo, hi) = self.split_i128(val);
-        let zero_i32 = self.cx.const_i32(0);
-        let sixty_four = self.cx.const_i32(64);
-        let one_twenty_eight = self.cx.const_i32(128);
-
-        let shift_is_zero = self.icmp(IntPredicate::IntEQ, shift, zero_i32);
-        let shift_ge64 = self.icmp(IntPredicate::IntUGE, shift, sixty_four);
-        let shift_ge128 = self.icmp(IntPredicate::IntUGE, shift, one_twenty_eight);
-
-        let ge128_bb = self.append_sibling_block("i128_shl_ge128");
-        let lt128_bb = self.append_sibling_block("i128_shl_lt128");
-        let ge64_bb = self.append_sibling_block("i128_shl_ge64");
-        let lt64_bb = self.append_sibling_block("i128_shl_lt64");
-        let zero_bb = self.append_sibling_block("i128_shl_zero");
-        let nz_bb = self.append_sibling_block("i128_shl_lt64_nz");
-        let merge_bb = self.append_sibling_block("i128_shl_merge");
-
-        self.cond_br(shift_ge128, ge128_bb, lt128_bb);
-
-        let mut ge128_bx = Self::build(self.cx, ge128_bb);
-        let ge128_res = ge128_bx.const_u128(0);
-        ge128_bx.br(merge_bb);
-
-        let mut lt128_bx = Self::build(self.cx, lt128_bb);
-        lt128_bx.cond_br(shift_ge64, ge64_bb, lt64_bb);
-
-        let mut ge64_bx = Self::build(self.cx, ge64_bb);
-        let shift_minus64 = ge64_bx.sub(shift, sixty_four);
-        let shift_minus64_i64 = ge64_bx.zext(shift_minus64, ge64_bx.type_i64());
-        let hi_from_lo = ge64_bx.shl(lo, shift_minus64_i64);
-        let ge64_res = ge64_bx.combine_i128(ge64_bx.const_u64(0), hi_from_lo);
-        ge64_bx.br(merge_bb);
-
-        let mut lt64_bx = Self::build(self.cx, lt64_bb);
-        lt64_bx.cond_br(shift_is_zero, zero_bb, nz_bb);
-
-        let mut zero_bx = Self::build(self.cx, zero_bb);
-        zero_bx.br(merge_bb);
-
-        let mut nz_bx = Self::build(self.cx, nz_bb);
-        let shift_i64 = nz_bx.zext(shift, nz_bx.type_i64());
-        let new_lo = nz_bx.shl(lo, shift_i64);
-        let hi_shifted = nz_bx.shl(hi, shift_i64);
-        let inv = nz_bx.sub(sixty_four, shift);
-        let inv_i64 = nz_bx.zext(inv, nz_bx.type_i64());
-        let carry = nz_bx.lshr(lo, inv_i64);
-        let new_hi = nz_bx.or(hi_shifted, carry);
-        let nz_res = nz_bx.combine_i128(new_lo, new_hi);
-        nz_bx.br(merge_bb);
-
-        let mut merge_bx = Self::build(self.cx, merge_bb);
-        let result = merge_bx.phi(self.type_i128(), &[], &[]);
-        merge_bx.add_incoming_to_phi(result, ge128_res, ge128_bb);
-        merge_bx.add_incoming_to_phi(result, ge64_res, ge64_bb);
-        merge_bx.add_incoming_to_phi(result, val, zero_bb);
-        merge_bx.add_incoming_to_phi(result, nz_res, nz_bb);
-
-        *self = merge_bx;
-        result
+        let val = self.ensure_i128(val);
+        let shift = self.intcast(shift, self.cx.type_i32(), false);
+        let args = [val, shift];
+        self.call_compiler_builtin("__ashlti3", self.type_i128(), &args)
     }
 
     pub(super) fn emulate_i128_lshr(&mut self, val: &'ll Value, shift: &'ll Value) -> &'ll Value {
-        let (lo, hi) = self.split_i128(val);
-        let zero_i32 = self.cx.const_i32(0);
-        let sixty_four = self.cx.const_i32(64);
-        let one_twenty_eight = self.cx.const_i32(128);
-
-        let shift_is_zero = self.icmp(IntPredicate::IntEQ, shift, zero_i32);
-        let shift_ge64 = self.icmp(IntPredicate::IntUGE, shift, sixty_four);
-        let shift_ge128 = self.icmp(IntPredicate::IntUGE, shift, one_twenty_eight);
-
-        let ge128_bb = self.append_sibling_block("i128_lshr_ge128");
-        let lt128_bb = self.append_sibling_block("i128_lshr_lt128");
-        let ge64_bb = self.append_sibling_block("i128_lshr_ge64");
-        let lt64_bb = self.append_sibling_block("i128_lshr_lt64");
-        let zero_bb = self.append_sibling_block("i128_lshr_zero");
-        let nz_bb = self.append_sibling_block("i128_lshr_lt64_nz");
-        let merge_bb = self.append_sibling_block("i128_lshr_merge");
-
-        self.cond_br(shift_ge128, ge128_bb, lt128_bb);
-
-        let mut ge128_bx = Self::build(self.cx, ge128_bb);
-        let ge128_res = ge128_bx.const_u128(0);
-        ge128_bx.br(merge_bb);
-
-        let mut lt128_bx = Self::build(self.cx, lt128_bb);
-        lt128_bx.cond_br(shift_ge64, ge64_bb, lt64_bb);
-
-        let mut ge64_bx = Self::build(self.cx, ge64_bb);
-        let shift_minus64 = ge64_bx.sub(shift, sixty_four);
-        let shift_minus64_i64 = ge64_bx.zext(shift_minus64, ge64_bx.type_i64());
-        let new_lo = ge64_bx.lshr(hi, shift_minus64_i64);
-        let ge64_res = ge64_bx.combine_i128(new_lo, ge64_bx.const_u64(0));
-        ge64_bx.br(merge_bb);
-
-        let mut lt64_bx = Self::build(self.cx, lt64_bb);
-        lt64_bx.cond_br(shift_is_zero, zero_bb, nz_bb);
-
-        let mut zero_bx = Self::build(self.cx, zero_bb);
-        zero_bx.br(merge_bb);
-
-        let mut nz_bx = Self::build(self.cx, nz_bb);
-        let shift_i64 = nz_bx.zext(shift, nz_bx.type_i64());
-        let new_lo = nz_bx.lshr(lo, shift_i64);
-        let inv = nz_bx.sub(sixty_four, shift);
-        let inv_i64 = nz_bx.zext(inv, nz_bx.type_i64());
-        let carry = nz_bx.shl(hi, inv_i64);
-        let new_lo = nz_bx.or(new_lo, carry);
-        let new_hi = nz_bx.lshr(hi, shift_i64);
-        let nz_res = nz_bx.combine_i128(new_lo, new_hi);
-        nz_bx.br(merge_bb);
-
-        let mut merge_bx = Self::build(self.cx, merge_bb);
-        let result = merge_bx.phi(self.type_i128(), &[], &[]);
-        merge_bx.add_incoming_to_phi(result, ge128_res, ge128_bb);
-        merge_bx.add_incoming_to_phi(result, ge64_res, ge64_bb);
-        merge_bx.add_incoming_to_phi(result, val, zero_bb);
-        merge_bx.add_incoming_to_phi(result, nz_res, nz_bb);
-
-        *self = merge_bx;
-        result
+        let val = self.ensure_i128(val);
+        let shift = self.intcast(shift, self.cx.type_i32(), false);
+        let args = [val, shift];
+        self.call_compiler_builtin("__lshrti3", self.type_i128(), &args)
     }
 
     pub(super) fn emulate_i128_ashr(&mut self, val: &'ll Value, shift: &'ll Value) -> &'ll Value {
-        let (lo, hi) = self.split_i128(val);
-        let zero_i32 = self.cx.const_i32(0);
-        let sixty_four = self.cx.const_i32(64);
-        let one_twenty_eight = self.cx.const_i32(128);
-        let zero_u64 = self.const_u64(0);
-
-        let shift_is_zero = self.icmp(IntPredicate::IntEQ, shift, zero_i32);
-        let shift_ge64 = self.icmp(IntPredicate::IntUGE, shift, sixty_four);
-        let shift_ge128 = self.icmp(IntPredicate::IntUGE, shift, one_twenty_eight);
-        let is_negative = self.icmp(IntPredicate::IntSLT, hi, zero_u64);
-
-        let ge128_bb = self.append_sibling_block("i128_ashr_ge128");
-        let lt128_bb = self.append_sibling_block("i128_ashr_lt128");
-        let ge64_bb = self.append_sibling_block("i128_ashr_ge64");
-        let lt64_bb = self.append_sibling_block("i128_ashr_lt64");
-        let zero_bb = self.append_sibling_block("i128_ashr_zero");
-        let nz_bb = self.append_sibling_block("i128_ashr_lt64_nz");
-        let merge_bb = self.append_sibling_block("i128_ashr_merge");
-
-        self.cond_br(shift_ge128, ge128_bb, lt128_bb);
-
-        let mut ge128_bx = Self::build(self.cx, ge128_bb);
-        let all_ones = ge128_bx.const_u128(u128::MAX);
-        let zero = ge128_bx.const_u128(0);
-        let ge128_res = ge128_bx.select(is_negative, all_ones, zero);
-        ge128_bx.br(merge_bb);
-
-        let mut lt128_bx = Self::build(self.cx, lt128_bb);
-        lt128_bx.cond_br(shift_ge64, ge64_bb, lt64_bb);
-
-        let mut ge64_bx = Self::build(self.cx, ge64_bb);
-        let shift_minus64 = ge64_bx.sub(shift, sixty_four);
-        let shift_minus64_i64 = ge64_bx.zext(shift_minus64, ge64_bx.type_i64());
-        let new_lo = ge64_bx.ashr(hi, shift_minus64_i64);
-        let fill_hi = ge64_bx.select(
-            is_negative,
-            ge64_bx.const_u64(u64::MAX),
-            ge64_bx.const_u64(0),
-        );
-        let ge64_res = ge64_bx.combine_i128(new_lo, fill_hi);
-        ge64_bx.br(merge_bb);
-
-        let mut lt64_bx = Self::build(self.cx, lt64_bb);
-        lt64_bx.cond_br(shift_is_zero, zero_bb, nz_bb);
-
-        let mut zero_bx = Self::build(self.cx, zero_bb);
-        zero_bx.br(merge_bb);
-
-        let mut nz_bx = Self::build(self.cx, nz_bb);
-        let shift_i64 = nz_bx.zext(shift, nz_bx.type_i64());
-        let new_lo_shift = nz_bx.lshr(lo, shift_i64);
-        let inv = nz_bx.sub(sixty_four, shift);
-        let inv_i64 = nz_bx.zext(inv, nz_bx.type_i64());
-        let carry = nz_bx.shl(hi, inv_i64);
-        let new_lo = nz_bx.or(new_lo_shift, carry);
-        let new_hi = nz_bx.ashr(hi, shift_i64);
-        let nz_res = nz_bx.combine_i128(new_lo, new_hi);
-        nz_bx.br(merge_bb);
-
-        let mut merge_bx = Self::build(self.cx, merge_bb);
-        let result = merge_bx.phi(self.type_i128(), &[], &[]);
-        merge_bx.add_incoming_to_phi(result, ge128_res, ge128_bb);
-        merge_bx.add_incoming_to_phi(result, ge64_res, ge64_bb);
-        merge_bx.add_incoming_to_phi(result, val, zero_bb);
-        merge_bx.add_incoming_to_phi(result, nz_res, nz_bb);
-
-        *self = merge_bx;
-        result
+        let val = self.ensure_i128(val);
+        let shift = self.intcast(shift, self.cx.type_i32(), false);
+        let args = [val, shift];
+        self.call_compiler_builtin("__ashrti3", self.type_i128(), &args)
     }
 
     // Emulate 128-bit bitwise NOT
