@@ -463,14 +463,6 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
                     .layout_of(ptr_ty)
                     .scalar_pair_element_llvm_type(cx, index, immediate);
             }
-            // `dyn* Trait` has the same ABI as `*mut dyn Trait`
-            ty::Dynamic(bounds, region, ty::DynStar) => {
-                let ptr_ty =
-                    Ty::new_mut_ptr(cx.tcx, Ty::new_dynamic(cx.tcx, bounds, *region, ty::Dyn));
-                return cx
-                    .layout_of(ptr_ty)
-                    .scalar_pair_element_llvm_type(cx, index, immediate);
-            }
             _ => {}
         }
 

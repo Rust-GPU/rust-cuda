@@ -3,7 +3,6 @@
 // make our lives a lot easier for llvm ffi with this. And since rustc's core infra
 // relies on it its almost guaranteed to not be removed/broken
 #![feature(extern_types)]
-#![feature(let_chains)]
 #![feature(slice_as_array)]
 
 extern crate rustc_abi;

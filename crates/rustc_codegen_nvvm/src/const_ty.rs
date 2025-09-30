@@ -152,7 +152,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                 }
             }
             Scalar::Ptr(ptr, _) => {
-                let (prov, offset) = ptr.into_parts();
+                let (prov, offset) = ptr.prov_and_relative_offset();
                 let (base_addr, base_addr_space) = match self.tcx.global_alloc(prov.alloc_id()) {
                     GlobalAlloc::Memory(alloc) => {
                         // For ZSTs directly codegen an aligned pointer.
