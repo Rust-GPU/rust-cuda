@@ -483,17 +483,6 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
-    fn dynamic_alloca(&mut self, size: &'ll Value, align: Align) -> &'ll Value {
-        trace!("Dynamic Alloca `{:?}`", size);
-        unsafe {
-            let alloca =
-                llvm::LLVMBuildArrayAlloca(self.llbuilder, self.cx().type_i8(), size, UNNAMED);
-            llvm::LLVMSetAlignment(alloca, align.bytes() as c_uint);
-            // Cast to default addrspace if necessary
-            llvm::LLVMBuildPointerCast(self.llbuilder, alloca, self.cx().type_ptr(), UNNAMED)
-        }
-    }
-
     fn load(&mut self, ty: &'ll Type, ptr: &'ll Value, align: Align) -> &'ll Value {
         trace!("Load {ty:?} {:?}", ptr);
         let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
@@ -901,7 +890,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             if kind == llvm::TypeKind::Pointer {
                 let element = self.element_type(ty);
                 let addrspace = llvm::LLVMGetPointerAddressSpace(ty);
-                let new_ty = self.type_ptr_to_ext(element, AddressSpace::DATA);
+                let new_ty = self.type_ptr_to_ext(element, AddressSpace::ZERO);
                 if addrspace != 0 {
                     trace!("injecting addrspace cast for `{:?}` to `{:?}`", ty, new_ty);
                     val = llvm::LLVMBuildAddrSpaceCast(self.llbuilder, val, new_ty, UNNAMED);

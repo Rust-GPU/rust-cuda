@@ -57,7 +57,7 @@ impl<'ll> CodegenCx<'ll, '_> {
     pub(crate) fn voidp(&self) -> &'ll Type {
         // llvm uses i8* for void ptrs, void* is invalid
         let i8_ty = self.type_i8();
-        self.type_ptr_to_ext(i8_ty, AddressSpace::DATA)
+        self.type_ptr_to_ext(i8_ty, AddressSpace::ZERO)
     }
 
     pub(crate) fn type_named_struct(&self, name: &str) -> &'ll Type {
@@ -93,7 +93,7 @@ impl<'ll> CodegenCx<'ll, '_> {
     }
 
     pub(crate) fn type_i8p(&self) -> &'ll Type {
-        self.type_i8p_ext(AddressSpace::DATA)
+        self.type_i8p_ext(AddressSpace::ZERO)
     }
 
     pub(crate) fn type_i8p_ext(&self, address_space: AddressSpace) -> &'ll Type {
@@ -116,7 +116,7 @@ impl<'ll> CodegenCx<'ll, '_> {
             "don't call ptr_to on function types, use ptr_to_llvm_type on FnAbi instead or explicitly specify an address space if it makes sense"
         );
 
-        unsafe { llvm::LLVMPointerType(ty, AddressSpace::DATA.0) }
+        unsafe { llvm::LLVMPointerType(ty, AddressSpace::ZERO.0) }
     }
 
     pub(crate) fn type_ptr_to_ext(&self, ty: &'ll Type, address_space: AddressSpace) -> &'ll Type {
@@ -211,7 +211,7 @@ impl<'ll, 'tcx> BaseTypeCodegenMethods for CodegenCx<'ll, 'tcx> {
     }
 
     fn type_ptr(&self) -> Self::Type {
-        self.type_ptr_ext(AddressSpace::DATA)
+        self.type_ptr_ext(AddressSpace::ZERO)
     }
 
     fn type_ptr_ext(&self, address_space: AddressSpace) -> Self::Type {
@@ -434,7 +434,7 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
                 {
                     (cx.type_pointee_for_align(align), address_space)
                 } else {
-                    (cx.type_i8(), AddressSpace::DATA)
+                    (cx.type_i8(), AddressSpace::ZERO)
                 };
                 cx.type_ptr_to_ext(pointee, address_space)
             }

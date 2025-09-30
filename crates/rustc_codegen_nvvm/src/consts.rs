@@ -60,7 +60,7 @@ pub(crate) fn const_alloc_to_llvm<'ll>(
     }
     let mut llvals = Vec::with_capacity(alloc.provenance().ptrs().len() + 1);
     let dl = cx.data_layout();
-    let pointer_size = dl.pointer_size.bytes() as usize;
+    let pointer_size = dl.pointer_size().bytes() as usize;
 
     // Note: this function may call `inspect_with_uninit_and_ptr_outside_interpreter`,
     // so `range` must be within the bounds of `alloc` and not contain or overlap a relocation.
@@ -253,7 +253,7 @@ impl<'ll> CodegenCx<'ll, '_> {
             // TODO(RDambrosio016): replace this with latest rustc's handling when we use llvm 13
             let name = self.generate_local_symbol_name(kind.unwrap_or("private"));
             let gv = self
-                .define_global(&name[..], self.val_ty(cv), AddressSpace::DATA)
+                .define_global(&name[..], self.val_ty(cv), AddressSpace::ZERO)
                 .unwrap_or_else(|| bug!("symbol `{}` is already defined", name));
             llvm::LLVMRustSetLinkage(gv, llvm::Linkage::PrivateLinkage);
             llvm::LLVMSetInitializer(gv, cv);

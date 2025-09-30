@@ -87,7 +87,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                 let sc = self.const_bytes(s.as_bytes());
                 let sym = self.generate_local_symbol_name("str");
                 let g = self
-                    .define_global(&sym[..], self.val_ty(sc), AddressSpace::DATA)
+                    .define_global(&sym[..], self.val_ty(sc), AddressSpace::ZERO)
                     .unwrap_or_else(|| {
                         bug!("symbol `{}` is already defined", sym);
                     });
@@ -185,7 +185,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                                     format!("alloc_{hash:032x}").as_bytes(),
                                 );
                             }
-                            (value, AddressSpace::DATA)
+                            (value, AddressSpace::ZERO)
                         }
                     }
                     GlobalAlloc::Function { instance, .. } => (
@@ -204,7 +204,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                             .unwrap_memory();
                         let init = const_alloc_to_llvm(self, alloc, /*static*/ false);
                         let value = self.static_addr_of(init, alloc.inner().align, None);
-                        (value, AddressSpace::DATA)
+                        (value, AddressSpace::ZERO)
                     }
                     GlobalAlloc::Static(def_id) => {
                         assert!(self.tcx.is_static(def_id));
@@ -213,6 +213,11 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                         let addrspace =
                             unsafe { llvm::LLVMGetPointerAddressSpace(self.val_ty(val)) };
                         (val, AddressSpace(addrspace))
+                    }
+                    GlobalAlloc::TypeId { .. } => {
+                        // Drop the provenance, the offset contains the bytes of the hash
+                        let llval = self.const_usize(offset.bytes());
+                        return unsafe { llvm::LLVMConstIntToPtr(llval, llty) };
                     }
                 };
                 let llval = unsafe {
@@ -228,7 +233,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                 if !matches!(layout.primitive(), Pointer(_)) {
                     unsafe { llvm::LLVMConstPtrToInt(llval, llty) }
                 } else {
-                    if base_addr_space != AddressSpace::DATA {
+                    if base_addr_space != AddressSpace::ZERO {
                         unsafe {
                             let element = llvm::LLVMGetElementType(llty);
                             llty = self.type_ptr_to_ext(element, base_addr_space);

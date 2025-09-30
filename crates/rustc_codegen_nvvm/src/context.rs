@@ -161,6 +161,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             local_gen_sym_counter: Cell::new(0),
             nvptx_data_layout: TargetDataLayout::parse_from_llvm_datalayout_string(
                 &target::target().data_layout,
+                AddressSpace::ZERO,
             )
             .unwrap_or_else(|err| tcx.sess.dcx().emit_fatal(err)),
             nvptx_target: target::target(),
@@ -292,7 +293,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                 }
             }
         } else {
-            AddressSpace::DATA
+            AddressSpace::ZERO
         }
     }
 

@@ -167,7 +167,7 @@ fn build_pointer_or_reference_di_node<'ll, 'tcx>(
         None => {
             // This is a thin pointer. Create a regular pointer type and give it the correct name.
             assert_eq!(
-                (data_layout.pointer_size, data_layout.pointer_align.abi),
+                (data_layout.pointer_size(), data_layout.pointer_align().abi),
                 cx.size_and_align_of(ptr_type),
                 "ptr_type={ptr_type}, pointee_type={pointee_type}",
             );
@@ -176,8 +176,8 @@ fn build_pointer_or_reference_di_node<'ll, 'tcx>(
                 llvm::LLVMRustDIBuilderCreatePointerType(
                     DIB(cx),
                     pointee_type_di_node,
-                    data_layout.pointer_size.bits(),
-                    data_layout.pointer_align.abi.bits() as u32,
+                    data_layout.pointer_size().bits(),
+                    data_layout.pointer_align().abi.bits() as u32,
                     CString::new(ptr_type_debuginfo_name).unwrap().as_ptr(),
                 )
             };
@@ -335,8 +335,8 @@ fn build_subroutine_type_di_node<'ll, 'tcx>(
     let (size, align) = match fn_ty.kind() {
         ty::FnDef(..) => (0, 1),
         ty::FnPtr(..) => (
-            cx.tcx.data_layout.pointer_size.bits(),
-            cx.tcx.data_layout.pointer_align.abi.bits() as u32,
+            cx.tcx.data_layout.pointer_size().bits(),
+            cx.tcx.data_layout.pointer_align().abi.bits() as u32,
         ),
         _ => unreachable!(),
     };
@@ -527,7 +527,7 @@ fn recursion_marker_type_di_node<'ll>(cx: &CodegenCx<'ll, '_>) -> &'ll DIType {
                     DIB(cx),
                     name.as_c_char_ptr(),
                     name.len(),
-                    cx.tcx.data_layout.pointer_size.bits(),
+                    cx.tcx.data_layout.pointer_size().bits(),
                     dwarf_const::DW_ATE_unsigned,
                 )
             }
