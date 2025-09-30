@@ -1,0 +1,8 @@
+[target.x86_64-unknown-linux-gnu]
+# The command to execute instead of the compiled test binary. Cargo will append the
+# actual path to the compiled test executable and any arguments (like --list, --exact,
+# --nocapture) after this command. 
+# We use a tool without a slash in it so cargo will search $PATH.
+#
+# Before calling the `cargo test` we append the location of the glue to the path.
+runner = ["cargo_glue.sh"]
