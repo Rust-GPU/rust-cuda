@@ -77,7 +77,7 @@ pub(crate) fn get_transformed_type<'ll>(
 // going from i64 down.
 pub(crate) fn target_vector_width_and_count(int_width: u32) -> (u32, u32) {
     for &i in WIDTH_CANDIDATES {
-        if int_width % i == 0 {
+        if int_width.is_multiple_of(i) {
             return (i, int_width / i);
         }
     }

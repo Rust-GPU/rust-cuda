@@ -320,7 +320,8 @@ impl<A: DeviceCopy + Pod> DeviceBuffer<A> {
     ///   - If either type is a ZST (but not both).
     #[cfg_attr(docsrs, doc(cfg(feature = "bytemuck")))]
     pub fn try_cast<B: Pod + DeviceCopy>(self) -> Result<DeviceBuffer<B>, PodCastError> {
-        if align_of::<B>() > align_of::<A>() && (self.buf.as_raw() as usize) % align_of::<B>() != 0
+        if align_of::<B>() > align_of::<A>()
+            && !(self.buf.as_raw() as usize).is_multiple_of(align_of::<B>())
         {
             Err(PodCastError::TargetAlignmentGreaterAndInputNotAligned)
         } else if size_of::<B>() == size_of::<A>() {
@@ -328,7 +329,7 @@ impl<A: DeviceCopy + Pod> DeviceBuffer<A> {
             Ok(unsafe { transmute::<DeviceBuffer<A>, DeviceBuffer<B>>(self) })
         } else if size_of::<A>() == 0 || size_of::<B>() == 0 {
             Err(PodCastError::SizeMismatch)
-        } else if (size_of::<A>() * self.len) % size_of::<B>() == 0 {
+        } else if (size_of::<A>() * self.len).is_multiple_of(size_of::<B>()) {
             let new_len = (size_of::<A>() * self.len) / size_of::<B>();
             let ret = Ok(DeviceBuffer {
                 buf: self.buf.cast(),

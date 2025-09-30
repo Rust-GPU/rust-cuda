@@ -1056,7 +1056,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         todo!()
     }
 
-    fn filter_landing_pad(&mut self, _pers_fn: &'ll Value) -> (&'ll Value, &'ll Value) {
+    fn filter_landing_pad(&mut self, _pers_fn: &'ll Value) {
         todo!()
     }
 
