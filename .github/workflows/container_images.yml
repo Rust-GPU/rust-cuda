@@ -42,6 +42,9 @@ jobs:
           - name: RockyLinux-9/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-rockylinux9-cuda12"
             dockerfile: ./container/rockylinux9-cuda12/Dockerfile
+          - name: Ubuntu-24.04/CUDA-12.8.1/Modal-CI
+            image: "rust-gpu/rust-cuda-modal-ci"
+            dockerfile: ./container/modal-ci/Dockerfile
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -124,6 +127,8 @@ jobs:
             image: "rust-gpu/rust-cuda-ubuntu24-cuda12"
           - name: RockyLinux-9/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-rockylinux9-cuda12"
+          - name: Ubuntu-24.04/CUDA-12.8.1/Modal-CI
+            image: "rust-gpu/rust-cuda-modal-ci"
     steps:
       - name: Set artifact name
         run: |
