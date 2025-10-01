@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.22
@@ -56,9 +56,6 @@ jobs:
           sub-packages: ${{ toJson(matrix.sub-packages) }}
           log-file-suffix: "${{matrix.os}}-${{matrix.cuda}}"
 
-      - name: Verify CUDA installation
-        run: nvcc --version
-
       - name: List CUDA_PATH files
         shell: pwsh
         run: Get-ChildItem -Path $env:CUDA_PATH -Recurse | ForEach-Object { $_.FullName }
@@ -70,16 +67,29 @@ jobs:
       - name: Add rustup components
         run: rustup component add rustfmt clippy
 
+      - name: Verify CUDA, Rust installation
+        run: |
+          nvcc --version
+          rustup show
+
       - name: Load Rust Cache
         uses: Swatinem/rust-cache@v2.7.7
         with:
           key: ${{ matrix.os }}-${{ matrix.target }}-${{ matrix.cuda }}
 
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+
       - name: Build all bindings
         run: cargo build --all-features -p cust_raw
 
-      - name: Build
+      - name: Build workspace
         run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex*" --exclude "cudnn*" --exclude "sha2*"
+
+      - name: Clippy
+        env:
+          RUSTFLAGS: -Dwarnings
+        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex*" --exclude "cudnn*" --exclude "sha2*"
 
       # Don't currently test because many tests rely on the system having a CUDA GPU
       # - name: Test
@@ -89,6 +99,7 @@ jobs:
         env:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex*" --exclude "cudnn*" --exclude "sha2*" --exclude "cust_raw"
+
       # Disabled due to dll issues, someone with  Windows knowledge needed
       # - name: Compiletest
       #  run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_70,compute_90

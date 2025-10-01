@@ -72,6 +72,7 @@ jobs:
         run: |
           nvcc --version
           rustup show
+
       - name: Load Rust cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -90,6 +91,10 @@ jobs:
         env:
           RUSTFLAGS: -Dwarnings
         run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*"
+
+      # Don't currently test because many tests rely on the system having a CUDA GPU
+      # - name: Test
+      #   run: cargo test --workspace
 
       - name: Check documentation
         env:
