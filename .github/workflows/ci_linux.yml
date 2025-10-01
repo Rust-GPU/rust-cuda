@@ -80,16 +80,16 @@ jobs:
       - name: Rustfmt
         run: cargo fmt --all -- --check
 
-      - name: Clippy
-        env:
-          RUSTFLAGS: -Dwarnings
-        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*"
-
       - name: Build all bindings
         run: cargo build --all-features -p cust_raw
 
       - name: Build workspace
         run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*"
+
+      - name: Clippy
+        env:
+          RUSTFLAGS: -Dwarnings
+        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*"
 
       - name: Check documentation
         env:
