@@ -85,12 +85,12 @@ jobs:
         run: cargo build --all-features -p cust_raw
 
       - name: Build workspace
-        run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*"
+        run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*"
 
       - name: Clippy
         env:
           RUSTFLAGS: -Dwarnings
-        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*"
+        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*"
 
       # Don't currently test because many tests rely on the system having a CUDA GPU
       # - name: Test
@@ -99,7 +99,7 @@ jobs:
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex*" --exclude "cudnn*" --exclude "cust_raw"
+        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*" --exclude "cust_raw"
 
       - name: Prepare artifact details
         id: artifact_details
