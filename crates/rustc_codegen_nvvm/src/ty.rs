@@ -651,11 +651,11 @@ impl<'tcx> CodegenCx<'_, 'tcx> {
 }
 
 impl<'tcx> TypeMembershipCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
-    fn add_type_metadata(&self, _function: Self::Function, _typeid: String) {}
+    fn add_type_metadata(&self, _function: Self::Function, _typeid: &[u8]) {}
 
-    fn set_type_metadata(&self, _function: Self::Function, _typeid: String) {}
+    fn set_type_metadata(&self, _function: Self::Function, _typeid: &[u8]) {}
 
-    fn typeid_metadata(&self, _typeid: String) -> Option<Self::Metadata> {
+    fn typeid_metadata(&self, _typeid: &[u8]) -> Option<Self::Metadata> {
         None
     }
 

@@ -157,10 +157,12 @@ pub extern "C" fn demangle_callback(
 /// Compile a single module (in an nvvm context this means getting the llvm bitcode out of it)
 pub(crate) unsafe fn codegen(
     cgcx: &CodegenContext<NvvmCodegenBackend>,
-    dcx: DiagCtxtHandle<'_>,
     module: ModuleCodegen<LlvmMod>,
     config: &ModuleConfig,
 ) -> Result<CompiledModule, FatalError> {
+    let dcx = cgcx.create_dcx();
+    let dcx = dcx.handle();
+
     // For NVVM, all the codegen we need to do is turn the llvm modules
     // into llvm bitcode and write them to a tempdir. nvvm expects llvm
     // bitcode as the modules to be added to the program. Then as the last step

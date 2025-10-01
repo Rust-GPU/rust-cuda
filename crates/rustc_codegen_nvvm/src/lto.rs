@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustc_codegen_ssa::{
     ModuleCodegen,
     back::{
-        lto::{LtoModuleCodegen, SerializedModule, ThinModule, ThinShared},
+        lto::{SerializedModule, ThinModule, ThinShared},
         write::CodegenContext,
     },
     traits::{ModuleBufferMethods, ThinBufferMethods},
@@ -106,7 +106,7 @@ pub(crate) fn run_thin(
     _cgcx: &CodegenContext<NvvmCodegenBackend>,
     modules: Vec<(String, ThinBuffer)>,
     cached_modules: Vec<(SerializedModule<ModuleBuffer>, WorkProduct)>,
-) -> Result<(Vec<LtoModuleCodegen<NvvmCodegenBackend>>, Vec<WorkProduct>), FatalError> {
+) -> Result<(Vec<ThinModule<NvvmCodegenBackend>>, Vec<WorkProduct>), FatalError> {
     debug!("Running thin LTO");
     let mut thin_buffers = Vec::with_capacity(modules.len());
     let mut module_names = Vec::with_capacity(modules.len() + cached_modules.len());
@@ -142,10 +142,10 @@ pub(crate) fn run_thin(
 
     let mut opt_jobs = vec![];
     for (module_index, _) in shared.module_names.iter().enumerate() {
-        opt_jobs.push(LtoModuleCodegen::Thin(ThinModule {
+        opt_jobs.push(ThinModule {
             shared: shared.clone(),
             idx: module_index,
-        }));
+        });
     }
 
     Ok((opt_jobs, vec![]))

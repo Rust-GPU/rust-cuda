@@ -63,7 +63,7 @@ use rustc_ast::expand::autodiff_attrs::AutoDiffItem;
 use rustc_codegen_ssa::{
     CodegenResults, CompiledModule, ModuleCodegen, TargetConfig,
     back::{
-        lto::{LtoModuleCodegen, SerializedModule, ThinModule},
+        lto::{SerializedModule, ThinModule},
         write::{CodegenContext, FatLtoInput, ModuleConfig, OngoingCodegen},
     },
     traits::{CodegenBackend, ExtraBackendMethods, WriteBackendMethods},
@@ -83,6 +83,7 @@ use rustc_session::{
 use tracing::debug;
 
 use std::ffi::CString;
+use std::path::PathBuf;
 
 // codegen dylib entrypoint
 #[unsafe(no_mangle)]
@@ -275,19 +276,25 @@ impl WriteBackendMethods for NvvmCodegenBackend {
         todo!();
     }
 
-    fn run_fat_lto(
-        _: &CodegenContext<Self>,
-        _: Vec<FatLtoInput<Self>>,
-        _: Vec<(SerializedModule<Self::ModuleBuffer>, WorkProduct)>,
-    ) -> Result<LtoModuleCodegen<Self>, FatalError> {
+    fn run_and_optimize_fat_lto(
+        _cgcx: &CodegenContext<Self>,
+        _exported_symbols_for_lto: &[String],
+        _each_linked_rlib_for_lto: &[PathBuf],
+        _modules: Vec<FatLtoInput<Self>>,
+        _diff_fncs: Vec<AutoDiffItem>,
+    ) -> Result<ModuleCodegen<Self::Module>, FatalError> {
         todo!()
     }
 
     fn run_thin_lto(
         cgcx: &CodegenContext<Self>,
+        // FIXME: Limit LTO exports to these symbols
+        _exported_symbols_for_lto: &[String],
+        // FIXME: handle these? but only relevant for non-thin LTO?
+        _each_linked_rlib_for_lto: &[PathBuf],
         modules: Vec<(String, Self::ThinBuffer)>,
         cached_modules: Vec<(SerializedModule<Self::ModuleBuffer>, WorkProduct)>,
-    ) -> Result<(Vec<LtoModuleCodegen<Self>>, Vec<WorkProduct>), FatalError> {
+    ) -> Result<(Vec<ThinModule<Self>>, Vec<WorkProduct>), FatalError> {
         lto::run_thin(cgcx, modules, cached_modules)
     }
 
@@ -317,11 +324,10 @@ impl WriteBackendMethods for NvvmCodegenBackend {
 
     fn codegen(
         cgcx: &CodegenContext<Self>,
-        diag_handler: DiagCtxtHandle<'_>,
         module: ModuleCodegen<Self::Module>,
         config: &ModuleConfig,
     ) -> Result<CompiledModule, FatalError> {
-        unsafe { back::codegen(cgcx, diag_handler, module, config) }
+        unsafe { back::codegen(cgcx, module, config) }
     }
 
     fn prepare_thin(
@@ -345,22 +351,6 @@ impl WriteBackendMethods for NvvmCodegenBackend {
                 lto::ModuleBuffer::new(module.module_llvm.llmod.as_ref().unwrap()),
             )
         }
-    }
-
-    fn optimize_fat(
-        _cgcx: &CodegenContext<Self>,
-        _llmod: &mut ModuleCodegen<Self::Module>,
-    ) -> Result<(), FatalError> {
-        todo!()
-    }
-
-    fn autodiff(
-        _cgcx: &CodegenContext<Self>,
-        _module: &ModuleCodegen<Self::Module>,
-        _diff_fncs: Vec<AutoDiffItem>,
-        _config: &ModuleConfig,
-    ) -> Result<(), FatalError> {
-        todo!()
     }
 }
 
