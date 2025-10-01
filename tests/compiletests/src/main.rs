@@ -531,7 +531,7 @@ fn find_rustc_codegen_nvvm(workspace_root: &Path) -> PathBuf {
             // On Windows, ensure the directory containing the DLL is in PATH
             // so that its dependencies can be found
             #[cfg(windows)]
-            setup_windows_dll_path(&path);
+            setup_windows_dll_path(path);
 
             return path.clone();
         }
@@ -554,7 +554,7 @@ fn find_rustc_codegen_nvvm(workspace_root: &Path) -> PathBuf {
         if path.is_file() {
             // On Windows, ensure the directory containing the DLL is in PATH
             #[cfg(windows)]
-            setup_windows_dll_path(&path);
+            setup_windows_dll_path(path);
 
             return path.clone();
         }
