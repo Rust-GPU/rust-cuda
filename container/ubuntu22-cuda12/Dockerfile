@@ -1,41 +1,31 @@
-FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04 AS builder
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
-    build-essential \
-    curl \
-    clang \
-    libssl-dev \
-    libtinfo-dev \
-    pkg-config \
-    xz-utils \
-    zlib1g-dev && \
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y install \
+        build-essential \
+        clang \
+        cmake \
+        curl \
+        libffi-dev \
+        libfontconfig-dev \
+        libssl-dev \
+        libtinfo-dev \
+        libedit-dev \
+        libncurses5-dev \
+        libxml2-dev \
+        libx11-xcb-dev \
+        libxcursor-dev \
+        libxi-dev \
+        libxinerama-dev \
+        libxrandr-dev \
+        ninja-build \
+        pkg-config \
+        python3 \
+        xz-utils \
+        zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Needed to build `path_tracer`, `optix/ex03_window` example
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
-    cmake \
-    libfontconfig-dev \
-    libx11-xcb-dev \
-    libxcursor-dev \
-    libxi-dev \
-    libxinerama-dev \
-    libxrandr-dev && \
-    rm -rf /var/lib/apt/lists/*
-
-# Get LLVM 7
-WORKDIR /data/llvm7
-
-# Install dependencies for building LLVM
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
-    libffi-dev \
-    libedit-dev \
-    libncurses5-dev \
-    libxml2-dev \
-    python3 \
-    ninja-build && \
-    rm -rf /var/lib/apt/lists/*
-
-# Download and build LLVM 7.1.0 for all architectures
+WORKDIR /opt/build
 RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmorg-7.1.0/llvm-7.1.0.src.tar.xz && \
     tar -xf llvm-7.1.0.src.tar.xz && \
     cd llvm-7.1.0.src && \
@@ -58,25 +48,56 @@ RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmo
         -DLLVM_INCLUDE_BENCHMARKS=OFF \
         -DLLVM_ENABLE_ZLIB=ON \
         -DLLVM_ENABLE_TERMINFO=ON \
-        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_PREFIX=/opt/llvm-7 \
         .. && \
-    ninja -j$(nproc) && \
+    ninja -j"$(nproc)" && \
     ninja install && \
-    cd ../.. && \
-    rm -rf llvm-7.1.0.src* && \
-    ln -s /usr/bin/llvm-config /usr/bin/llvm-config-7
+    cd /opt && rm -rf /opt/build
 
-# Get Rust
-RUN curl -sSf -L https://sh.rustup.rs | bash -s -- -y
+RUN curl -sSf -L https://sh.rustup.rs | bash -s -- -y --profile minimal && \
+    /root/.cargo/bin/rustup component add rustfmt clippy && \
+    rm -rf /root/.cargo/registry /root/.cargo/git /root/.rustup/tmp
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Setup the workspace
-WORKDIR /data/rust-cuda
-RUN --mount=type=bind,source=rust-toolchain.toml,target=/data/rust-cuda/rust-toolchain.toml \
-    rustup show
+FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04 AS runtime
 
-# Add nvvm to LD_LIBRARY_PATH.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get -y install \
+        build-essential \
+        clang \
+        cmake \
+        curl \
+        libffi-dev \
+        libfontconfig-dev \
+        libssl-dev \
+        libtinfo-dev \
+        libedit-dev \
+        libncurses5-dev \
+        libxml2-dev \
+        libx11-xcb-dev \
+        libxcursor-dev \
+        libxi-dev \
+        libxinerama-dev \
+        libxrandr-dev \
+        pkg-config \
+        python3 \
+        xz-utils \
+        zlib1g-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/llvm-7 /opt/llvm-7
+RUN ln -sf /opt/llvm-7/bin/llvm-config /usr/bin/llvm-config && \
+    ln -sf /opt/llvm-7/bin/llvm-config /usr/bin/llvm-config-7
+
+COPY --from=builder /root/.cargo /root/.cargo
+COPY --from=builder /root/.rustup /root/.rustup
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN /root/.cargo/bin/rustup show && \
+    rm -rf /root/.cargo/registry /root/.cargo/git /root/.rustup/tmp
+
+WORKDIR /data/rust-cuda
 ENV LD_LIBRARY_PATH="/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
 ENV LLVM_LINK_STATIC=1
 ENV RUST_LOG=info
 
+CMD ["bash"]
