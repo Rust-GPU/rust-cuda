@@ -1,0 +1,10 @@
+[package]
+name = "i128_demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cust = { path = "../../../crates/cust" }
+
+[build-dependencies]
+cuda_builder = { workspace = true, default-features = false }

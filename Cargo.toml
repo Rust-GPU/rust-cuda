@@ -16,6 +16,8 @@ members = [
   "examples/cuda/path_tracer/kernels",
   "examples/cuda/sha2_crates_io",
   "examples/cuda/sha2_crates_io/kernels",
+  "examples/cuda/i128_demo",
+  "examples/cuda/i128_demo/kernels",
 
   "examples/optix/*",
   "tests/compiletests",
