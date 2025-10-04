@@ -805,13 +805,42 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     fn fptoui_sat(&mut self, val: &'ll Value, dest_ty: &'ll Type) -> &'ll Value {
-        // NVVM does not have support for saturated conversion. Setting rustc flag
-        // `-Z saturating_float_casts=false` falls back to non-saturated, UB-prone
-        // conversion, and should prevent this codegen. Otherwise, fall back to UB
-        // prone conversion.
-        self.cx().sess().dcx()
-            .warn("Saturated float to int conversion is not supported on NVVM. Defaulting to UB prone conversion.");
-        self.fptoui(val, dest_ty)
+        // NVVM does not support saturating casts, however, they are relatively simple to implement.
+        // (at least for unsigned ints). So, we emulate them here.
+
+        // In order to clamp the value, we need to know it's type.
+        let val_ty = self.val_ty(val);
+        // Find the min / max intrinsics
+        let (min, max) = match self.cx().float_width(val_ty) {
+            64 => ("__nv_fmin", "__nv_fmax"),
+            32 => ("__nv_fminf", "__nv_fmaxf"),
+            _ => {
+                self.cx().sess().dcx()
+                    .warn("Saturated float to int conversion is not supported in NVVM for type {val_ty:?}. Defaulting to UB prone conversion.");
+                return self.fptoui(val, dest_ty);
+            }
+        };
+        let (max_ty, max) = self.cx().get_intrinsic(max);
+        let (min_ty, min) = self.cx().get_intrinsic(min);
+        // Find the zero value, and the max value of a given int.
+        let zero = self.const_real(val_ty, 0.0);
+        let max_value = match self.int_width(dest_ty) {
+            8 => u8::MAX as f64,
+            16 => u16::MAX as f64,
+            32 => u32::MAX as f64,
+            64 => u64::MAX as f64,
+            128 => u128::MAX as f64,
+            _ => todo!("Unsupported int type {dest_ty:?}"),
+        };
+        let max_value = self.const_real(val_ty, max_value);
+        // Compute max(val, 0). This will clamp negative values to zero **AND**
+        // replace NaNs with 0s(just like how Rust is specified to behave)
+        let res = self.call(max_ty, None, None, max, &[val, zero], None, None);
+        // Clamp all values higher than max to max
+        let res = self.call(min_ty, None, None, min, &[res, max_value], None, None);
+        // Now, we know that `res` is non-nan, and in range (min, max). So, it is well-defined
+        // for all inputs :D!
+        self.fptoui(res, dest_ty)
     }
 
     fn fptosi_sat(&mut self, val: &'ll Value, dest_ty: &'ll Type) -> &'ll Value {
