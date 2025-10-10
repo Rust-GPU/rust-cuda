@@ -317,8 +317,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         }
     }
 
-    /// Declare a function. All functions use the default ABI, NVVM ignores any calling convention markers.
-    /// All functions calls are generated according to the PTX calling convention.
+    /// Declare a function with appropriate PTX calling conventions.
     /// <https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html#calling-conventions>
     pub fn declare_fn(
         &self,
@@ -332,8 +331,12 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
         trace!("Declaring function `{}` with ty `{:?}`", name, ty);
 
-        // TODO(RDambrosio016): we should probably still generate accurate calling conv for functions
-        // just to make it easier to debug IR and/or make it more compatible with compiling using llvm
+        // Set PTX device calling convention for all functions declared here.
+        // Kernel functions will have their calling convention overridden in mono_item.rs
+        unsafe {
+            llvm::LLVMSetFunctionCallConv(llfn, llvm::PtxCallConv::Device as u32);
+        }
+
         llvm::SetUnnamedAddress(llfn, llvm::UnnamedAddr::Global);
         if let Some(abi) = fn_abi {
             abi.apply_attrs_llfn(self, llfn);
