@@ -479,7 +479,15 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             let alloca = llvm::LLVMBuildAlloca(bx.llbuilder, ty, UNNAMED);
             llvm::LLVMSetAlignment(alloca, align.bytes() as c_uint);
             // Cast to default addrspace if necessary
-            llvm::LLVMBuildPointerCast(bx.llbuilder, alloca, self.cx().type_ptr(), UNNAMED)
+            let alloca_ty = llvm::LLVMTypeOf(alloca);
+            let alloca_addrspace = llvm::LLVMGetPointerAddressSpace(alloca_ty);
+            let dest_ty = self.cx().type_ptr();
+            let dest_addrspace = llvm::LLVMGetPointerAddressSpace(dest_ty);
+            if alloca_addrspace != dest_addrspace {
+                llvm::LLVMBuildAddrSpaceCast(bx.llbuilder, alloca, dest_ty, UNNAMED)
+            } else {
+                alloca
+            }
         }
     }
 
@@ -907,7 +915,19 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn pointercast(&mut self, val: &'ll Value, dest_ty: &'ll Type) -> &'ll Value {
         trace!("Pointercast `{:?}` to ty `{:?}`", val, dest_ty);
-        unsafe { llvm::LLVMBuildPointerCast(self.llbuilder, val, dest_ty, unnamed()) }
+        unsafe {
+            let val_ty = self.val_ty(val);
+            let val_addrspace = llvm::LLVMGetPointerAddressSpace(val_ty);
+            let dest_addrspace = llvm::LLVMGetPointerAddressSpace(dest_ty);
+
+            if val_addrspace != dest_addrspace {
+                // Address spaces differ, use addrspacecast
+                llvm::LLVMBuildAddrSpaceCast(self.llbuilder, val, dest_ty, unnamed())
+            } else {
+                // Same address space, use regular pointer cast
+                llvm::LLVMBuildPointerCast(self.llbuilder, val, dest_ty, unnamed())
+            }
+        }
     }
 
     /* Comparisons */
