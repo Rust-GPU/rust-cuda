@@ -260,7 +260,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     pub fn static_addrspace(&self, instance: Instance<'tcx>) -> AddressSpace {
         let ty = instance.ty(self.tcx, self.typing_env());
         let is_mutable = self.tcx().is_mutable_static(instance.def_id());
-        let attrs = self.tcx.get_attrs_unchecked(instance.def_id()); // TODO: replace with get_attrs
+        let attrs = self.tcx.get_all_attrs(instance.def_id()); // TODO: replace with get_attrs
         let nvvm_attrs = NvvmAttributes::parse(self, attrs);
 
         if let Some(addr) = nvvm_attrs.addrspace {

@@ -90,7 +90,7 @@ impl<'tcx> PreDefineCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
         attributes::from_fn_attrs(self, lldecl, instance);
 
         let def_id = instance.def_id();
-        let attrs = self.tcx.get_attrs_unchecked(def_id); // TODO: Replace with get_attrs
+        let attrs = self.tcx.get_all_attrs(def_id); // TODO: Replace with get_attrs
         let nvvm_attrs = NvvmAttributes::parse(self, attrs);
 
         unsafe {

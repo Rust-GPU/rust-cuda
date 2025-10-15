@@ -8,7 +8,6 @@
 extern crate rustc_abi;
 extern crate rustc_arena;
 extern crate rustc_ast;
-extern crate rustc_attr_data_structures;
 extern crate rustc_attr_parsing;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;
@@ -262,19 +261,6 @@ impl WriteBackendMethods for NvvmCodegenBackend {
     type TargetMachineError = String;
     type ThinData = ();
     type ThinBuffer = ThinBuffer;
-
-    fn run_link(
-        _cgcx: &CodegenContext<Self>,
-        _diag_handler: DiagCtxtHandle<'_>,
-        _modules: Vec<ModuleCodegen<Self::Module>>,
-    ) -> Result<ModuleCodegen<Self::Module>, FatalError> {
-        // TODO(Rdambrosio016):
-        // we can probably call the llvm codegen to do this, but cgcx
-        // is a codegen context of NvvmCodegenBackend not LlvmCodegenBackend
-        // and to make a new cgcx we need to make a new LlvmCodegenBackend which
-        // cannot be done through the API currently
-        todo!();
-    }
 
     fn run_and_optimize_fat_lto(
         _cgcx: &CodegenContext<Self>,

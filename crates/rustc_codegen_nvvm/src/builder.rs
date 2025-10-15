@@ -1340,6 +1340,19 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         call
     }
 
+    fn tail_call(
+        &mut self,
+        _llty: Self::Type,
+        _fn_attrs: Option<&CodegenFnAttrs>,
+        _fn_abi: &FnAbi<'tcx, Ty<'tcx>>,
+        _llfn: Self::Value,
+        _args: &[Self::Value],
+        _funclet: Option<&Self::Funclet>,
+        _instance: Option<ty::Instance<'tcx>>,
+    ) {
+        todo!()
+    }
+
     fn zext(&mut self, val: &'ll Value, dest_ty: &'ll Type) -> &'ll Value {
         trace!("Zext {:?} to {:?}", val, dest_ty);
         unsafe { llvm::LLVMBuildZExt(self.llbuilder, val, dest_ty, unnamed()) }
