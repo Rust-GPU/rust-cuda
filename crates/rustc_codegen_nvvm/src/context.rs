@@ -725,10 +725,6 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for CodegenCx<'_, 'tcx> {
 }
 
 impl<'tcx> CoverageInfoBuilderMethods<'tcx> for CodegenCx<'_, 'tcx> {
-    fn init_coverage(&mut self, _instance: Instance<'tcx>) {
-        todo!()
-    }
-
     fn add_coverage(
         &mut self,
         _instance: Instance<'tcx>,

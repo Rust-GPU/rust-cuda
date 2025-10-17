@@ -519,7 +519,8 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         _size: Size,
     ) -> &'ll Value {
         // Since for any A, A | 0 = A, and performing atomics on constant memory is UB in Rust, we can abuse or to perform atomic reads.
-        self.atomic_rmw(AtomicRmwBinOp::AtomicOr, ptr, self.const_int(ty, 0), order)
+        // njn: ?
+        self.atomic_rmw(AtomicRmwBinOp::AtomicOr, ptr, self.const_int(ty, 0), order, /* ret_ptr */ true)
     }
 
     fn load_operand(&mut self, place: PlaceRef<'tcx, &'ll Value>) -> OperandRef<'tcx, &'ll Value> {
@@ -752,7 +753,8 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         _size: Size,
     ) {
         // We can exchange *ptr with val, and then discard the result.
-        self.atomic_rmw(AtomicRmwBinOp::AtomicXchg, ptr, val, order);
+        // njn: ?
+        self.atomic_rmw(AtomicRmwBinOp::AtomicXchg, ptr, val, order, /* ret_ptr */ true);
     }
 
     fn gep(&mut self, ty: &'ll Type, ptr: &'ll Value, indices: &[&'ll Value]) -> &'ll Value {
@@ -1209,12 +1211,14 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         let success = self.extract_value(res, 1);
         (val, success)
     }
+
     fn atomic_rmw(
         &mut self,
         op: AtomicRmwBinOp,
         dst: &'ll Value,
         src: &'ll Value,
         order: AtomicOrdering,
+        _ret_ptr: bool, // njn: what to do?
     ) -> &'ll Value {
         if matches!(op, AtomicRmwBinOp::AtomicNand) {
             self.fatal("Atomic NAND not supported yet!")
