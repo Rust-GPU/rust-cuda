@@ -44,6 +44,9 @@ use tracing::{debug, trace};
 /// <https://docs.nvidia.com/cuda/archive/12.8.1/pdf/CUDA_C_Best_Practices_Guide.pdf>
 const CONSTANT_MEMORY_SIZE_LIMIT_BYTES: u64 = 64 * 1024;
 
+/// Threshold for warning when approaching 80% of constant memory limit
+const CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES: u64 = (CONSTANT_MEMORY_SIZE_LIMIT_BYTES * 80) / 100;
+
 pub(crate) struct CodegenCx<'ll, 'tcx> {
     pub tcx: TyCtxt<'tcx>,
 
@@ -104,6 +107,9 @@ pub(crate) struct CodegenCx<'ll, 'tcx> {
     pub codegen_args: CodegenArgs,
     // the value of the last call instruction. Needed for return type remapping.
     pub last_call_llfn: Cell<Option<&'ll Value>>,
+
+    /// Tracks cumulative constant memory usage in bytes for compile-time diagnostics
+    constant_memory_usage: Cell<u64>,
 }
 
 impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
@@ -174,6 +180,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             dbg_cx,
             codegen_args: CodegenArgs::from_session(tcx.sess()),
             last_call_llfn: Cell::new(None),
+            constant_memory_usage: Cell::new(0),
         };
         cx.build_intrinsics_map();
         cx
@@ -281,16 +288,47 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                 // static and many small ones, you might want the small ones to all be
                 // in constant memory or just the big one depending on your workload.
                 let layout = self.layout_of(ty);
-                if layout.size.bytes() > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+                let size_bytes = layout.size.bytes();
+                let current_usage = self.constant_memory_usage.get();
+                let new_usage = current_usage + size_bytes;
+
+                // Check if this single static is too large for constant memory
+                if size_bytes > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
                     self.tcx.sess.dcx().warn(format!(
-                    "static `{instance}` exceeds the constant memory limit; placing in global memory (performance may be reduced)"
-                ));
-                    // Place instance in global memory if it is too big for constant memory.
-                    AddressSpace(1)
-                } else {
-                    // Place instance in constant memory if it fits.
-                    AddressSpace(4)
+                        "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {} bytes; placing in global memory (performance may be reduced)",
+                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                    ));
+                    return AddressSpace(1);
                 }
+
+                // Check if adding this static would exceed the cumulative limit
+                if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+                    self.tcx.sess.dcx().emit_err(format!(
+                        "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
+                         cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit. \
+                         Current usage: {current_usage} bytes. \
+                         Consider: (1) using `#[cuda_std::address_space(global)]` on less frequently accessed statics, \
+                         (2) reducing static data sizes, or (3) disabling automatic constant memory placement",
+                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                    ));
+                    return AddressSpace(1);
+                }
+
+                // If successfully placed in constant memory: update cumulative usage
+                self.constant_memory_usage.set(new_usage);
+
+                // If approaching the threshold: warns
+                if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES &&
+                   current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES {
+                    self.tcx.sess.dcx().warn(format!(
+                        "constant memory usage is approaching the limit: {new_usage} / {} bytes ({:.1}% used)",
+                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES,
+                        (new_usage as f64 / CONSTANT_MEMORY_SIZE_LIMIT_BYTES as f64) * 100.0
+                    ));
+                }
+
+                trace!("Placing static `{instance}` ({size_bytes} bytes) in constant memory. Total usage: {new_usage} bytes");
+                AddressSpace(4)
             }
         } else {
             AddressSpace::ZERO
