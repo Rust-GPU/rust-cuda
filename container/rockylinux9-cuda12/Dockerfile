@@ -1,41 +1,32 @@
-FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-rockylinux9
+# Multi-stage build to keep final image slim while still providing CUDA, Python, LLVM 7, and Rust.
+# Stage 1: build LLVM and install Rust.
+FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-rockylinux9 AS builder
 
 RUN dnf -y update && \
     dnf -y install \
-    clang \
-    openssl-devel \
-    pkgconfig \
-    redhat-rpm-config \
-    which \
-    xz \
-    zlib-devel && \
+        clang \
+        cmake \
+        fontconfig-devel \
+        libX11-devel \
+        libXcursor-devel \
+        libXi-devel \
+        libXrandr-devel \
+        libffi-devel \
+        libxml2-devel \
+        libedit-devel \
+        ncurses-devel \
+        openssl-devel \
+        pkgconfig \
+        python3 \
+        redhat-rpm-config \
+        which \
+        xz \
+        zlib-devel \
+        make && \
     dnf clean all
 
-# Needed to build `path_tracer`, `optix/ex03_window` example
-RUN dnf -y install \
-    cmake \
-    fontconfig-devel \
-    libX11-devel  \
-    libXcursor-devel \
-    libXi-devel \
-    libXrandr-devel && \
-    dnf clean all
-
-# Get LLVM 7
-WORKDIR /data/llvm7
-
-# Install dependencies for building LLVM
-RUN dnf -y install epel-release && \
-    dnf -y install \
-    libffi-devel \
-    ncurses-devel \
-    libxml2-devel \
-    libedit-devel \
-    python3 \
-    make && \
-    dnf clean all
-
-# Download and build LLVM 7.1.0 for all architectures
+# Build LLVM 7.1.0 once and install into /opt/llvm-7
+WORKDIR /opt/build
 RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmorg-7.1.0/llvm-7.1.0.src.tar.xz && \
     tar -xf llvm-7.1.0.src.tar.xz && \
     cd llvm-7.1.0.src && \
@@ -58,25 +49,56 @@ RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmo
         -DLLVM_INCLUDE_BENCHMARKS=OFF \
         -DLLVM_ENABLE_ZLIB=ON \
         -DLLVM_ENABLE_TERMINFO=ON \
-        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_PREFIX=/opt/llvm-7 \
         .. && \
-    make -j$(nproc) && \
+    make -j"$(nproc)" && \
     make install && \
-    cd ../.. && \
-    rm -rf llvm-7.1.0.src* && \
-    ln -s /usr/bin/llvm-config /usr/bin/llvm-config-7 && \
-    dnf clean all
+    cd /opt && \
+    rm -rf /opt/build
 
-# Get Rust
-RUN curl -sSf -L https://sh.rustup.rs | bash -s -- -y
+# Install Rust toolchain (minimal profile) and clean caches
+RUN curl -sSf -L https://sh.rustup.rs | bash -s -- -y --profile minimal && \
+    /root/.cargo/bin/rustup component add rustfmt clippy && \
+    rm -rf /root/.cargo/registry /root/.cargo/git /root/.rustup/tmp
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Setup the workspace
-WORKDIR /data/rust-cuda
-RUN --mount=type=bind,source=rust-toolchain.toml,target=/data/rust-cuda/rust-toolchain.toml \
-    rustup show
+# Stage 2: final runtime image
+FROM nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-rockylinux9 AS runtime
 
-# Add nvvm to LD_LIBRARY_PATH.
+# Install runtime build dependencies (no compilers for LLVM build needed here)
+RUN dnf -y update && \
+    dnf -y install \
+        clang \
+        cmake \
+        fontconfig-devel \
+        libX11-devel \
+        libXcursor-devel \
+        libXi-devel \
+        libXrandr-devel \
+        openssl-devel \
+        pkgconfig \
+        python3 \
+        redhat-rpm-config \
+        which \
+        xz \
+        zlib-devel && \
+    dnf clean all
+
+# Copy LLVM and Rust from builder stage
+COPY --from=builder /opt/llvm-7 /opt/llvm-7
+RUN ln -sf /opt/llvm-7/bin/llvm-config /usr/bin/llvm-config && \
+    ln -sf /opt/llvm-7/bin/llvm-config /usr/bin/llvm-config-7
+
+COPY --from=builder /root/.cargo /root/.cargo
+COPY --from=builder /root/.rustup /root/.rustup
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN /root/.cargo/bin/rustup show && \
+    rm -rf /root/.cargo/registry /root/.cargo/git /root/.rustup/tmp
+
+# Set up workspace environment defaults
+WORKDIR /data/rust-cuda
 ENV LD_LIBRARY_PATH="/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
 ENV LLVM_LINK_STATIC=1
 ENV RUST_LOG=info
+
+CMD ["bash"]
