@@ -101,7 +101,7 @@ docker build -f ./container/ubuntu24/Dockerfile -t rust-cuda-ubuntu24 .
 docker run --rm --runtime=nvidia --gpus all -it rust-cuda-ubuntu24
 ```
 
-A sample `.devcontainer.json` file is also included, configured for Ubuntu 24.02. Copy this to `.devcontainer/devcontainer.json` to make additonal customizations.
+A sample `.devcontainer.json` file is also included, configured for Ubuntu 24.02. Copy this to `.devcontainer/devcontainer.json` to make additional customizations.
 
 ## License
 
