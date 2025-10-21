@@ -303,12 +303,12 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
                 // Check if adding this static would exceed the cumulative limit
                 if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
-                    self.tcx.sess.dcx().emit_err(format!(
+                    self.tcx.sess.dcx().err(format!(
                         "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
-                         cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit. \
-                         Current usage: {current_usage} bytes. \
-                         Consider: (1) using `#[cuda_std::address_space(global)]` on less frequently accessed statics, \
-                         (2) reducing static data sizes, or (3) disabling automatic constant memory placement",
+                        cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit. \
+                        Current usage: {current_usage} bytes. \
+                        Consider: (1) using `#[cuda_std::address_space(global)]` on less frequently accessed statics, \
+                        (2) reducing static data sizes, or (3) disabling automatic constant memory placement",
                         CONSTANT_MEMORY_SIZE_LIMIT_BYTES
                     ));
                     return AddressSpace(1);
@@ -318,8 +318,9 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                 self.constant_memory_usage.set(new_usage);
 
                 // If approaching the threshold: warns
-                if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES &&
-                   current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES {
+                if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
+                    && current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
+                {
                     self.tcx.sess.dcx().warn(format!(
                         "constant memory usage is approaching the limit: {new_usage} / {} bytes ({:.1}% used)",
                         CONSTANT_MEMORY_SIZE_LIMIT_BYTES,
@@ -327,7 +328,9 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                     ));
                 }
 
-                trace!("Placing static `{instance}` ({size_bytes} bytes) in constant memory. Total usage: {new_usage} bytes");
+                trace!(
+                    "Placing static `{instance}` ({size_bytes} bytes) in constant memory. Total usage: {new_usage} bytes"
+                );
                 AddressSpace(4)
             }
         } else {
