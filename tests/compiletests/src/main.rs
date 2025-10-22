@@ -122,6 +122,7 @@ impl Runner {
                 "-Zunstable-options",
                 "-Zcrate-attr=no_std",
                 "-Zcrate-attr=feature(abi_ptx)",
+                "-Zui-testing",
             ]
             .join(" ")
         }
