@@ -387,3 +387,8 @@ pub struct CUevent_st {
     _unused: [u8; 0],
 }
 pub type cudaEvent_t = *mut CUevent_st;
+
+#[repr(C)]
+pub struct cudaIpcMemHandle_t {
+    pub reserved: [u8; 64],
+}

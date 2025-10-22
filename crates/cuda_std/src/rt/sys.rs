@@ -51,4 +51,8 @@ extern "C" {
         shared_mem_size: c_uint,
     ) -> *mut c_void;
     pub fn cudaLaunchDeviceV2(parameter_buffer: *mut c_void, stream: cudaStream_t) -> cudaError_t;
+
+    pub fn cudaIpcGetMemHandle(handle: *mut cudaIpcMemHandle_t, dev_ptr: *mut c_void) -> cudaError_t;
+    pub fn cudaIpcOpenMemHandle(dev_ptr: *mut *mut c_void, handle: cudaIpcMemHandle_t, flags: u32) -> cudaError_t;
+    pub fn cudaIpcCloseMemHandle(dev_ptr: *mut c_void) -> cudaError_t;
 }
