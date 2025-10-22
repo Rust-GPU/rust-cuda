@@ -303,15 +303,17 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
                 // Check if adding this static would exceed the cumulative limit
                 if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
-                    self.tcx.sess.dcx().err(format!(
+                    self.fatal(format!(
                         "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
                         cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit. \
                         Current usage: {current_usage} bytes. \
-                        Consider: (1) using `#[cuda_std::address_space(global)]` on less frequently accessed statics, \
-                        (2) reducing static data sizes, or (3) disabling automatic constant memory placement",
+                        \n\
+                        = help: use `#[cuda_std::address_space(global)]` on less frequently accessed statics\n\
+                        = help: reducing static data size\n\
+                        = help: disabling automatic constant memory placement by calling `.use_constant_memory_space(false)` \
+                        on your `CudaBuilder` in build.rs",
                         CONSTANT_MEMORY_SIZE_LIMIT_BYTES
                     ));
-                    return AddressSpace(1);
                 }
 
                 // If successfully placed in constant memory: update cumulative usage
