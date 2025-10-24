@@ -294,26 +294,54 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
                 // Check if this single static is too large for constant memory
                 if size_bytes > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
-                    self.tcx.sess.dcx().warn(format!(
-                        "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {} bytes; placing in global memory (performance may be reduced)",
-                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES
-                    ));
+                    let def_id = instance.def_id();
+                    let span = self.tcx.def_span(def_id);
+                    let mut diag = self.tcx.sess.dcx().struct_span_warn(
+                        span,
+                        format!(
+                            "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {} bytes",
+                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                        ),
+                    );
+                    diag.span_label(span, "static exceeds constant memory limit");
+                    diag.note("placing in global memory (performance may be reduced)");
+                    diag.help("use `#[cuda_std::address_space(global)]` to explicitly place this static in global memory");
+                    diag.emit();
                     return AddressSpace(1);
                 }
 
                 // Check if adding this static would exceed the cumulative limit
                 if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
-                    self.fatal(format!(
-                        "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
-                        cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit. \
-                        Current usage: {current_usage} bytes. \
-                        \n\
-                        = help: use `#[cuda_std::address_space(global)]` on less frequently accessed statics\n\
-                        = help: reducing static data size\n\
-                        = help: disabling automatic constant memory placement by calling `.use_constant_memory_space(false)` \
-                        on your `CudaBuilder` in build.rs",
-                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                    let def_id = instance.def_id();
+                    let span = self.tcx.def_span(def_id);
+                    let mut diag = self.tcx.sess.dcx().struct_span_err(
+                        span,
+                        format!(
+                            "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
+                            cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit",
+                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                        ),
+                    );
+                    diag.span_label(
+                        span,
+                        format!(
+                            "this static would cause total usage to exceed {} bytes",
+                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                        ),
+                    );
+                    diag.note(format!(
+                        "current constant memory usage: {current_usage} bytes"
                     ));
+                    diag.note(format!("static size: {size_bytes} bytes"));
+                    diag.note(format!("would result in: {new_usage} bytes total"));
+
+                    diag.help("move this or other statics to global memory using `#[cuda_std::address_space(global)]`");
+                    diag.help("reduce the total size of static data");
+                    diag.help("disable automatic constant memory placement by setting `.use_constant_memory_space(false)` on `CudaBuilder` in build.rs");
+
+                    diag.emit();
+                    self.tcx.sess.dcx().abort_if_errors();
+                    unreachable!()
                 }
 
                 // If successfully placed in constant memory: update cumulative usage
@@ -323,11 +351,27 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                 if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
                     && current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
                 {
-                    self.tcx.sess.dcx().warn(format!(
-                        "constant memory usage is approaching the limit: {new_usage} / {} bytes ({:.1}% used)",
-                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES,
-                        (new_usage as f64 / CONSTANT_MEMORY_SIZE_LIMIT_BYTES as f64) * 100.0
+                    let def_id = instance.def_id();
+                    let span = self.tcx.def_span(def_id);
+                    let usage_percent =
+                        (new_usage as f64 / CONSTANT_MEMORY_SIZE_LIMIT_BYTES as f64) * 100.0;
+                    let mut diag = self.tcx.sess.dcx().struct_span_warn(
+                        span,
+                        format!(
+                            "constant memory usage is approaching the limit: {new_usage} / {} bytes ({usage_percent:.1}% used)",
+                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                        ),
+                    );
+                    diag.span_label(
+                        span,
+                        "this placement brought you over 80% of constant memory capacity",
+                    );
+                    diag.note(format!(
+                        "only {} bytes of constant memory remain",
+                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES - new_usage
                     ));
+                    diag.help("to prevent constant memory overflow, consider moving some statics to global memory using `#[cuda_std::address_space(global)]`");
+                    diag.emit();
                 }
 
                 trace!(
