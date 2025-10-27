@@ -1,7 +1,6 @@
 [book]
 authors = ["Riccardo D'Ambrosio<rdambrosio016@gmail.com>"]
 language = "en"
-multilingual = false
 src = "src"
 title = "GPU Computing with Rust using CUDA"
 description = "Writing extremely fast GPU Computing code with rust using rustc_codegen_nvvm and CUDA"
