@@ -761,6 +761,10 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
         llvm_args.push("--override-libm".to_string());
     }
 
+    if builder.use_constant_memory_space {
+        llvm_args.push("--use-constant-memory-space".to_string());
+    }
+
     if let Some(path) = &builder.final_module_path {
         llvm_args.push("--final-module-path".to_string());
         llvm_args.push(path.to_str().unwrap().to_string());
