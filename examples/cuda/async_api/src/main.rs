@@ -51,14 +51,14 @@ fn main() -> Result<(), cust::error::CudaError> {
     let stop_event = Event::new(EventFlags::DEFAULT)?;
 
     // Create buffers for data on host-side
-    // Ideally must be page-locked for efficiency
+    // Ideally should be page-locked for efficiency
     let mut host_a = LockedBuffer::new(&0u32, N).expect("host array couldn't be initialized!");
     let mut device_a = DeviceBuffer::from_slice(&[u32::MAX; N]).expect("device array couldn't be initialized!");
 
     start_event.record(&stream).expect("Failed to record start_event in the CUDA stream!");
     let start = Instant::now();
 
-    // SAFETY: until the stop_event being triggered:
+    // SAFETY: until the stop_event is triggered:
     // 1. `host_a` is not being modified
     // 2. Both `device_a` and `host_a` are not deallocated
     // 3. Until `stop_query` yields `EventStatus::Ready`, `device_a` is not involved in any other operation
@@ -77,7 +77,7 @@ fn main() -> Result<(), cust::error::CudaError> {
         result.expect("Result of `increment` kernel did not process!");
     }
 
-    // SAFETY: until the stop_event being triggered:
+    // SAFETY: until the stop_event is triggered:
     // 1. `device_a` is not being modified
     // 2. Both `device_a` and `host_a` are not deallocated
     // 3. At this point, until `stop_query` yields `EventStatus::Ready`, 
