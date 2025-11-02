@@ -8,6 +8,8 @@ members = [
 
   "xtask",
 
+  "examples/cuda/async_api",
+  "examples/cuda/async_api/kernels",
   "examples/cuda/vecadd",
   "examples/cuda/vecadd/kernels",
   "examples/cuda/gemm",
