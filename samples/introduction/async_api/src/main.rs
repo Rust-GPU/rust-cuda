@@ -38,7 +38,6 @@ fn main() -> Result<(), cust::error::CudaError> {
     let stream = Stream::new(StreamFlags::NON_BLOCKING, None).expect("Stream couldn't be init!");
 
     const N: usize = 16 * 1024 * 1024;
-    const N_BYTES: usize = N * (i32::BITS as usize);
     let value = 26;
 
     let blocks = BlockSize::xy(512, 1);

@@ -8,8 +8,6 @@ members = [
 
   "xtask",
 
-  "examples/cuda/async_api",
-  "examples/cuda/async_api/kernels",
   "examples/cuda/vecadd",
   "examples/cuda/vecadd/kernels",
   "examples/cuda/gemm",
@@ -22,6 +20,9 @@ members = [
   "examples/optix/*",
   "tests/compiletests",
   "tests/compiletests/deps-helper",
+
+  "samples/introduction/async_api",
+  "samples/introduction/async_api/kernels",
 ]
 
 exclude = [
