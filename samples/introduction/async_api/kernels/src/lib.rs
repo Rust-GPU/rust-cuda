@@ -10,5 +10,5 @@ pub unsafe fn increment(g_data: *mut u32, inc_value: u32) {
         + cuda_std::thread::thread_idx().x) as usize;
 
     let elem: &mut u32 = unsafe { &mut *g_data.add(idx) };
-    *elem = *elem + inc_value;
+    *elem += inc_value;
 }
