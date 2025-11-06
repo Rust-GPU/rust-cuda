@@ -23,14 +23,11 @@ fn correct_output(data: &[u32], x: u32) -> bool {
 }
 
 fn main() -> Result<(), cust::error::CudaError> {
-    cust::init(CudaFlags::empty()).expect("Couldn't initialize CUDA environment!");
-
+    // Set up the context, load the module, and create a stream to run kernels in.
+    let _ctx = cust::quick_init();
     let device = Device::get_device(0).expect("Couldn't find Cuda supported devices!");
-
     println!("Device Name: {}", device.name().unwrap());
 
-    // Set up the context, load the module, and create a stream to run kernels in.
-    let _ctx = Context::new(device);
     let module = Module::from_ptx(PTX, &[]).expect("Module couldn't be init!");
     let increment = module
         .get_function("increment")
