@@ -113,24 +113,8 @@ fn main() -> Result<(), cust::error::CudaError> {
     // Stream is synchronized as a safety measure
     stream.synchronize().expect("Stream couldn't synchronize!");
 
-    // Events and buffers can be safely dropped now
-    match Event::drop(start_event) {
-        Ok(()) => println!("Successfully destroyed start_event"),
-        Err((cuda_error, _event)) => {
-            println!("Failed to destroy start_event: {:?}", cuda_error);
-        }
-    }
-
-    match Event::drop(stop_event) {
-        Ok(()) => println!("Successfully destroyed stop_event"),
-        Err((cuda_error, _event)) => {
-            println!("Failed to destroy stop_event: {:?}", cuda_error);
-        }
-    }
-
-    DeviceBuffer::drop(device_a).expect("Couldn't drop device array!");
-    LockedBuffer::drop(host_a).expect("Couldn't drop host array!");
-
     println!("test PASSED");
     Ok(())
+
+    // The events and the memory buffers are automatically dropped here.
 }
