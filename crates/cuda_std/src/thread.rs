@@ -193,26 +193,14 @@ pub fn grid_dim_z() -> u32 {
 #[gpu_only]
 #[inline(always)]
 pub fn thread_idx() -> UVec3 {
-    unsafe {
-        UVec3::new(
-            __nvvm_thread_idx_x(),
-            __nvvm_thread_idx_y(),
-            __nvvm_thread_idx_z(),
-        )
-    }
+    UVec3::new(thread_idx_x(), thread_idx_y(), thread_idx_z())
 }
 
 /// Gets the 3d index of the block that the thread currently executing the kernel is located in.
 #[gpu_only]
 #[inline(always)]
 pub fn block_idx() -> UVec3 {
-    unsafe {
-        UVec3::new(
-            __nvvm_block_idx_x(),
-            __nvvm_block_idx_y(),
-            __nvvm_block_idx_z(),
-        )
-    }
+    UVec3::new(block_idx_x(), block_idx_y(), block_idx_z())
 }
 
 /// Gets the 3d layout of the thread blocks executing this kernel. In other words,
@@ -220,13 +208,7 @@ pub fn block_idx() -> UVec3 {
 #[gpu_only]
 #[inline(always)]
 pub fn block_dim() -> UVec3 {
-    unsafe {
-        UVec3::new(
-            __nvvm_block_dim_x(),
-            __nvvm_block_dim_y(),
-            __nvvm_block_dim_z(),
-        )
-    }
+    UVec3::new(block_dim_x(), block_dim_y(), block_dim_z())
 }
 
 /// Gets the 3d layout of the block grids executing this kernel. In other words,
@@ -234,13 +216,7 @@ pub fn block_dim() -> UVec3 {
 #[gpu_only]
 #[inline(always)]
 pub fn grid_dim() -> UVec3 {
-    unsafe {
-        UVec3::new(
-            __nvvm_grid_dim_x(),
-            __nvvm_grid_dim_y(),
-            __nvvm_grid_dim_z(),
-        )
-    }
+    UVec3::new(grid_dim_x(), grid_dim_y(), grid_dim_z())
 }
 
 /// Gets the overall thread index, accounting for 1d/2d/3d block/grid dimensions. This
