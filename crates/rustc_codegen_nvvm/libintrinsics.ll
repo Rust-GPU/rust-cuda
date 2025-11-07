@@ -8,86 +8,6 @@ source_filename = "libintrinsics"
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64"
 target triple = "nvptx64-nvidia-cuda"
 
-; thread ----
-
-define i32 @__nvvm_thread_idx_x() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
-  ret i32 %0
-}
-
-define i32 @__nvvm_thread_idx_y() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.tid.y()
-  ret i32 %0
-}
-
-define i32 @__nvvm_thread_idx_z() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.tid.z()
-  ret i32 %0
-}
-
-; block dimension ----
-
-define i32 @__nvvm_block_dim_x() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
-  ret i32 %0
-}
-
-define i32 @__nvvm_block_dim_y() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.ntid.y()
-  ret i32 %0
-}
-
-define i32 @__nvvm_block_dim_z() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.ntid.z()
-  ret i32 %0
-}
-
-; block idx ----
-
-define i32 @__nvvm_block_idx_x() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
-  ret i32 %0
-}
-
-define i32 @__nvvm_block_idx_y() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.ctaid.y()
-  ret i32 %0
-}
-
-define i32 @__nvvm_block_idx_z() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.ctaid.z()
-  ret i32 %0
-}
-
-; grid dimension ---- 
-
-define i32 @__nvvm_grid_dim_x() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.nctaid.x()
-  ret i32 %0
-}
-
-define i32 @__nvvm_grid_dim_y() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.nctaid.y()
-  ret i32 %0
-}
-
-define i32 @__nvvm_grid_dim_z() #0 {
-start:
-  %0 = call i32 @llvm.nvvm.read.ptx.sreg.nctaid.z()
-  ret i32 %0
-}
-
 ; warp ----
 
 define i32 @__nvvm_warp_size() #0 {
@@ -96,18 +16,6 @@ start:
   ret i32 %0
 }
 
-declare i32 @llvm.nvvm.read.ptx.sreg.tid.x()
-declare i32 @llvm.nvvm.read.ptx.sreg.tid.y()
-declare i32 @llvm.nvvm.read.ptx.sreg.tid.z()
-declare i32 @llvm.nvvm.read.ptx.sreg.ntid.x()
-declare i32 @llvm.nvvm.read.ptx.sreg.ntid.y()
-declare i32 @llvm.nvvm.read.ptx.sreg.ntid.z()
-declare i32 @llvm.nvvm.read.ptx.sreg.ctaid.x()
-declare i32 @llvm.nvvm.read.ptx.sreg.ctaid.y()
-declare i32 @llvm.nvvm.read.ptx.sreg.ctaid.z()
-declare i32 @llvm.nvvm.read.ptx.sreg.nctaid.x()
-declare i32 @llvm.nvvm.read.ptx.sreg.nctaid.y()
-declare i32 @llvm.nvvm.read.ptx.sreg.nctaid.z()
 declare i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 
 ; other ----

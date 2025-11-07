@@ -63,22 +63,6 @@ use glam::{UVec2, UVec3};
 // different calling conventions dont exist in nvptx, so we just use C as a placeholder.
 extern "C" {
     // defined in libintrinsics.ll
-    fn __nvvm_thread_idx_x() -> u32;
-    fn __nvvm_thread_idx_y() -> u32;
-    fn __nvvm_thread_idx_z() -> u32;
-
-    fn __nvvm_block_dim_x() -> u32;
-    fn __nvvm_block_dim_y() -> u32;
-    fn __nvvm_block_dim_z() -> u32;
-
-    fn __nvvm_block_idx_x() -> u32;
-    fn __nvvm_block_idx_y() -> u32;
-    fn __nvvm_block_idx_z() -> u32;
-
-    fn __nvvm_grid_dim_x() -> u32;
-    fn __nvvm_grid_dim_y() -> u32;
-    fn __nvvm_grid_dim_z() -> u32;
-
     fn __nvvm_warp_size() -> u32;
 
     fn __nvvm_block_barrier();
@@ -92,8 +76,8 @@ extern "C" {
 macro_rules! in_range {
     // The bounds were taken mostly from the cuda C++ programming guide. I also
     // double-checked with what cuda clang does by checking its emitted llvm ir's scalar metadata.
-    ($func_name:ident, $range:expr) => {{
-        let val = unsafe { $func_name() };
+    ($func_name:path, $range:expr) => {{
+        let val = unsafe { $func_name() as u32 };
         if !$range.contains(&val) {
             // SAFETY: this condition is declared unreachable by compute capability max bound.
             // https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#compute-capabilities
@@ -109,84 +93,84 @@ macro_rules! in_range {
 #[inline(always)]
 pub fn thread_idx_x() -> u32 {
     // The range is derived from the `block_idx_x` range.
-    in_range!(__nvvm_thread_idx_x, 0..1024)
+    in_range!(core::arch::nvptx::_thread_idx_x, 0..1024)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn thread_idx_y() -> u32 {
     // The range is derived from the `block_idx_y` range.
-    in_range!(__nvvm_thread_idx_y, 0..1024)
+    in_range!(core::arch::nvptx::_thread_idx_y, 0..1024)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn thread_idx_z() -> u32 {
     // The range is derived from the `block_idx_z` range.
-    in_range!(__nvvm_thread_idx_z, 0..64)
+    in_range!(core::arch::nvptx::_thread_idx_z, 0..64)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn block_idx_x() -> u32 {
     // The range is derived from the `grid_idx_x` range.
-    in_range!(__nvvm_block_idx_x, 0..2147483647)
+    in_range!(core::arch::nvptx::_block_idx_x, 0..2147483647)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn block_idx_y() -> u32 {
     // The range is derived from the `grid_idx_y` range.
-    in_range!(__nvvm_block_idx_y, 0..65535)
+    in_range!(core::arch::nvptx::_block_idx_y, 0..65535)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn block_idx_z() -> u32 {
     // The range is derived from the `grid_idx_z` range.
-    in_range!(__nvvm_block_idx_z, 0..65535)
+    in_range!(core::arch::nvptx::_block_idx_z, 0..65535)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn block_dim_x() -> u32 {
     // CUDA Compute Capabilities: "Maximum x- or y-dimensionality of a block" is 1024.
-    in_range!(__nvvm_block_dim_x, 1..=1024)
+    in_range!(core::arch::nvptx::_block_dim_x, 1..=1024)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn block_dim_y() -> u32 {
     // CUDA Compute Capabilities: "Maximum x- or y-dimensionality of a block" is 1024.
-    in_range!(__nvvm_block_dim_y, 1..=1024)
+    in_range!(core::arch::nvptx::_block_dim_y, 1..=1024)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn block_dim_z() -> u32 {
     // CUDA Compute Capabilities: "Maximum z-dimension of a block" is 64.
-    in_range!(__nvvm_block_dim_z, 1..=64)
+    in_range!(core::arch::nvptx::_block_dim_z, 1..=64)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn grid_dim_x() -> u32 {
     // CUDA Compute Capabilities: "Maximum x-dimension of a grid of thread blocks" is 2^32 - 1.
-    in_range!(__nvvm_grid_dim_x, 1..=2147483647)
+    in_range!(core::arch::nvptx::_grid_dim_x, 1..=2147483647)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn grid_dim_y() -> u32 {
     // CUDA Compute Capabilities: "Maximum y- or z-dimension of a grid of thread blocks" is 65535.
-    in_range!(__nvvm_grid_dim_y, 1..=65535)
+    in_range!(core::arch::nvptx::_grid_dim_y, 1..=65535)
 }
 
 #[gpu_only]
 #[inline(always)]
 pub fn grid_dim_z() -> u32 {
     // CUDA Compute Capabilities: "Maximum y- or z-dimension of a grid of thread blocks" is 65535.
-    in_range!(__nvvm_grid_dim_z, 1..=65535)
+    in_range!(core::arch::nvptx::_grid_dim_z, 1..=65535)
 }
 
 /// Gets the 3d index of the thread currently executing the kernel.
