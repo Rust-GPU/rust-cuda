@@ -1,0 +1,15 @@
+error: cannot place static `BIG_ARRAY_2` (35840 bytes) in constant memory: cumulative constant memory usage would be 71680 bytes, exceeding the 65536 byte limit
+  --> $DIR/constant_memory_overflow.rs:15:1
+   |
+LL | static BIG_ARRAY_2: [u32; ARRAY_SIZE] = [222u32; ARRAY_SIZE];
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this static would cause total usage to exceed 65536 bytes
+   |
+   = note: current constant memory usage: 35840 bytes
+   = note: static size: 35840 bytes
+   = note: would result in: 71680 bytes total
+   = help: move this or other statics to global memory using `#[cuda_std::address_space(global)]`
+   = help: reduce the total size of static data
+   = help: disable automatic constant memory placement by setting `.use_constant_memory_space(false)` on `CudaBuilder` in build.rs
+
+error: aborting due to 1 previous error
+
