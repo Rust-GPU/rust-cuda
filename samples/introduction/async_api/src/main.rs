@@ -1,12 +1,11 @@
-use cust::context::Context;
 use cust::device::Device;
 use cust::event::{Event, EventFlags};
 use cust::function::{BlockSize, GridSize};
+use cust::launch;
 use cust::memory::{AsyncCopyDestination, DeviceBuffer, LockedBuffer};
 use cust::module::Module;
 use cust::prelude::EventStatus;
 use cust::stream::{Stream, StreamFlags};
-use cust::{CudaFlags, launch};
 use std::time::Instant;
 
 static PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/kernels.ptx"));
@@ -54,7 +53,9 @@ fn main() -> Result<(), cust::error::CudaError> {
         .expect("Failed to record start_event in the CUDA stream!");
     let start = Instant::now();
 
-    // SAFETY: until the stop_event is triggered:
+    // # Safety
+    //
+    // Until the stop_event is triggered:
     // 1. `host_a` is not being modified
     // 2. Both `device_a` and `host_a` are not deallocated
     // 3. Until `stop_query` yields `EventStatus::Ready`, `device_a` is not involved in any other operation
@@ -65,7 +66,9 @@ fn main() -> Result<(), cust::error::CudaError> {
             .expect("Could not copy from host to device!");
     }
 
-    // SAFETY: number of threads * number of blocks = total number of elements.
+    // # Safety
+    //
+    // Number of threads * number of blocks = total number of elements.
     // Hence there will not be any out-of-bounds issues.
     unsafe {
         let result = launch!(increment<<<grids, blocks, 0, stream>>>(
@@ -75,7 +78,9 @@ fn main() -> Result<(), cust::error::CudaError> {
         result.expect("Result of `increment` kernel did not process!");
     }
 
-    // SAFETY: until the stop_event is triggered:
+    // # Safety
+    //
+    // Until the stop_event is triggered:
     // 1. `device_a` is not being modified
     // 2. Both `device_a` and `host_a` are not deallocated
     // 3. At this point, until `stop_query` yields `EventStatus::Ready`,
