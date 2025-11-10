@@ -97,7 +97,7 @@ cargo build
 The distribution related Dockerfile are located in `container` folder.
 Taking ubuntu 24.04 as an example, run the following command in repository root:
 ```bash
-docker build -f ./container/ubuntu24/Dockerfile -t rust-cuda-ubuntu24 .
+docker build -f ./container/ubuntu24-cuda12/Dockerfile -t rust-cuda-ubuntu24 .
 docker run --rm --runtime=nvidia --gpus all -it rust-cuda-ubuntu24
 ```
 
