@@ -6,11 +6,7 @@ This section covers how to get started writing GPU crates with `cuda_std` and `c
 
 Before you can use the project to write GPU crates, you will need a couple of prerequisites:
 
-- [The CUDA SDK](https://developer.nvidia.com/cuda-downloads), version `11.2-11.8` (and the appropriate driver - [see cuda release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html)).
-
-  - We recently [added experimental support for the `12.x`
-    SDK](https://github.com/Rust-GPU/rust-cuda/issues/100), please file any issues you
-    see
+- [The CUDA SDK](https://developer.nvidia.com/cuda-downloads), version 11.2 or later (and the appropriate driver - [see CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html)).
 
   This is only for building GPU crates, to execute built PTX you only need CUDA `9+`.
 
@@ -27,13 +23,14 @@ Before you can use the project to write GPU crates, you will need a couple of pr
 
 - You may wish to use or consult the bundled [Dockerfile](#docker) to assist in your local config
 
-## rust-toolchain
+## rust-toolchain.toml
 
-Currently, the Codegen only works on nightly (because it uses rustc internals), and it only works on a specific version of nightly.
-This is why you must copy the `rust-toolchain` file in the project repository to your own project. This will ensure
-you are on the correct nightly version so the codegen builds.
+NVVM codegen currently requires a specific version of Rust nightly, because it uses rustc internals
+that are subject to change. Therefore, you must copy the `rust-toolchain.toml` file in the project
+repository so that your own project uses the correct nightly version.
 
-Only the codegen requires nightly, `cust` and other CPU-side libraries work perfectly fine on stable.
+Note: `cust` and other CPU-side libraries work with stable Rust, but they will end up being
+compiled with the version of nightly specified in `rust-toolchain.toml`.
 
 ## Cargo.toml
 
@@ -111,9 +108,9 @@ thread, with the number of threads being decided by the caller (the CPU).
 We call these parameters the launch dimensions of the kernel. Launch dimensions are split
 up into two basic concepts:
 
-- Threads, a single thread executes the GPU kernel **once**, and it makes the index
+- **Threads:** A single thread executes the GPU kernel **once**, and it makes the index
   of itself available to the kernel through special registers (functions in our case).
-- Blocks, Blocks house multiple threads that they execute on their own. Thread indices
+- **Blocks:** A single block houses multiple threads that it execute on its own. Thread indices
   are only unique across the thread's block, therefore CUDA also exposes the index
   of the current block.
 
@@ -150,8 +147,8 @@ If you have used CUDA C++ before, this should seem fairly familiar, with a few o
   is unsound. The reason being that rustc assumes `&mut` does not alias. However, because every thread gets a copy of the arguments, this would cause it to alias, thereby violating
   this invariant and yielding technically unsound code. Pointers do not have such an invariant on the other hand. Therefore, we use a pointer and only make a mutable reference once we
   are sure the elements are disjoint: `let elem = &mut *c.add(idx);`.
-- We check that the index is not out of bounds before doing anything, this is because it is
-  common to launch kernels with thread amounts that are not exactly divisible by the length for optimization.
+- We check that the index is not out of bounds before doing anything, because it is common to
+  launch kernels with thread counts that are not exactly divisible by the length for optimization.
 
 Internally what this does is it first checks that a couple of things are right in the kernel:
 
@@ -165,8 +162,7 @@ It also applies `#[no_mangle]` so the name of the kernel is the same as it is de
 ## Building the GPU crate
 
 Now that you have some kernels defined in a crate, you can build them easily using `cuda_builder`.
-`cuda_builder` is a helper crate similar to `spirv_builder` (if you have used rust-gpu before), it builds
-GPU crates while passing everything needed by rustc.
+which builds GPU crates while passing everything needed by rustc.
 
 To use it you can simply add it as a build dependency in your CPU crate (the crate running the GPU kernels):
 
@@ -216,23 +212,11 @@ static PTX: &str = include_str!("some/path.ptx");
 
 Then execute it using cust.
 
-Don't forget to include the current `rust-toolchain` in the top of your project:
-
-```toml
-# If you see this, run `rustup self update` to get rustup 1.23 or newer.
-
-# NOTE: above comment is for older `rustup` (before TOML support was added),
-# which will treat the first line as the toolchain name, and therefore show it
-# to the user in the error, instead of "error: invalid channel name '[toolchain]'".
-
-[toolchain]
-channel = "nightly-2021-12-04"
-components = ["rust-src", "rustc-dev", "llvm-tools-preview"]
-```
+Don't forget to include the current `rust-toolchain.toml` at the top of your project.
 
 ## Docker
 
-There is also a [Dockerfile](Dockerfile) prepared as a quickstart with all the necessary libraries for base cuda development.
+There are also some [Dockerfiles](https://github.com/Rust-GPU/rust-cuda/tree/main/container) prepared as a quickstart with all the necessary libraries for base CUDA development.
 
 You can use it as follows (assuming your clone of Rust CUDA is at the absolute path `RUST_CUDA`):
 
@@ -244,7 +228,7 @@ You can use it as follows (assuming your clone of Rust CUDA is at the absolute p
 
 **Notes:**
 
-1. refer to [rust-toolchain](#rust-toolchain) to ensure you are using the correct toolchain in your project.
+1. refer to [rust-toolchain.toml](#rust-toolchain.toml) to ensure you are using the correct toolchain in your project.
 2. despite using Docker, your machine will still need to be running a compatible driver, in this case for Cuda 11.4.1 it is >=470.57.02
 3. if you have issues within the container, it can help to start ensuring your gpu is recognized
    - ensure `nvidia-smi` provides meaningful output in the container

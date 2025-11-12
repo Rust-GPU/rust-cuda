@@ -44,7 +44,7 @@ In `cust` everything uses RAII (through `Drop` impls) to manage freeing memory a
 frees users from having to think about that, which yields safer, more reliable code.
 
 Results are particularly helpful, almost every single call in every CUDA library returns a status code in the form of a cuda result.
-Ignoring these statuses is very dangerous and can often lead to random segfaults and overall unrealiable code. For this purpose,
+Ignoring these statuses is very dangerous and can often lead to random segfaults and overall unreliable code. For this purpose,
 both the CUDA SDK, and other libraries provide macros to handle such statuses. This handling is not very reliable and causes
 dependency issues down the line. 
 

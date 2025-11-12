@@ -29,7 +29,7 @@ over CUDA C/C++ with the same (or better!) performance and features, therefore, 
 Short answer, no.
 
 Long answer, there are a couple of things that make this impossible:
-- At the time of writing, libnvvm expects LLVM 7 bitcode, giving it LLVM 12/13 bitcode (which is what rustc uses) does not work.
+- At the time of writing, libnvvm expects LLVM 7 bitcode, which is a very old format. Giving it bitcode from later LLVM version (which is what rustc uses) does not work.
 - NVVM IR is a __subset__ of LLVM IR, there are tons of things that nvvm will not accept. Such as a lot of function attrs not being allowed. 
 This is well documented and you can find the spec [here](https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html). Not to mention
 many bugs in libnvvm that i have found along the way, the most infuriating of which is nvvm not accepting integer types that arent `i1, i8, i16, i32, or i64`.
