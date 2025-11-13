@@ -18,8 +18,6 @@ jobs:
   build-toolchain:
     name: Build LLVM7 base (${{ matrix.variance.name }} / ${{ matrix.platform.arch }})
     runs-on: ${{ matrix.platform.runner }}
-    env:
-      TOOLCHAIN_TAR_DIR: ${{ runner.tool_cache }}/llvm7-tars
     permissions:
       contents: read
       packages: write
@@ -78,6 +76,11 @@ jobs:
           echo "TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
           echo "BUILDKIT_TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
           echo "BUILDKIT_SANDBOX_TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
+      - name: Prepare tar output directory
+        run: |
+          TAR_DIR="$RUNNER_TOOL_CACHE/llvm7-tars"
+          mkdir -p "$TAR_DIR"
+          echo "TOOLCHAIN_TAR_DIR=$TAR_DIR" >> "$GITHUB_ENV"
       - name: Prepare tar output directory
         run: mkdir -p "$TOOLCHAIN_TAR_DIR"
       - name: Build and push toolchain
