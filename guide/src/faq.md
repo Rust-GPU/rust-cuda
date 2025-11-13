@@ -153,7 +153,7 @@ things to gain in terms of safety using Rust.
 The reasoning for this is the same reasoning as to why you would use CUDA over opengl/vulkan compute shaders:
 - CUDA usually outperforms shaders if kernels are written well and launch configurations are optimal.
 - CUDA has many useful features such as shared memory, unified memory, graphs, fine grained thread control, streams, the PTX ISA, etc.
-- rust-gpu does not perform many optimizations, and with cg_ssa's less than ideal codegen, the optimizations by llvm and libnvvm are needed.
+- rust-gpu does not perform many optimizations, and with rustc_codegen_ssa's less than ideal codegen, the optimizations by llvm and libnvvm are needed.
 - SPIRV is arguably still not suitable for serious GPU kernel codegen, it is underspecced, complex, and does not mention many things which are needed.
 While libnvvm (which uses a well documented subset of LLVM IR) and the PTX ISA are very thoroughly documented/specified.
 - rust-gpu is primarily focused on graphical shaders, compute shaders are secondary, which the rust ecosystem needs, but it also 

@@ -42,15 +42,18 @@ dive into each trait.
 
 But first, let's talk about the end of the codegen, it is pretty simple, we do a couple of things:
 *after codegen is done and LLVM has been run to optimize each module*
-- 1: We gather every llvm bitcode module we created.
-- 2: We create a new libnvvm program.
-- 3: We add every bitcode module to the libnvvm program.
-- 4: We try to find libdevice and add it to the program (see [nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/introduction.html#what-is-libdevice) on what libdevice is).
-- 5: We run the verifier on the nvvm program just to check that we did not create any invalid nvvm ir.
-- 6: We run the compiler which gives us a final PTX string, hooray!
-- 7: Finally, the PTX goes through a small stage where its parsed and function DCE is run to eliminate
-     Most of the bloat in the file, traditionally this is done by the linker but theres no linker to be found for miles here.
-- 8: We write this ptx file to wherever rustc tells us to write the final file.
+1. We gather every LLVM bitcode module we created.
+2. We create a new libnvvm program.
+3. We add every bitcode module to the libnvvm program.
+4. We try to find libdevice and add it to the program (see [nvidia
+   docs](https://docs.nvidia.com/cuda/libdevice-users-guide/introduction.html#what-is-libdevice) on
+   what libdevice is).
+5. We run the verifier on the nvvm program just to check that we did not create any invalid NVVM IR.
+6. We run the compiler which gives us a final PTX string, hooray!
+7. Finally, the PTX goes through a small stage where its parsed and function DCE is run to
+   eliminate most of the bloat in the file. Traditionally this is done by the linker but there's no
+   linker to be found for miles here.
+8. We write this PTX file to wherever rustc tells us to write the final file.
 
 We will cover the libnvvm steps in more detail later on.
 
@@ -71,12 +74,12 @@ rlibs are mysterious files, their origins are mysterious and their contents are 
 but rlibs often confuse people (including me at first). Rlibs are rustc's way of encoding basically everything it needs to know 
 about a crate into a file. Rlibs usually contain the following:
 - Object files for each CGU.
-- LLVM Bitcode.
-- a Symbol table.
-- metadata:
-  - rustc version (because things can go kaboom if version mismatches, ABIs are fun amirite)
+- LLVM bitcode.
+- A symbol table.
+- Metadata:
+  - The rustc version (because things can go kaboom if version mismatches, ABIs are fun amirite)
   - A crate hash
-  - a crate id
-  - info about the source files
-  - the exported API, things like macros, traits, etc.
+  - A crate id
+  - Info about the source files
+  - The exported API, things like macros, traits, etc.
   - MIR, for things such as generic functions and `#[inline]`d functions (please don't put `#[inline]` on everything, rustc will cry)

@@ -15,13 +15,13 @@ Nowadays, Rustc is almost fully decoupled from LLVM and it is instead generic ov
 Rustc instead uses a system of codegen backends that implement traits and then get loaded as dynamically linked libraries.
 This allows rust to compile to virtually anything with a surprisingly small amount of work. At the time of writing, there are
 five publicly known codegens that exist:
-- rustc_codegen_clif, cranelift
+- rustc_codegen_cranelift
 - rustc_codegen_llvm
 - rustc_codegen_gcc
 - rustc_codegen_spirv
 - rustc_codegen_nvvm, obviously the best codegen ;)
 
-`rustc_codegen_clif` targets the cranelift backend, which is a codegen backend written in rust that is faster than LLVM but does not have many optimizations
+`rustc_codegen_cranelift` targets the cranelift backend, which is a codegen backend written in rust that is faster than LLVM but does not have many optimizations
 compared to LLVM. `rustc_codegen_llvm` is obvious, it is the backend almost everybody uses which targets LLVM. `rustc_codegen_gcc` targets GCC (GNU Compiler Collection)
 which is able to target more exotic targets than LLVM, especially for embedded. `rustc_codegen_spirv` targets the SPIR-V (Standard Portable Intermediate Representation 5)
 format, which is a format mostly used for compiling shader languages such as GLSL or WGSL to a standard representation that Vulkan/OpenGL can use, the reasons
@@ -32,16 +32,12 @@ What NVVM IR/libnvvm are has been covered in the [CUDA section](../../cuda/pipel
 
 # rustc_codegen_ssa
 
-Despite its name, `rustc_codegen_ssa` does not actually codegen to anything, it is however the central crate behind every single codegen.
-The SSA codegen does most of the hard work in codegen, which is actually codegenning MIR and taking care of managing codegen altogether.
+`rustc_codegen_ssa` is the central crate behind every single codegen and does much of the hard work.
+It abstracts away the MIR lowering logic so that custom codegens only have to implement some
+traits and the SSA codegen does everything else. For example:
+- A trait for getting a type like an integer type.
+- A trait for optimizing a module.
+- A trait for linking everything.
+- A trait for declaring a function.
 
-The SSA codegen abstracts away the MIR lowering logic so that custom codegens do not have to implement the time consuming logic of lowering MIR,
-they can just implement a bunch of traits and the SSA codegen does everything else.
-
-The SSA codegen is literally just a bunch of traits, for example:
-- A trait for getting a type like an integer type
-- A trait for optimizing a module
-- A trait for linking everything
-- A trait for declaring a function
-...etc
-You will find an SSA codegen trait in almost every single file.
+And so on. You will find an SSA codegen trait in almost every file.
