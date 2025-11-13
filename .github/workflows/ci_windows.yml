@@ -77,11 +77,6 @@ jobs:
           nvcc --version
           rustup show
 
-      - name: Load Rust Cache
-        uses: Swatinem/rust-cache@v2.7.7
-        with:
-          key: ${{ matrix.os }}-${{ matrix.target }}-${{ matrix.cuda }}
-
       - name: Rustfmt
         run: cargo fmt --all -- --check
 

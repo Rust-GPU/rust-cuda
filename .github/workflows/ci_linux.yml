@@ -73,11 +73,6 @@ jobs:
           nvcc --version
           rustup show
 
-      - name: Load Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.variance.name }}-${{ github.sha }}
-
       - name: Rustfmt
         run: cargo fmt --all -- --check
 
