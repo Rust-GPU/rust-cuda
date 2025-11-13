@@ -72,17 +72,12 @@ jobs:
         uses: docker/setup-buildx-action@v3
       - name: Prepare BuildKit temp space
         run: |
-          mkdir -p "${RUNNER_TEMP}/buildkit-tmp"
-          echo "TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
-          echo "BUILDKIT_TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
-          echo "BUILDKIT_SANDBOX_TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
+          mkdir -p "${{ runner.temp }}/buildkit-tmp"
+          echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
+          echo "BUILDKIT_TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
+          echo "BUILDKIT_SANDBOX_TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
       - name: Prepare tar output directory
-        run: |
-          TAR_DIR="$RUNNER_TOOL_CACHE/llvm7-tars"
-          mkdir -p "$TAR_DIR"
-          echo "TOOLCHAIN_TAR_DIR=$TAR_DIR" >> "$GITHUB_ENV"
-      - name: Prepare tar output directory
-        run: mkdir -p "$TOOLCHAIN_TAR_DIR"
+        run: mkdir -p "${{ runner.temp }}/llvm7-tars"
       - name: Build and push toolchain
         id: toolchain-build
         uses: docker/build-push-action@v6
@@ -95,8 +90,8 @@ jobs:
             ${{ steps.toolchain-meta.outputs.tags }}
             ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}:ci-${{ github.run_id }}-${{ matrix.platform.arch }}
           outputs: |
-            type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-            type=docker,dest=${{ env.TOOLCHAIN_TAR_DIR }}/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
+            type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }},compression=zstd,compression-level=10,force-compression=true
+            type=docker,dest=${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar,compression=zstd,compression-level=10,force-compression=true
           cache-from: type=gha
       - name: Export digest
         if: github.event_name != 'pull_request'
@@ -116,11 +111,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}
-          path: ${{ env.TOOLCHAIN_TAR_DIR }}/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
+          path: ${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
           if-no-files-found: error
           retention-days: 1
       - name: Remove local tarball
-        run: rm -f "$TOOLCHAIN_TAR_DIR/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar"
+        run: rm -f "${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar"
       - name: Clean up caches
         if: always()
         run: |

@@ -98,7 +98,7 @@ jobs:
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-          CARGO_TARGET_DIR: ${{ runner.tool_cache }}/cargo-doc
+          CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-doc
         run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex0*" --exclude "cudnn*" --exclude "sha2*" --exclude "cust_raw"
 
       # Disabled due to dll issues, someone with  Windows knowledge needed

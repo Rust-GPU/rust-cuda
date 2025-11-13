@@ -27,8 +27,8 @@ jobs:
     container:
       image: ${{ matrix.variance.image }}
     env:
-      CARGO_TARGET_DIR: ${{ runner.tool_cache }}/cargo-target
-      DOC_CARGO_TARGET_DIR: ${{ runner.tool_cache }}/cargo-doc
+      CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-target
+      DOC_CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-doc
     strategy:
       fail-fast: false
       matrix:
