@@ -94,6 +94,7 @@ jobs:
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
+          CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-doc
         run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*" --exclude "cust_raw"
 
       - name: Prepare artifact details
