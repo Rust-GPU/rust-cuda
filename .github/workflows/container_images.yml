@@ -70,6 +70,12 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+      - name: Prepare BuildKit temp space
+        run: |
+          mkdir -p "${RUNNER_TEMP}/buildkit-tmp"
+          echo "TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
+          echo "BUILDKIT_TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
+          echo "BUILDKIT_SANDBOX_TMPDIR=${RUNNER_TEMP}/buildkit-tmp" >> "$GITHUB_ENV"
       - name: Build and push toolchain
         id: toolchain-build
         uses: docker/build-push-action@v6
@@ -83,7 +89,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}:ci-${{ github.run_id }}-${{ matrix.platform.arch }}
           outputs: |
             type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
-            type=docker,dest=/tmp/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
+            type=docker,dest=${{ runner.temp }}/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
           cache-from: type=gha
       - name: Export digest
         if: github.event_name != 'pull_request'
@@ -103,7 +109,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}
-          path: /tmp/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
+          path: ${{ runner.temp }}/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
           if-no-files-found: error
           retention-days: 1
       - name: Clean up caches
