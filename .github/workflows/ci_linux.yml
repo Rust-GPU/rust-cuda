@@ -26,6 +26,9 @@ jobs:
     runs-on: ${{ matrix.variance.runner }}
     container:
       image: ${{ matrix.variance.image }}
+    env:
+      CARGO_TARGET_DIR: ${{ runner.tool_cache }}/cargo-target
+      DOC_CARGO_TARGET_DIR: ${{ runner.tool_cache }}/cargo-doc
     strategy:
       fail-fast: false
       matrix:
@@ -94,7 +97,7 @@ jobs:
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-          CARGO_TARGET_DIR: ${{ runner.tool_cache }}/cargo-doc
+          CARGO_TARGET_DIR: ${{ env.DOC_CARGO_TARGET_DIR }}
         run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*" --exclude "cust_raw"
 
       - name: Prepare artifact details
@@ -102,7 +105,9 @@ jobs:
         run: |
           SANITIZED_NAME=$(echo '${{ matrix.variance.name }}' | sed 's/[^a-zA-Z0-9.-]/-/g')
           ARTIFACT_NAME="target_debug-${SANITIZED_NAME}-${{ github.run_id }}"
-          ARTIFACT_PATH="target/debug"
+          ARTIFACT_UPLOAD_PATH="${CARGO_TARGET_DIR}/debug"
+          ARTIFACT_PATH="target-debug/${SANITIZED_NAME}-${{ github.run_id }}"
+          echo "upload_path=${ARTIFACT_UPLOAD_PATH}" >> $GITHUB_OUTPUT
           echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
           echo "path=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
 
@@ -110,7 +115,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.artifact_details.outputs.name }}
-          path: ${{ steps.artifact_details.outputs.path }}
+          path: ${{ steps.artifact_details.outputs.upload_path }}
           retention-days: 1
 
   test:
