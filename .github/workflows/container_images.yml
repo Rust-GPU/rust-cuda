@@ -119,6 +119,8 @@ jobs:
           path: ${{ env.TOOLCHAIN_TAR_DIR }}/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
           if-no-files-found: error
           retention-days: 1
+      - name: Remove local tarball
+        run: rm -f "$TOOLCHAIN_TAR_DIR/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar"
       - name: Clean up caches
         if: always()
         run: |
