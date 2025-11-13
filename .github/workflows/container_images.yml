@@ -68,15 +68,29 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}
+      - name: Aggressive runner cleanup
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/julia* || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/local/share/chromium || true
+          sudo rm -rf /opt/microsoft || true
+          sudo rm -rf /opt/google || true
+          sudo rm -rf /opt/az || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Prepare BuildKit temp space
         run: |
           mkdir -p "${{ runner.temp }}/buildkit-tmp"
-          mkdir -p "${{ runner.temp }}/buildkit-root"
           echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: root=${{ runner.temp }}/buildkit-root
       - name: Prepare tar output directory
         run: mkdir -p "${{ runner.temp }}/llvm7-tars"
       - name: Build and push toolchain
@@ -91,8 +105,8 @@ jobs:
             ${{ steps.toolchain-meta.outputs.tags }}
             ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}:ci-${{ github.run_id }}-${{ matrix.platform.arch }}
           outputs: |
-            type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }},compression=zstd,compression-level=10,force-compression=true
-            type=docker,dest=${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar,compression=zstd,compression-level=10,force-compression=true
+            type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+            type=docker,dest=${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
           cache-from: type=gha
       - name: Export digest
         if: github.event_name != 'pull_request'
@@ -194,15 +208,29 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ matrix.variance.image }}
+      - name: Aggressive runner cleanup
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/julia* || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/local/share/chromium || true
+          sudo rm -rf /opt/microsoft || true
+          sudo rm -rf /opt/google || true
+          sudo rm -rf /opt/az || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       - name: Prepare BuildKit temp space
         run: |
           mkdir -p "${{ runner.temp }}/buildkit-tmp"
-          mkdir -p "${{ runner.temp }}/buildkit-root"
           echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: root=${{ runner.temp }}/buildkit-root
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
