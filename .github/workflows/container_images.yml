@@ -68,14 +68,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
       - name: Prepare BuildKit temp space
         run: |
           mkdir -p "${{ runner.temp }}/buildkit-tmp"
+          mkdir -p "${{ runner.temp }}/buildkit-root"
           echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
-          echo "BUILDKIT_TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
-          echo "BUILDKIT_SANDBOX_TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: root=${{ runner.temp }}/buildkit-root
       - name: Prepare tar output directory
         run: mkdir -p "${{ runner.temp }}/llvm7-tars"
       - name: Build and push toolchain
@@ -193,8 +194,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ matrix.variance.image }}
+      - name: Prepare BuildKit temp space
+        run: |
+          mkdir -p "${{ runner.temp }}/buildkit-tmp"
+          mkdir -p "${{ runner.temp }}/buildkit-root"
+          echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: root=${{ runner.temp }}/buildkit-root
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
