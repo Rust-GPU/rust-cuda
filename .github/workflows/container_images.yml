@@ -15,9 +15,136 @@ on:
 env:
   REGISTRY: ghcr.io
 jobs:
+  build-toolchain:
+    name: Build LLVM7 base (${{ matrix.variance.name }} / ${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+        variance:
+          - name: Ubuntu-22.04
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu22-llvm7"
+            toolchain_dockerfile: ./container/llvm7-ubuntu22/Dockerfile
+            toolchain_artifact: llvm7-ubuntu22
+          - name: Ubuntu-24.04
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu24-llvm7"
+            toolchain_dockerfile: ./container/llvm7-ubuntu24/Dockerfile
+            toolchain_artifact: llvm7-ubuntu24
+          - name: RockyLinux-9
+            toolchain_image: "rust-gpu/rust-cuda-rockylinux9-llvm7"
+            toolchain_dockerfile: ./container/llvm7-rockylinux9/Dockerfile
+            toolchain_artifact: llvm7-rockylinux9
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Validate platform
+        run: |
+          ARCH=$(uname -m)
+          if [[ "${{ matrix.platform.arch }}" == "amd64" && "$ARCH" != "x86_64" ]]; then
+            echo "Error: Expected x86_64 but got $ARCH"
+            exit 1
+          fi
+          if [[ "${{ matrix.platform.arch }}" == "arm64" && "$ARCH" != "aarch64" ]]; then
+            echo "Error: Expected aarch64 but got $ARCH"
+            exit 1
+          fi
+          echo "Platform validation passed: $ARCH matches ${{ matrix.platform.arch }}"
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata (tags, labels) for toolchain
+        id: toolchain-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}
+      - name: Aggressive runner cleanup
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/julia* || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/local/share/chromium || true
+          sudo rm -rf /opt/microsoft || true
+          sudo rm -rf /opt/google || true
+          sudo rm -rf /opt/az || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Prepare BuildKit temp space
+        run: |
+          mkdir -p "${{ runner.temp }}/buildkit-tmp"
+          echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
+      - name: Prepare tar output directory
+        run: mkdir -p "${{ runner.temp }}/llvm7-tars"
+      - name: Build and push toolchain
+        id: toolchain-build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.variance.toolchain_dockerfile }}
+          platforms: linux/${{ matrix.platform.arch }}
+          labels: ${{ steps.toolchain-meta.outputs.labels }}
+          tags: |
+            ${{ steps.toolchain-meta.outputs.tags }}
+            ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}:ci-${{ github.run_id }}-${{ matrix.platform.arch }}
+          outputs: |
+            type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+            type=docker,dest=${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
+          cache-from: type=gha
+      - name: Export digest
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.toolchain-build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      - name: Upload digest
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload LLVM7 base layer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}
+          path: ${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove local tarball
+        run: rm -f "${{ runner.temp }}/llvm7-tars/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar"
+      - name: Clean up caches
+        if: always()
+        run: |
+          docker builder prune --all --force || true
+          docker system prune --volumes --force || true
+          rm -rf ~/.cargo/registry ~/.cargo/git ~/.cargo/bin ~/.cargo/.package-cache ~/.rustup || true
+          rm -rf ~/.cache/sccache ~/.cache/cargo || true
+
   build-images:
     name: Build ${{ matrix.variance.name }} (${{ matrix.platform.arch }})
+    needs: build-toolchain
     runs-on: ${{ matrix.platform.runner }}
+    env:
+      BUILDX_DRIVER: ${{ github.event_name == 'pull_request' && 'docker' || 'docker-container' }}
     permissions:
       contents: read
       packages: write
@@ -33,18 +160,33 @@ jobs:
           - name: Ubuntu-22.04/CUDA-11.8.0
             image: "rust-gpu/rust-cuda-ubuntu22-cuda11"
             dockerfile: ./container/ubuntu22-cuda11/Dockerfile
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu22-llvm7"
+            toolchain_artifact: llvm7-ubuntu22
           - name: Ubuntu-22.04/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-ubuntu22-cuda12"
             dockerfile: ./container/ubuntu22-cuda12/Dockerfile
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu22-llvm7"
+            toolchain_artifact: llvm7-ubuntu22
           - name: Ubuntu-24.04/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-ubuntu24-cuda12"
             dockerfile: ./container/ubuntu24-cuda12/Dockerfile
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu24-llvm7"
+            toolchain_artifact: llvm7-ubuntu24
           - name: RockyLinux-9/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-rockylinux9-cuda12"
             dockerfile: ./container/rockylinux9-cuda12/Dockerfile
+            toolchain_image: "rust-gpu/rust-cuda-rockylinux9-llvm7"
+            toolchain_artifact: llvm7-rockylinux9
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - name: Download LLVM base image
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}
+          path: /tmp/toolchain
+      - name: Load LLVM base image
+        run: docker load --input /tmp/toolchain/${{ matrix.variance.toolchain_artifact }}-${{ matrix.platform.arch }}.tar
       - name: Validate platform
         run: |
           ARCH=$(uname -m)
@@ -68,8 +210,31 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ matrix.variance.image }}
+      - name: Aggressive runner cleanup
+        run: |
+          sudo rm -rf /usr/lib/jvm || true
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /usr/local/julia* || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /usr/local/share/chromium || true
+          sudo rm -rf /opt/microsoft || true
+          sudo rm -rf /opt/google || true
+          sudo rm -rf /opt/az || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver: ${{ env.BUILDX_DRIVER }}
+      - name: Prepare BuildKit temp space
+        run: |
+          mkdir -p "${{ runner.temp }}/buildkit-tmp"
+          echo "TMPDIR=${{ runner.temp }}/buildkit-tmp" >> "$GITHUB_ENV"
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
@@ -80,7 +245,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ matrix.variance.image }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            LLVM_BASE_IMAGE=${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}:ci-${{ github.run_id }}-${{ matrix.platform.arch }}
       - name: Set artifact name
         if: github.event_name != 'pull_request'
         run: |
@@ -101,6 +267,73 @@ jobs:
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
+      - name: Clean up caches
+        if: always()
+        run: |
+          docker builder prune --all --force || true
+          docker system prune --volumes --force || true
+          rm -rf ~/.cargo/registry ~/.cargo/git ~/.cargo/bin ~/.cargo/.package-cache ~/.rustup || true
+          rm -rf ~/.cache/sccache ~/.cache/cargo || true
+
+  merge-toolchain:
+    name: Create manifest for LLVM7 base (${{ matrix.variance.name }})
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    needs: build-toolchain
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        variance:
+          - name: Ubuntu-22.04
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu22-llvm7"
+            toolchain_artifact: llvm7-ubuntu22
+          - name: Ubuntu-24.04
+            toolchain_image: "rust-gpu/rust-cuda-ubuntu24-llvm7"
+            toolchain_artifact: llvm7-ubuntu24
+          - name: RockyLinux-9
+            toolchain_image: "rust-gpu/rust-cuda-rockylinux9-llvm7"
+            toolchain_artifact: llvm7-rockylinux9
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-${{ matrix.variance.toolchain_artifact }}-*
+          merge-multiple: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Docker meta
+        id: toolchain-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Login to Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}@sha256:%s ' *)
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ matrix.variance.toolchain_image }}:${{ steps.toolchain-meta.outputs.version }}
 
   merge-manifests:
     name: Create manifest for ${{ matrix.variance.name }}
