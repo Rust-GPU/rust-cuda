@@ -29,7 +29,7 @@ over CUDA C/C++ with the same (or better!) performance and features, therefore, 
 Short answer, no.
 
 Long answer, there are a couple of things that make this impossible:
-- At the time of writing, libnvvm expects LLVM 7 bitcode, giving it LLVM 12/13 bitcode (which is what rustc uses) does not work.
+- At the time of writing, libnvvm expects LLVM 7 bitcode, which is a very old format. Giving it bitcode from later LLVM version (which is what rustc uses) does not work.
 - NVVM IR is a __subset__ of LLVM IR, there are tons of things that nvvm will not accept. Such as a lot of function attrs not being allowed. 
 This is well documented and you can find the spec [here](https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html). Not to mention
 many bugs in libnvvm that i have found along the way, the most infuriating of which is nvvm not accepting integer types that arent `i1, i8, i16, i32, or i64`.
@@ -153,7 +153,7 @@ things to gain in terms of safety using Rust.
 The reasoning for this is the same reasoning as to why you would use CUDA over opengl/vulkan compute shaders:
 - CUDA usually outperforms shaders if kernels are written well and launch configurations are optimal.
 - CUDA has many useful features such as shared memory, unified memory, graphs, fine grained thread control, streams, the PTX ISA, etc.
-- rust-gpu does not perform many optimizations, and with cg_ssa's less than ideal codegen, the optimizations by llvm and libnvvm are needed.
+- rust-gpu does not perform many optimizations, and with rustc_codegen_ssa's less than ideal codegen, the optimizations by llvm and libnvvm are needed.
 - SPIRV is arguably still not suitable for serious GPU kernel codegen, it is underspecced, complex, and does not mention many things which are needed.
 While libnvvm (which uses a well documented subset of LLVM IR) and the PTX ISA are very thoroughly documented/specified.
 - rust-gpu is primarily focused on graphical shaders, compute shaders are secondary, which the rust ecosystem needs, but it also 

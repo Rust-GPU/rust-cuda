@@ -34,7 +34,7 @@ which i will add to the project soon.
 
 Miscompilations are rare but annoying. They usually result in one of two things happening:
 - CUDA rejecting the PTX as a whole (throwing an InvalidPtx error). This is rare but the most common cause is declaring invalid
-extern functions (just grep for `extern` in the ptx file and check if its odd functions that arent cuda syscalls like vprintf, malloc, free, etc).
+extern functions (just grep for `extern` in the ptx file and check if it's odd functions that aren't cuda syscalls like vprintf, malloc, free, etc).
 - The PTX containing invalid behavior. This is very specific and rare but if you find this, the best way to debug it is:
   - Try to get a minimal working example so we don't have to search through megabytes of llvm ir/ptx.
   - Use `RUSTFLAGS="--emit=llvm-ir"` and find `crate_name.ll` in `target/nvptx64-nvidia-cuda/<debug/release>/deps/` and attach it in any bug report.

@@ -20,9 +20,10 @@ Undefined behavior on the GPU is defined as potentially being able to cause the 
 - Causing LLVM/NVVM to optimize the code into unknown code.
 
 Behavior considered undefined inside of GPU kernels:
-- Most importantly, any behavior that is considered undefined on the CPU, is considered undefined
-on the GPU too. See: https://doc.rust-lang.org/reference/behavior-considered-undefined.html.
-The only exception being invalid sizes for buffers given to a GPU kernel.
+- Most importantly, any behavior that is [considered undefined on the
+  CPU](https://doc.rust-lang.org/reference/behavior-considered-undefined.html) is considered
+  undefined on the GPU too. The only exception being invalid sizes for buffers given to a GPU
+  kernel.
 
 Currently we declare that the invariant that a buffer given to a gpu kernel must be large enough for any access the
 kernel is going to make is up to the caller of the kernel to uphold. This idiom may be changed in the future.
@@ -42,7 +43,7 @@ the CPU.
 
 ### Streams
 
-Streams will always execute concurrently with eachother. That is to say, kernels launched
+Streams will always execute concurrently with each other. That is to say, kernels launched
 inside of a single stream guarantee that they will be executed one after the other, in order.
 
 However, kernels launched in different streams have no guarantee of execution order, their execution
@@ -54,9 +55,9 @@ Therefore, it is undefined behavior to write to the same memory location in kern
 streams without synchronization.
 
 For example:
-1: `Foo` is allocated as a buffer of memory on the GPU.
-2: Stream `1` launches kernel `bar` which writes to `Foo`.
-3: Stream `2` launches kernel `bar` which also writes to `Foo`.
+1. `Foo` is allocated as a buffer of memory on the GPU.
+2. Stream `1` launches kernel `bar` which writes to `Foo`.
+3. Stream `2` launches kernel `bar` which also writes to `Foo`.
 
 This is undefined behavior because the kernels are likely to be executed concurrently, causing a data
 race when multiple kernels try to write to the same memory.
@@ -100,8 +101,8 @@ The following invariants must be upheld by the caller of a kernel, failure to do
 behavior to launch the kernel with 3d thread indices (which would cause a data race). However, it is not undefined behavior
 to launch the kernel with a dimensionality lower than expected, e.g. launching a 2d kernel with a 1d dimensionality.
 - The types expected by the kernel must match:
-  - If the kernel expects a struct, if the struct is repr(Rust), the struct must be the actual struct from the kernel library,
-    otherwise, if it is repr(C) (which is reccomended), the fields must all match, including alignment and order of fields.
+  - If the kernel expects a struct, if the struct is `repr(Rust)`, the struct must be the actual struct from the kernel library,
+    otherwise, if it is `repr(C)` (which is recommended), the fields must all match, including alignment and order of fields.
 - Reference aliasing rules must not be violated, including:
   - Immutable references are allowed to be aliased, e.g. if a kernel expects `&T` and `&T`, it is sound to pass the same pointer for both.
   - Data behind an immutable reference must not be modified, meaning, it is undefined behavior to pass the same pointer to `&T` and `*mut T`,
