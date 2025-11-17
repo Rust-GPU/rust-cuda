@@ -339,15 +339,7 @@ pub enum NvvmArch {
 
 impl Display for NvvmArch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let raw = format!("{self:?}").to_ascii_lowercase();
-        // Handle architectures with suffixes (e.g., Compute90a -> compute_90a)
-        if let Some(pos) = raw.find(|c: char| c.is_ascii_digit()) {
-            let (prefix, rest) = raw.split_at(pos);
-            write!(f, "{prefix}_{rest}")
-        } else {
-            // Fallback for unexpected format
-            f.write_str(&raw)
-        }
+        f.write_str(&self.target_feature())
     }
 }
 
