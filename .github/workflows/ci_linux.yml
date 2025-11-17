@@ -48,6 +48,9 @@ jobs:
           - name: RockyLinux-9 / CUDA-12.8.1 / x86_64
             image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12:latest"
             runner: ubuntu-latest
+          - name: RockyLinux-9 / CUDA-12.8.1 / ROCm 6.4.3 / x86_64
+            image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12-rocm6.4.3:latest"
+            runner: ubuntu-latest
     outputs:
       # Output the result of the permission check
       actor_has_write_permission: ${{ steps.check_access.outputs.require-result }}
@@ -161,6 +164,9 @@ jobs:
             runner: ubuntu-24.04-arm
           - name: RockyLinux-9 / CUDA-12.8.1 / x86_64
             image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12:latest"
+            runner: ubuntu-latest
+          - name: RockyLinux-9 / CUDA-12.8.1 / ROCm 6.4.3 / x86_64
+            image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12-rocm6.4.3:latest"
             runner: ubuntu-latest
     steps:
       - name: Download build artifacts
