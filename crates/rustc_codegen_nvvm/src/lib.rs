@@ -149,7 +149,7 @@ impl CodegenBackend for NvvmCodegenBackend {
                     features.extend(
                         arch.all_target_features()
                             .into_iter()
-                            .map(|feature| feature.target_feature()),
+                            .map(|s| s.target_feature().to_string()),
                     );
                     break;
                 }
@@ -238,7 +238,7 @@ impl CodegenBackend for NvvmCodegenBackend {
                 target_features.extend(
                     backend_features
                         .iter()
-                        .map(|f| rustc_span::Symbol::intern(&f.target_feature())),
+                        .map(|f| rustc_span::Symbol::intern(f.target_feature())),
                 );
                 break;
             }

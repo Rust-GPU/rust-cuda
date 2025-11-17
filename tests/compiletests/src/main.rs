@@ -149,7 +149,7 @@ impl Runner {
             // which offer `// only-S` and `// ignore-S` for any stage ID `S`.
             let stage_id = if variation.name == "default" {
                 // Use the architecture name as the stage ID.
-                arch.clone()
+                arch.to_string()
             } else {
                 // Include the variation name in the stage ID.
                 format!("{}-{}", arch, variation.name)
@@ -161,7 +161,7 @@ impl Runner {
                 &self.deps_target_dir,
                 &self.codegen_backend_path,
                 CUDA_TARGET,
-                &arch,
+                arch,
             );
             let mut flags = test_rustc_flags(
                 &self.codegen_backend_path,
@@ -174,7 +174,7 @@ impl Runner {
                         .deps_target_dir
                         .join(DepKind::ProcMacro.target_dir_suffix(CUDA_TARGET)),
                 ],
-                &arch,
+                arch,
             );
             flags += variation.extra_flags;
 

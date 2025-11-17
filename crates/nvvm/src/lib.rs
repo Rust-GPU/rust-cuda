@@ -339,7 +339,7 @@ pub enum NvvmArch {
 
 impl Display for NvvmArch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.target_feature())
+        f.write_str(self.target_feature())
     }
 }
 
@@ -435,40 +435,40 @@ impl NvvmArch {
     }
 
     /// Get the target feature string (e.g., "compute_35" for Compute35, "compute_90a" for Compute90a)
-    pub fn target_feature(&self) -> String {
+    pub fn target_feature(&self) -> &'static str {
         match self {
-            Self::Compute35 => "compute_35".to_string(),
-            Self::Compute37 => "compute_37".to_string(),
-            Self::Compute50 => "compute_50".to_string(),
-            Self::Compute52 => "compute_52".to_string(),
-            Self::Compute53 => "compute_53".to_string(),
-            Self::Compute60 => "compute_60".to_string(),
-            Self::Compute61 => "compute_61".to_string(),
-            Self::Compute62 => "compute_62".to_string(),
-            Self::Compute70 => "compute_70".to_string(),
-            Self::Compute72 => "compute_72".to_string(),
-            Self::Compute75 => "compute_75".to_string(),
-            Self::Compute80 => "compute_80".to_string(),
-            Self::Compute86 => "compute_86".to_string(),
-            Self::Compute87 => "compute_87".to_string(),
-            Self::Compute89 => "compute_89".to_string(),
-            Self::Compute90 => "compute_90".to_string(),
-            Self::Compute90a => "compute_90a".to_string(),
-            Self::Compute100 => "compute_100".to_string(),
-            Self::Compute100f => "compute_100f".to_string(),
-            Self::Compute100a => "compute_100a".to_string(),
-            Self::Compute101 => "compute_101".to_string(),
-            Self::Compute101f => "compute_101f".to_string(),
-            Self::Compute101a => "compute_101a".to_string(),
-            Self::Compute103 => "compute_103".to_string(),
-            Self::Compute103f => "compute_103f".to_string(),
-            Self::Compute103a => "compute_103a".to_string(),
-            Self::Compute120 => "compute_120".to_string(),
-            Self::Compute120f => "compute_120f".to_string(),
-            Self::Compute120a => "compute_120a".to_string(),
-            Self::Compute121 => "compute_121".to_string(),
-            Self::Compute121f => "compute_121f".to_string(),
-            Self::Compute121a => "compute_121a".to_string(),
+            Self::Compute35 => "compute_35",
+            Self::Compute37 => "compute_37",
+            Self::Compute50 => "compute_50",
+            Self::Compute52 => "compute_52",
+            Self::Compute53 => "compute_53",
+            Self::Compute60 => "compute_60",
+            Self::Compute61 => "compute_61",
+            Self::Compute62 => "compute_62",
+            Self::Compute70 => "compute_70",
+            Self::Compute72 => "compute_72",
+            Self::Compute75 => "compute_75",
+            Self::Compute80 => "compute_80",
+            Self::Compute86 => "compute_86",
+            Self::Compute87 => "compute_87",
+            Self::Compute89 => "compute_89",
+            Self::Compute90 => "compute_90",
+            Self::Compute90a => "compute_90a",
+            Self::Compute100 => "compute_100",
+            Self::Compute100f => "compute_100f",
+            Self::Compute100a => "compute_100a",
+            Self::Compute101 => "compute_101",
+            Self::Compute101f => "compute_101f",
+            Self::Compute101a => "compute_101a",
+            Self::Compute103 => "compute_103",
+            Self::Compute103f => "compute_103f",
+            Self::Compute103a => "compute_103a",
+            Self::Compute120 => "compute_120",
+            Self::Compute120f => "compute_120f",
+            Self::Compute120a => "compute_120a",
+            Self::Compute121 => "compute_121",
+            Self::Compute121f => "compute_121f",
+            Self::Compute121a => "compute_121a",
         }
     }
 
