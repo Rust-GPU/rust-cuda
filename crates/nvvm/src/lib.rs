@@ -689,12 +689,11 @@ impl NvvmProgram {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::str::FromStr;
 
     #[test]
     fn nvvm_arch_capability_value() {
-        use crate::NvvmArch;
-
         assert_eq!(NvvmArch::Compute35.capability_value(), 35);
         assert_eq!(NvvmArch::Compute37.capability_value(), 37);
         assert_eq!(NvvmArch::Compute50.capability_value(), 50);
@@ -715,8 +714,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_major_minor_version() {
-        use crate::NvvmArch;
-
         // Test major/minor version extraction
         assert_eq!(NvvmArch::Compute35.major_version(), 3);
         assert_eq!(NvvmArch::Compute35.minor_version(), 5);
@@ -737,8 +734,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_target_feature() {
-        use crate::NvvmArch;
-
         // Test baseline features
         assert_eq!(NvvmArch::Compute35.target_feature(), "compute_35");
         assert_eq!(NvvmArch::Compute61.target_feature(), "compute_61");
@@ -764,8 +759,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_all_target_features() {
-        use crate::NvvmArch;
-
         assert_eq!(
             NvvmArch::Compute35.all_target_features(),
             vec!["compute_35"]
@@ -1036,8 +1029,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_iter_up_to_includes_only_lower_or_equal() {
-        use crate::NvvmArch;
-
         // Compute35 only includes itself
         let archs: Vec<_> = NvvmArch::Compute35.iter_up_to().collect();
         assert_eq!(archs, vec![NvvmArch::Compute35]);
@@ -1076,8 +1067,8 @@ mod tests {
 
     #[test]
     fn options_parse_correctly() {
-        use crate::NvvmArch::*;
-        use crate::NvvmOption::{self, *};
+        use NvvmArch::*;
+        use NvvmOption::{self, *};
 
         let opts = vec![
             "-g",
@@ -1132,8 +1123,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_variant_checks() {
-        use crate::NvvmArch;
-
         // Base variants
         assert!(NvvmArch::Compute90.is_base_variant());
         assert!(NvvmArch::Compute120.is_base_variant());
@@ -1154,8 +1143,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_base_architecture() {
-        use crate::NvvmArch;
-
         // Base variants return themselves
         assert_eq!(NvvmArch::Compute90.base_architecture(), NvvmArch::Compute90);
         assert_eq!(
@@ -1186,8 +1173,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_get_variants() {
-        use crate::NvvmArch;
-
         // Architecture with only base variant
         let compute80_variants = NvvmArch::Compute80.get_variants();
         assert_eq!(compute80_variants, vec![NvvmArch::Compute80]);
@@ -1211,8 +1196,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_variants_for_capability() {
-        use crate::NvvmArch;
-
         // Capability with single variant
         assert_eq!(
             NvvmArch::variants_for_capability(75),
