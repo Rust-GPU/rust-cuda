@@ -74,9 +74,9 @@ CudaBuilder::new("kernels")
     .unwrap();
 
 // In your kernel code:
-#[cfg(target_feature = "compute_60")]  // ✓ Pass (older compute capability)
-#[cfg(target_feature = "compute_70")]  // ✓ Pass (current compute capability)
-#[cfg(target_feature = "compute_80")]  // ✗ Fail (newer compute capability)
+#[cfg(target_feature = "compute_60")]  // ✓ Pass (lower base variant)
+#[cfg(target_feature = "compute_70")]  // ✓ Pass (this base variant))
+#[cfg(target_feature = "compute_80")]  // ✗ Fail (higher base variant)
 ```
 
 ### Family Suffix ('f')
@@ -99,13 +99,13 @@ CudaBuilder::new("kernels")
     .unwrap();
 
 // In your kernel code:
-#[cfg(target_feature = "compute_100")]   // ✗ Fail (10.0 < 10.1)
-#[cfg(target_feature = "compute_101")]   // ✓ Pass (equal major, equal minor)
-#[cfg(target_feature = "compute_103")]   // ✓ Pass (equal major, greater minor)
+#[cfg(target_feature = "compute_90")]    // ✓ Pass (lower base variant)
+#[cfg(target_feature = "compute_100")]   // ✓ Pass (lower base variant)
+#[cfg(target_feature = "compute_100f")]  // ✓ Pass (lower 'f' variant)
+#[cfg(target_feature = "compute_101")]   // ✓ Pass (this base variant)
 #[cfg(target_feature = "compute_101f")]  // ✓ Pass (the 'f' variant itself)
-#[cfg(target_feature = "compute_100f")]  // ✗ Fail (other 'f' variant)
-#[cfg(target_feature = "compute_90")]    // ✗ Fail (different major)
-#[cfg(target_feature = "compute_110")]   // ✗ Fail (different major)
+#[cfg(target_feature = "compute_103")]   // ✗ Fail (higher base variant)
+#[cfg(target_feature = "compute_110")]   // ✗ Fail (higher base variant)
 ```
 
 ### Architecture Suffix ('a')
@@ -130,12 +130,12 @@ CudaBuilder::new("kernels")
     .unwrap();
 
 // In your kernel code:
-#[cfg(target_feature = "compute_100a")]  // ✓ Pass (the 'a' variant itself)
-#[cfg(target_feature = "compute_100")]   // ✓ Pass (base variant)
 #[cfg(target_feature = "compute_90")]    // ✓ Pass (lower base variant)
+#[cfg(target_feature = "compute_100")]   // ✓ Pass (base variant)
 #[cfg(target_feature = "compute_100f")]  // ✓ Pass (family variant with same major/minor)
-#[cfg(target_feature = "compute_101f")]  // ✗ Fail (family variant with higher minor)
-#[cfg(target_feature = "compute_110")]   // ✗ Fail (higher major version)
+#[cfg(target_feature = "compute_100a")]  // ✓ Pass (the 'a' variant itself)
+#[cfg(target_feature = "compute_101f")]  // ✗ Fail (higher family variant)
+#[cfg(target_feature = "compute_110")]   // ✗ Fail (higher base variant)
 ```
 
 Note: While the 'a' variant enables all these features during compilation (allowing you to use all available instructions), the generated PTX code will still only run on the exact GPU architecture specified.

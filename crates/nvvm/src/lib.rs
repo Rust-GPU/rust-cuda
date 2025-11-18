@@ -430,73 +430,62 @@ impl NvvmArch {
         }
     }
 
-    /// Get all target features up to and including this architecture.
+    /// Gets all target features up to and including this architecture. This effectively answers
+    /// the question "for a given compilation target, what architectural features can be used?"
     ///
-    /// # PTX Forward-Compatibility Rules (per NVIDIA documentation):
+    /// # Examples
     ///
-    /// - **No suffix** (compute_XX): PTX is forward-compatible across all future architectures.
-    ///   Example: compute_70 runs on CC 7.0, 8.x, 9.x, 10.x, 12.x, and all future GPUs.
+    /// ```
+    /// # use nvvm::NvvmArch;
+    /// let features = NvvmArch::Compute53.all_target_features();
+    /// assert_eq!(
+    ///     features,
+    ///     vec!["compute_35", "compute_37", "compute_50", "compute_52", "compute_53"]
+    /// );
+    /// ```
     ///
-    /// - **Family-specific 'f' suffix** (compute_XXf): Forward-compatible within the same major
-    ///   version family. Supports devices with same major CC and equal or higher minor CC.
-    ///   Example: compute_100f runs on CC 10.0, 10.3, and future 10.x devices, but NOT on 11.x.
-    ///
-    /// - **Architecture-specific 'a' suffix** (compute_XXa): The code only runs on GPUs of that
-    ///   specific CC and no others. No forward or backward compatibility whatsoever.
-    ///   These features are primarily related to Tensor Core programming.
-    ///   Example: compute_100a ONLY runs on CC 10.0, not on 10.3, 10.1, 9.0, or any other version.
+    /// # External resources
     ///
     /// For more details on family and architecture-specific features, see:
     /// <https://developer.nvidia.com/blog/nvidia-blackwell-and-nvidia-cuda-12-9-introduce-family-specific-architecture-features/>
     pub fn all_target_features(&self) -> Vec<String> {
-        let mut features: Vec<String> = if self.is_architecture_variant() {
-            // 'a' variants: include all available instructions for the architecture
-            // This means: all base variants up to same version, all 'f' variants with same major and <= minor, plus itself
-            let base_features: Vec<String> = NvvmArch::iter()
-                .filter(|arch| {
-                    arch.is_base_variant() && arch.capability_value() <= self.capability_value()
-                })
-                .map(|arch| arch.target_feature())
-                .collect();
-
-            let family_features: Vec<String> = NvvmArch::iter()
-                .filter(|arch| {
-                    arch.is_family_variant()
-                        && arch.major_version() == self.major_version()
-                        && arch.minor_version() <= self.minor_version()
-                })
-                .map(|arch| arch.target_feature())
-                .collect();
-
-            base_features
-                .into_iter()
-                .chain(family_features)
-                .chain(std::iter::once(self.target_feature()))
-                .collect()
-        } else if self.is_family_variant() {
-            // 'f' variants: same major version with equal or higher minor version
-            NvvmArch::iter()
-                .filter(|arch| {
-                    // Include base variants with same major and >= minor version
-                    arch.is_base_variant()
-                        && arch.major_version() == self.major_version()
-                        && arch.minor_version() >= self.minor_version()
-                })
-                .map(|arch| arch.target_feature())
-                .chain(std::iter::once(self.target_feature())) // Add the 'f' variant itself
-                .collect()
-        } else {
-            // Base variants: all base architectures from lower or equal versions
-            NvvmArch::iter()
-                .filter(|arch| {
-                    arch.is_base_variant() && arch.capability_value() <= self.capability_value()
-                })
-                .map(|arch| arch.target_feature())
-                .collect()
+        // All lower-or-equal baseline features are included.
+        let included_baseline = |arch: &NvvmArch| {
+            arch.is_base_variant() && arch.capability_value() <= self.capability_value()
         };
 
-        features.sort();
-        features
+        // All lower-or-equal-with-same-major-version family features are included.
+        let included_family = |arch: &NvvmArch| {
+            arch.is_family_variant()
+                && arch.major_version() == self.major_version()
+                && arch.minor_version() <= self.minor_version()
+        };
+
+        if self.is_architecture_variant() {
+            // Architecture-specific ('a' suffix) features include:
+            // - all lower-or-equal baseline features
+            // - all lower-or-equal-with-same-major-version family features
+            // - itself
+            NvvmArch::iter()
+                .filter(|arch| included_baseline(arch) || included_family(arch) || arch == self)
+                .map(|arch| arch.target_feature())
+                .collect()
+        } else if self.is_family_variant() {
+            // Family-specific ('f' suffix) features include:
+            // - all lower-or-equal baseline features
+            // - all lower-or-equal-with-same-major-version family features
+            NvvmArch::iter()
+                .filter(|arch| included_baseline(arch) || included_family(arch))
+                .map(|arch| arch.target_feature())
+                .collect()
+        } else {
+            // Baseline (no suffix) features include:
+            // - all lower-or-equal baseline features
+            NvvmArch::iter()
+                .filter(included_baseline)
+                .map(|arch| arch.target_feature())
+                .collect()
+        }
     }
 
     /// Create an iterator over all architectures from Compute35 up to and including this one
@@ -777,19 +766,16 @@ mod tests {
     fn nvvm_arch_all_target_features() {
         use crate::NvvmArch;
 
-        // Compute35 only includes itself
         assert_eq!(
             NvvmArch::Compute35.all_target_features(),
             vec!["compute_35"]
         );
 
-        // Compute50 includes all lower base capabilities
         assert_eq!(
             NvvmArch::Compute50.all_target_features(),
             vec!["compute_35", "compute_37", "compute_50"],
         );
 
-        // Compute61 includes all lower base capabilities
         assert_eq!(
             NvvmArch::Compute61.all_target_features(),
             vec![
@@ -803,7 +789,6 @@ mod tests {
             ]
         );
 
-        // Compute70 includes all lower base capabilities
         assert_eq!(
             NvvmArch::Compute70.all_target_features(),
             vec![
@@ -819,7 +804,6 @@ mod tests {
             ]
         );
 
-        // Compute90 includes lower base capabilities
         let compute90_features = NvvmArch::Compute90.all_target_features();
         assert_eq!(
             compute90_features,
@@ -843,9 +827,6 @@ mod tests {
             ]
         );
 
-        // Test 'a' variant - includes all available instructions for the architecture.
-        // This means: all base variants up to same version, no 'f' variants (90 has none), and the
-        // 'a' variant.
         assert_eq!(
             NvvmArch::Compute90a.all_target_features(),
             vec![
@@ -869,14 +850,9 @@ mod tests {
             ]
         );
 
-        // Test compute100a - should include base variants up to 100, and 100f, and itself,
-        // but NOT 101f or 103f (higher minor).
         assert_eq!(
             NvvmArch::Compute100a.all_target_features(),
             vec![
-                "compute_100",
-                "compute_100a",
-                "compute_100f",
                 "compute_35",
                 "compute_37",
                 "compute_50",
@@ -893,26 +869,39 @@ mod tests {
                 "compute_87",
                 "compute_89",
                 "compute_90",
+                "compute_100",
+                "compute_100f",
+                "compute_100a",
             ]
         );
 
-        // Test 'f' variant with 100f
         assert_eq!(
             NvvmArch::Compute100f.all_target_features(),
-            // FIXME: this is wrong
-            vec!["compute_100", "compute_100f", "compute_101", "compute_103"]
+            vec![
+                "compute_35",
+                "compute_37",
+                "compute_50",
+                "compute_52",
+                "compute_53",
+                "compute_60",
+                "compute_61",
+                "compute_62",
+                "compute_70",
+                "compute_72",
+                "compute_75",
+                "compute_80",
+                "compute_86",
+                "compute_87",
+                "compute_89",
+                "compute_90",
+                "compute_100",
+                "compute_100f",
+            ]
         );
 
-        // Test compute101a - should include base variants up to 101, and 100f and 101f, and
-        // itself, but not 103f (higher minor)
         assert_eq!(
             NvvmArch::Compute101a.all_target_features(),
             vec![
-                "compute_100",
-                "compute_100f",
-                "compute_101",
-                "compute_101a",
-                "compute_101f",
                 "compute_35",
                 "compute_37",
                 "compute_50",
@@ -929,22 +918,43 @@ mod tests {
                 "compute_87",
                 "compute_89",
                 "compute_90",
+                "compute_100",
+                "compute_100f",
+                "compute_101",
+                "compute_101f",
+                "compute_101a",
             ]
         );
 
-        // Test 'f' variant with 101f
         assert_eq!(
             NvvmArch::Compute101f.all_target_features(),
-            vec!["compute_101", "compute_101f", "compute_103"],
+            vec![
+                "compute_35",
+                "compute_37",
+                "compute_50",
+                "compute_52",
+                "compute_53",
+                "compute_60",
+                "compute_61",
+                "compute_62",
+                "compute_70",
+                "compute_72",
+                "compute_75",
+                "compute_80",
+                "compute_86",
+                "compute_87",
+                "compute_89",
+                "compute_90",
+                "compute_100",
+                "compute_100f",
+                "compute_101",
+                "compute_101f",
+            ]
         );
 
         assert_eq!(
             NvvmArch::Compute120.all_target_features(),
             vec![
-                "compute_100",
-                "compute_101",
-                "compute_103",
-                "compute_120",
                 "compute_35",
                 "compute_37",
                 "compute_50",
@@ -961,24 +971,16 @@ mod tests {
                 "compute_87",
                 "compute_89",
                 "compute_90",
+                "compute_100",
+                "compute_101",
+                "compute_103",
+                "compute_120",
             ]
         );
 
         assert_eq!(
             NvvmArch::Compute120f.all_target_features(),
-            // FIXME: this is wrong
-            vec!["compute_120", "compute_120f", "compute_121"]
-        );
-
-        assert_eq!(
-            NvvmArch::Compute120a.all_target_features(),
             vec![
-                "compute_100",
-                "compute_101",
-                "compute_103",
-                "compute_120",
-                "compute_120a",
-                "compute_120f",
                 "compute_35",
                 "compute_37",
                 "compute_50",
@@ -995,6 +997,39 @@ mod tests {
                 "compute_87",
                 "compute_89",
                 "compute_90",
+                "compute_100",
+                "compute_101",
+                "compute_103",
+                "compute_120",
+                "compute_120f",
+            ]
+        );
+
+        assert_eq!(
+            NvvmArch::Compute120a.all_target_features(),
+            vec![
+                "compute_35",
+                "compute_37",
+                "compute_50",
+                "compute_52",
+                "compute_53",
+                "compute_60",
+                "compute_61",
+                "compute_62",
+                "compute_70",
+                "compute_72",
+                "compute_75",
+                "compute_80",
+                "compute_86",
+                "compute_87",
+                "compute_89",
+                "compute_90",
+                "compute_100",
+                "compute_101",
+                "compute_103",
+                "compute_120",
+                "compute_120f",
+                "compute_120a",
             ]
         );
     }
