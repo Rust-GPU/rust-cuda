@@ -673,9 +673,7 @@ impl CodegenArgs {
                 continue;
             }
 
-            if let Ok(flag) = NvvmOption::from_str(arg) {
-                cg_args.nvvm_options.push(flag);
-            } else if arg == "--override-libm" {
+            if arg == "--override-libm" {
                 cg_args.override_libm = true;
             } else if arg == "--use-constant-memory-space" {
                 cg_args.use_constant_memory_space = true;
@@ -714,6 +712,12 @@ impl CodegenArgs {
                 skip_next = true;
             } else if let Some(entry) = arg.strip_prefix("--disassemble-entry=") {
                 cg_args.disassemble = Some(DisassembleMode::Entry(entry.to_string()));
+            } else {
+                // Do this only after all the other flags above have been tried.
+                match NvvmOption::from_str(arg) {
+                    Ok(flag) => cg_args.nvvm_options.push(flag),
+                    Err(err) => panic!("{}", err),
+                }
             }
         }
 

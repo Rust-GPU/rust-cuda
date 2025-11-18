@@ -179,7 +179,7 @@ impl Display for NvvmOption {
 }
 
 impl FromStr for NvvmOption {
-    type Err = &'static str;
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
@@ -192,9 +192,9 @@ impl FromStr for NvvmOption {
                     Self::NoOpts
                 } else if slice == "3" {
                     // implied
-                    return Err("-opt=3 is default");
+                    return Err("-opt=3 is the default".to_string());
                 } else {
-                    return Err("unknown optimization level");
+                    return Err(format!("unknown -opt value: {slice}"));
                 }
             }
             _ if s.starts_with("-ftz=") => {
@@ -203,9 +203,9 @@ impl FromStr for NvvmOption {
                     Self::Ftz
                 } else if slice == "0" {
                     // implied
-                    return Err("-ftz=0 is default");
+                    return Err("-ftz=0 is the default".to_string());
                 } else {
-                    return Err("unknown ftz option");
+                    return Err(format!("unknown -ftz value: {slice}"));
                 }
             }
             _ if s.starts_with("-prec-sqrt=") => {
@@ -214,9 +214,9 @@ impl FromStr for NvvmOption {
                     Self::FastSqrt
                 } else if slice == "1" {
                     // implied
-                    return Err("-prec-sqrt=1 is default");
+                    return Err("-prec-sqrt=1 is the default".to_string());
                 } else {
-                    return Err("unknown prec-sqrt option");
+                    return Err(format!("unknown -prec-sqrt value: {slice}"));
                 }
             }
             _ if s.starts_with("-prec-div=") => {
@@ -225,9 +225,9 @@ impl FromStr for NvvmOption {
                     Self::FastDiv
                 } else if slice == "1" {
                     // implied
-                    return Err("-prec-div=1 is default");
+                    return Err("-prec-div=1 is the default".to_string());
                 } else {
-                    return Err("unknown prec-div option");
+                    return Err(format!("unknown -prec-div value: {slice}"));
                 }
             }
             _ if s.starts_with("-fma=") => {
@@ -236,13 +236,16 @@ impl FromStr for NvvmOption {
                     Self::NoFmaContraction
                 } else if slice == "1" {
                     // implied
-                    return Err("-fma=1 is default");
+                    return Err("-fma=1 is the default".to_string());
                 } else {
-                    return Err("unknown fma option");
+                    return Err(format!("unknown -fma value: {slice}"));
                 }
             }
             _ if s.starts_with("-arch=") => {
                 let slice = &s[6..];
+                if !slice.starts_with("compute_") {
+                    return Err(format!("unknown -arch value: {slice}"));
+                }
                 let arch_num = &slice[8..];
                 let arch = match arch_num {
                     "35" => NvvmArch::Compute35,
@@ -277,11 +280,11 @@ impl FromStr for NvvmOption {
                     "121" => NvvmArch::Compute121,
                     "121f" => NvvmArch::Compute121f,
                     "121a" => NvvmArch::Compute121a,
-                    _ => return Err("unknown arch"),
+                    _ => return Err(format!("unknown -arch=compute_NN value: {arch_num}")),
                 };
                 Self::Arch(arch)
             }
-            _ => return Err("umknown option"),
+            _ => return Err(format!("unknown option: {s}")),
         })
     }
 }
@@ -1013,55 +1016,53 @@ mod tests {
         use crate::NvvmArch::*;
         use crate::NvvmOption::{self, *};
 
-        let opts = vec![
-            "-g",
-            "-generate-line-info",
-            "-opt=0",
-            "-arch=compute_35",
-            "-arch=compute_37",
-            "-arch=compute_50",
-            "-arch=compute_52",
-            "-arch=compute_53",
-            "-arch=compute_60",
-            "-arch=compute_61",
-            "-arch=compute_62",
-            "-arch=compute_70",
-            "-arch=compute_72",
-            "-arch=compute_75",
-            "-arch=compute_80",
-            "-ftz=1",
-            "-prec-sqrt=0",
-            "-prec-div=0",
-            "-fma=0",
-        ];
-        let expected = vec![
-            GenDebugInfo,
-            GenLineInfo,
-            NoOpts,
-            Arch(Compute35),
-            Arch(Compute37),
-            Arch(Compute50),
-            Arch(Compute52),
-            Arch(Compute53),
-            Arch(Compute60),
-            Arch(Compute61),
-            Arch(Compute62),
-            Arch(Compute70),
-            Arch(Compute72),
-            Arch(Compute75),
-            Arch(Compute80),
-            Ftz,
-            FastSqrt,
-            FastDiv,
-            NoFmaContraction,
-        ];
+        let ok = |opt, val| assert_eq!(NvvmOption::from_str(opt), Ok(val));
+        let err = |opt, s: &str| assert_eq!(NvvmOption::from_str(opt), Err(s.to_string()));
 
-        let found = opts
-            .into_iter()
-            .map(|x| NvvmOption::from_str(x).unwrap())
-            .collect::<Vec<_>>();
+        ok("-arch=compute_35", Arch(Compute35));
+        ok("-arch=compute_37", Arch(Compute37));
+        ok("-arch=compute_50", Arch(Compute50));
+        ok("-arch=compute_52", Arch(Compute52));
+        ok("-arch=compute_53", Arch(Compute53));
+        ok("-arch=compute_60", Arch(Compute60));
+        ok("-arch=compute_61", Arch(Compute61));
+        ok("-arch=compute_62", Arch(Compute62));
+        ok("-arch=compute_70", Arch(Compute70));
+        ok("-arch=compute_72", Arch(Compute72));
+        ok("-arch=compute_75", Arch(Compute75));
+        ok("-arch=compute_80", Arch(Compute80));
+        ok("-arch=compute_86", Arch(Compute86));
+        ok("-arch=compute_87", Arch(Compute87));
+        ok("-arch=compute_89", Arch(Compute89));
+        ok("-arch=compute_90", Arch(Compute90));
+        ok("-arch=compute_90a", Arch(Compute90a));
+        ok("-arch=compute_100", Arch(Compute100));
+        ok("-arch=compute_100f", Arch(Compute100f));
+        ok("-arch=compute_100a", Arch(Compute100a));
+        ok("-arch=compute_101", Arch(Compute101));
+        ok("-arch=compute_101f", Arch(Compute101f));
+        ok("-arch=compute_101a", Arch(Compute101a));
+        ok("-arch=compute_120", Arch(Compute120));
+        ok("-arch=compute_120f", Arch(Compute120f));
+        ok("-arch=compute_120a", Arch(Compute120a));
+        ok("-arch=compute_121", Arch(Compute121));
+        ok("-arch=compute_121f", Arch(Compute121f));
+        ok("-arch=compute_121a", Arch(Compute121a));
+        ok("-fma=0", NoFmaContraction);
+        ok("-ftz=1", Ftz);
+        ok("-g", GenDebugInfo);
+        ok("-generate-line-info", GenLineInfo);
+        ok("-opt=0", NoOpts);
+        ok("-prec-div=0", FastDiv);
+        ok("-prec-sqrt=0", FastSqrt);
 
-        assert_eq!(found, expected);
+        err("blah", "unknown option: blah");
+        err("-aardvark", "unknown option: -aardvark");
+        err("-arch=compute75", "unknown -arch value: compute75");
+        err("-arch=compute_10", "unknown -arch=compute_NN value: 10");
+        err("-arch=compute_100x", "unknown -arch=compute_NN value: 100x");
+        err("-opt=3", "-opt=3 is the default");
+        err("-opt=99", "unknown -opt value: 99");
     }
 
     #[test]
