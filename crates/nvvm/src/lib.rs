@@ -1193,31 +1193,20 @@ mod tests {
         assert_eq!(compute80_variants, vec![NvvmArch::Compute80]);
 
         // Architecture with architecture and base variants
-        let mut compute90_variants = NvvmArch::Compute90.get_variants();
-        compute90_variants.sort_by_key(|v| format!("{:?}", v));
         assert_eq!(
-            compute90_variants,
+            NvvmArch::Compute90.get_variants(),
             vec![NvvmArch::Compute90, NvvmArch::Compute90a]
         );
 
         // Architecture with all three variants
-        let mut compute120_variants = NvvmArch::Compute120.get_variants();
-        compute120_variants.sort_by_key(|v| format!("{:?}", v));
-        assert_eq!(
-            compute120_variants,
-            vec![
-                NvvmArch::Compute120,
-                NvvmArch::Compute120a,
-                NvvmArch::Compute120f
-            ]
-        );
-
-        // Getting variants from a variant returns all variants
-        let compute120f_variants = NvvmArch::Compute120f.get_variants();
-        assert_eq!(compute120f_variants.len(), 3);
-        assert!(compute120f_variants.contains(&NvvmArch::Compute120));
-        assert!(compute120f_variants.contains(&NvvmArch::Compute120f));
-        assert!(compute120f_variants.contains(&NvvmArch::Compute120a));
+        let expected120 = vec![
+            NvvmArch::Compute120,
+            NvvmArch::Compute120f,
+            NvvmArch::Compute120a,
+        ];
+        assert_eq!(NvvmArch::Compute120.get_variants(), expected120);
+        assert_eq!(NvvmArch::Compute120f.get_variants(), expected120);
+        assert_eq!(NvvmArch::Compute120a.get_variants(), expected120);
     }
 
     #[test]
@@ -1225,23 +1214,22 @@ mod tests {
         use crate::NvvmArch;
 
         // Capability with single variant
-        let compute75_variants = NvvmArch::variants_for_capability(75);
-        assert_eq!(compute75_variants, vec![NvvmArch::Compute75]);
+        assert_eq!(
+            NvvmArch::variants_for_capability(75),
+            vec![NvvmArch::Compute75]
+        );
 
         // Capability with multiple variants
-        let mut compute101_variants = NvvmArch::variants_for_capability(101);
-        compute101_variants.sort_by_key(|v| format!("{:?}", v));
         assert_eq!(
-            compute101_variants,
+            NvvmArch::variants_for_capability(101),
             vec![
                 NvvmArch::Compute101,
+                NvvmArch::Compute101f,
                 NvvmArch::Compute101a,
-                NvvmArch::Compute101f
             ]
         );
 
         // Non-existent capability
-        let compute999_variants = NvvmArch::variants_for_capability(999);
-        assert!(compute999_variants.is_empty());
+        assert!(NvvmArch::variants_for_capability(999).is_empty());
     }
 }
