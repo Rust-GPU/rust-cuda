@@ -81,21 +81,21 @@ ENV LD_LIBRARY_PATH="/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
 ENV LLVM_LINK_STATIC=1
 ENV RUST_LOG=info
 
-RUN dnf install -y https://repo.radeon.com/amdgpu-install/6.4.3/rhel/9.6/amdgpu-install-6.4.60403-1.el9.noarch.rpm && \
+RUN dnf install -y https://repo.radeon.com/amdgpu-install/6.4.4/rhel/9.6/amdgpu-install-6.4.60404-1.el9.noarch.rpm && \
     dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
     dnf install -y dnf-plugin-config-manager && \
     crb enable && \
-    dnf install -y python3-setuptools python3-wheel ninja-build perl-core perl-devel openssl-devel && \
+    dnf install -y python3-setuptools python3-wheel ninja-build perl-core perl-devel git && \
     dnf clean all
 
 RUN \
-    for ver in 6.4.3 6.4; do \
+    for ver in 6.4.4 6.4; do \
     printf '[ROCm-%s]\nname=ROCm%s\nbaseurl=https://repo.radeon.com/rocm/el9/%s/main\nenabled=1\npriority=50\ngpgcheck=1\ngpgkey=https://repo.radeon.com/rocm/rocm.gpg.key\n' "$ver" "$ver" "$ver" >> /etc/yum.repos.d/rocm.repo; \
     done && \
-    dnf install rocm6.4.3 -y && \
+    dnf install rocm6.4.4 -y && \
     dnf clean all
 
 # Add rocm libraries to LD_LIBRARY_PATH.
-ENV LD_LIBRARY_PATH="/opt/rocm/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/usr/lib64:/opt/rocm/lib:${LD_LIBRARY_PATH}"
 # Add rocm binaries to PATH.
 ENV PATH="/opt/rocm/bin:${PATH}"
