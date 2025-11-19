@@ -105,4 +105,4 @@ on things used by the wide majority of users.
 | Stream Ordered Memory | ✔️ |
 | Graph Memory Nodes | ❌ |
 | Unified Memory | ✔️ |
-| `__restrict__` | ➖ | Not needed, you get that performance boost automatically through rust's noalias :) |
+| `__restrict__` | ➖ | Not needed, you get that performance boost automatically through Rust's noalias :) |

@@ -47,7 +47,7 @@ If that doesn't work, then it might be a bug inside of CUDA itself, but that sho
 is to set up the crate for debug (and see if it still happens in debug). Then you can run your executable under NSight Compute, go to the source tab, and 
 examine the SASS (basically an assembly lower than PTX) to see if ptxas miscompiled it.
 
-If you set up the codegen for debug, it should give you a mapping from rust code to SASS which should hopefully help to see what exactly is breaking.
+If you set up the codegen for debug, it should give you a mapping from Rust code to SASS which should hopefully help to see what exactly is breaking.
 
 Here is an example of the screen you should see:
 

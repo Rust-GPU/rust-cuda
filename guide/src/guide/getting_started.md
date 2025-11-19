@@ -232,4 +232,4 @@ You can use it as follows (assuming your clone of Rust CUDA is at the absolute p
 2. despite using Docker, your machine will still need to be running a compatible driver, in this case for CUDA 11.4.1 it is >=470.57.02
 3. if you have issues within the container, it can help to start ensuring your GPU is recognized
    - ensure `nvidia-smi` provides meaningful output in the container
-   - NVidia provides a number of samples https://github.com/NVIDIA/cuda-samples. In particular, you may want to try `make`ing and running the [`deviceQuery`](https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery) sample. If all is well you should see many details about your GPU
+   - NVIDIA provides a number of samples https://github.com/NVIDIA/cuda-samples. In particular, you may want to try `make`ing and running the [`deviceQuery`](https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery) sample. If all is well you should see many details about your GPU

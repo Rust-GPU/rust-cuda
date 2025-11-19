@@ -7,10 +7,10 @@ In other words, how the codegen expects you to pass different types to GPU kerne
 
 ## Preface
 
-Please note that the following __only__ applies to non-rust call conventions, we make zero guarantees 
-about the rust call convention, just like rustc. 
+Please note that the following __only__ applies to non-Rust call conventions, we make zero guarantees 
+about the Rust call convention, just like rustc. 
 
-While we currently override every ABI except rust, you should generally only use `"C"`, any 
+While we currently override every ABI except Rust, you should generally only use `"C"`, any 
 other ABI we override purely to avoid footguns.
 
 Functions marked as `#[kernel]` are enforced to be `extern "C"` by the kernel macro, and it is expected

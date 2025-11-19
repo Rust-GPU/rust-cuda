@@ -21,7 +21,7 @@ seamlessly implement features which would have been impossible or very difficult
   - Stripping away everything we do not need, no complex ABI handling, no shared lib handling, control over how function calls are generated, etc.
 
 So overall, the LLVM PTX backend is fit for smaller kernels/projects/proofs of concept.
-It is however not fit for compiling an entire language (core is __very__ big) with dependencies and more. The end goal is for rust to be able to be used 
+It is however not fit for compiling an entire language (core is __very__ big) with dependencies and more. The end goal is for Rust to be able to be used 
 over CUDA C/C++ with the same (or better!) performance and features, therefore, we must take advantage of all optimizations NVCC has over us.
 
 ## If NVVM IR is a subset of LLVM IR, can we not give rustc-generated LLVM IR to NVVM?
@@ -117,22 +117,22 @@ no control over it and no 100% reliable way to fix it, therefore we must shift t
 
 Moreover, the CUDA GPU kernel model is entirely based on trust, trusting each thread to index into the correct place in buffers,
 trusting the caller of the kernel to uphold some dimension invariants, etc. This is once again, completely incompatible with how 
-rust does things. We can provide wrappers to calculate an index that always works, and macros to index a buffer automatically, but 
+Rust does things. We can provide wrappers to calculate an index that always works, and macros to index a buffer automatically, but 
 indexing in complex ways is a core operation in CUDA and it is impossible for us to prove that whatever the developer is doing is correct.
 
 Finally, We would love to be able to use mut refs in kernel parameters, but this is would be unsound. Because
 each kernel function is *technically* called multiple times in parallel with the same parameters, we would be
-aliasing the mutable ref, which Rustc declares as unsound (aliasing mechanics). So raw pointers or slightly-less-unsafe
+aliasing the mutable ref, which rustc declares as unsound (aliasing mechanics). So raw pointers or slightly-less-unsafe
 need to be used. However, they are usually only used for the initial buffer indexing, after which you can turn them into a
 mutable reference just fine (because you indexed in a way where no other thread will index that element). Also note
 that shared refs can be used as parameters just fine.
 
-Now that we outlined why this is a thing, why is using rust a benefit if we still need to use unsafe?
+Now that we outlined why this is a thing, why is using Rust a benefit if we still need to use unsafe?
 
 Well it's simple, eliminating most of the things that a developer needs to think about to have a safe program
 is still exponentially safer than leaving __everything__ to the developer to think about. 
 
-By using rust, we eliminate:
+By using Rust, we eliminate:
 - The forgotten/unhandled CUDA errors problem (yay results!).
 - The uninitialized memory problem.
 - The forgetting to dealloc memory problem.
@@ -156,15 +156,15 @@ The reasoning for this is the same reasoning as to why you would use CUDA over o
 - rust-gpu does not perform many optimizations, and with `rustc_codegen_ssa`'s less than ideal codegen, the optimizations by LLVM and libNVVM are needed.
 - SPIR-V is arguably still not suitable for serious GPU kernel codegen, it is underspecced, complex, and does not mention many things which are needed.
 While libNVVM (which uses a well documented subset of LLVM IR) and the PTX ISA are very thoroughly documented/specified.
-- rust-gpu is primarily focused on graphical shaders, compute shaders are secondary, which the rust ecosystem needs, but it also 
+- rust-gpu is primarily focused on graphical shaders, compute shaders are secondary, which the Rust ecosystem needs, but it also 
 needs a project 100% focused on computing, and computing only.
 - SPIR-V cannot access many useful CUDA libraries such as OptiX, cuDNN, cuBLAS, etc.
 - SPIR-V debug info is still very young and rust-gpu cannot generate it. While `rustc_codegen_nvvm` does, which can be used
 for profiling kernels in something like nsight compute.
 
 Moreover, CUDA is the primary tool used in big computing industries such as VFX and scientific computing. Therefore 
-it is much easier for CUDA C++ users to use rust for GPU computing if most of the concepts are still the same. Plus,
-we can interface with existing CUDA code by compiling it to PTX then linking it with our rust code using the CUDA linker
+it is much easier for CUDA C++ users to use Rust for GPU computing if most of the concepts are still the same. Plus,
+we can interface with existing CUDA code by compiling it to PTX then linking it with our Rust code using the CUDA linker
 API (which is exposed in a high level wrapper in cust).
 
 ## Why use the CUDA Driver API over the Runtime API?
@@ -289,5 +289,5 @@ Changes that are currently in progress but not done/experimental:
 Just like RustaCUDA, cust makes no assumptions of what language was used to generate the PTX/cubin. It could be 
 C, C++, futhark, or best of all, Rust!
 
-Cust's name is literally just rust + CUDA mashed together in a horrible way.
+Cust's name is literally just Rust + CUDA mashed together in a horrible way.
 Or you can pretend it stands for custard if you really like custard.

@@ -58,7 +58,7 @@ into the module if they are used, doing so using dependency graphs.
 
 There are a couple of special modules we need to load before we are done, `libdevice` and `libintrinsics`. The first and most
 important one is libdevice, libdevice is essentially a bitcode module containing hyper-optimized math intrinsics
-that nvidia provides for us. You can find it as a `.bc` file in the libdevice folder inside your NVVM install location.
+that NVIDIA provides for us. You can find it as a `.bc` file in the libdevice folder inside your NVVM install location.
 Every function inside of it is prefixed with `__nv_`, you can find docs for it [here](https://docs.nvidia.com/cuda/libdevice-users-guide/index.html).
 
 We declare these intrinsics inside of `ctx_intrinsics.rs` and link to them inside `cuda_std`. We also use them to codegen

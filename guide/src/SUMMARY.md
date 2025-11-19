@@ -13,7 +13,7 @@
   - [GPU Computing](cuda/gpu_computing.md)
   - [The CUDA Pipeline](cuda/pipeline.md)
 - [`rustc_codegen_nvvm`](nvvm/README.md)
-  - [Custom Rustc Backends](nvvm/backends.md)
+  - [Custom rustc Backends](nvvm/backends.md)
   - [`rustc_codegen_nvvm`](nvvm/nvvm.md)
   - [Types](nvvm/types.md)
   - [PTX Generation](nvvm/ptxgen.md)

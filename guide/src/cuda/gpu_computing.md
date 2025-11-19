@@ -36,10 +36,10 @@ as (but not limited to):
 - Forgetting to free memory, using uninitialized memory, etc.
 
 Not to mention the standardized tooling that makes the building, documentation, sharing, and linting of GPU kernel libraries easily possible.
-Most of the reasons for using rust on the CPU apply to using Rust for the GPU, these reasons have been stated countless times so
+Most of the reasons for using Rust on the CPU apply to using Rust for the GPU, these reasons have been stated countless times so
 I will not repeat them here. 
 
-A couple of particular rust features make writing CUDA code much easier: RAII and Results.
+A couple of particular Rust features make writing CUDA code much easier: RAII and Results.
 In `cust` everything uses RAII (through `Drop` impls) to manage freeing memory and returning handles, which 
 frees users from having to think about that, which yields safer, more reliable code.
 
@@ -48,6 +48,6 @@ Ignoring these statuses is very dangerous and can often lead to random segfaults
 both the CUDA SDK, and other libraries provide macros to handle such statuses. This handling is not very reliable and causes
 dependency issues down the line. 
 
-Instead of an unreliable system of macros, we can leverage rust results for this. In cust we return special `CudaResult<T>`
-results that can be bubbled up using rust's `?` operator, or, similar to `CUDA_SAFE_CALL` can be unwrapped or expected if 
+Instead of an unreliable system of macros, we can leverage Rust results for this. In cust we return special `CudaResult<T>`
+results that can be bubbled up using Rust's `?` operator, or, similar to `CUDA_SAFE_CALL` can be unwrapped or expected if 
 proper error handling is not needed. 

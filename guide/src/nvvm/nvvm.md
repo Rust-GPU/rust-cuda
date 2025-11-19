@@ -8,7 +8,7 @@ Source code -> Typechecking -> MIR -> SSA Codegen -> LLVM IR (NVVM IR) -> PTX ->
                |                                     |          libNVVM +------+                                  |
                |                                     |                                                            |
                |                  rustc_codegen_nvvm +------------------------------------------------------------|
-         Rustc +---------------------------------------------------------------------------------------------------
+         rustc +---------------------------------------------------------------------------------------------------
 ```
 
 Before we do anything, rustc does its normal job, it typechecks, converts everything to MIR, etc. Then, 
