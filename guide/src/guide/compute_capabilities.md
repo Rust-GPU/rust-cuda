@@ -25,7 +25,7 @@ In CUDA terminology:
   features
 - **Real architectures** (`sm_XX`) represent actual GPU hardware
 
-rust-cuda works exclusively with virtual architectures since it only generates PTX. The
+Rust CUDA works exclusively with virtual architectures since it only generates PTX. The
 `NvvmArch::ComputeXX` enum values correspond to CUDA's virtual architectures.
 
 ## Using Target Features
@@ -217,7 +217,7 @@ If you encounter errors about missing functions or features:
 
 ## Runtime Behavior
 
-Again, rust-cuda **only generates PTX**, not pre-compiled GPU binaries
+Again, Rust CUDA **only generates PTX**, not pre-compiled GPU binaries
 ("[fatbinaries](https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/#fatbinaries)").
 This PTX is then JIT-compiled by the CUDA driver at _runtime_.
 

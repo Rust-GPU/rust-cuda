@@ -1,3 +1,3 @@
 # Introduction
 
-Welcome to the rust-cuda guide! Let's dive right in.
+Welcome to the Rust CUDA guide! Let's dive right in.
