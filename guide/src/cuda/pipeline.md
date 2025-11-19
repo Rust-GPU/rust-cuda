@@ -1,4 +1,4 @@
-# The CUDA Pipeline
+# The CUDA pipeline
 
 CUDA is traditionally used via CUDA C/C++ files which have a `.cu` extension. These files can be
 compiled using NVCC (NVIDIA CUDA Compiler) into an executable.

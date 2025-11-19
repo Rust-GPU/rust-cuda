@@ -1,8 +1,8 @@
-# Getting Started
+# Getting started
 
 This section covers how to get started writing GPU crates with `cuda_std` and `cuda_builder`.
 
-## Required Libraries
+## Required libraries
 
 Before you can use the project to write GPU crates, you will need a couple of prerequisites:
 
@@ -10,7 +10,7 @@ Before you can use the project to write GPU crates, you will need a couple of pr
 
   This is only for building GPU crates, to execute built PTX you only need CUDA `9+`.
 
-- LLVM 7.x (7.0 to 7.4), The codegen searches multiple places for LLVM:
+- LLVM 7.x (7.0 to 7.4), The codegen backend searches multiple places for LLVM:
 
   - If `LLVM_CONFIG` is present, it will use that path as `llvm-config`.
   - Or, if `llvm-config` is present as a binary, it will use that, assuming that `llvm-config --version` returns `7.x.x`.
@@ -60,7 +60,7 @@ We changed our crate's crate types to `cdylib` and `rlib`. We specified `cdylib`
 
 ## `lib.rs`
 
-Before we can write any GPU kernels, we must add a few directives to our `lib.rs` which are required by the codegen:
+Before we can write any GPU kernels, we must add a few directives to our `lib.rs` which are required by the codegen backend:
 
 ```rs
 #![cfg_attr(
@@ -76,7 +76,7 @@ This does a couple of things:
 
 - It only applies the attributes if we are compiling the crate for the GPU (target_os = "cuda").
 - It declares the crate to be `no_std` on CUDA targets.
-- It registers a special attribute required by the codegen for things like figuring out
+- It registers a special attribute required by the codegen backend for things like figuring out
   what functions are GPU kernels.
 - It explicitly includes `kernel` macro and `thread`
 
@@ -156,7 +156,7 @@ Internally what this does is it first checks that a couple of things are right i
 - The function is `unsafe`.
 - The function does not return anything.
 
-Then it declares this kernel to the codegen so that the codegen can tell CUDA this is a GPU kernel.
+Then it declares this kernel to the codegen backend so it can tell CUDA this is a GPU kernel.
 It also applies `#[no_mangle]` so the name of the kernel is the same as it is declared in the code.
 
 ## Building the GPU crate

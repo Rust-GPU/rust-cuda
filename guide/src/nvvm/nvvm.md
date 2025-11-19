@@ -12,7 +12,7 @@ Source code -> Typechecking -> MIR -> SSA Codegen -> LLVM IR (NVVM IR) -> PTX ->
 ```
 
 Before we do anything, rustc does its normal job, it typechecks, converts everything to MIR, etc. Then, 
-rustc loads our codegen shared lib and invokes it to codegen the MIR. It creates an instance of
+rustc loads our codegen backend shared lib and invokes it to codegen the MIR. It creates an instance of
 `NvvmCodegenBackend` and it invokes `codegen_crate`. You could do anything inside `codegen_crate` but 
 we just defer back to `rustc_codegen_ssa` and tell it to do the job for us:
 
@@ -34,9 +34,9 @@ fn codegen_crate<'tcx>(
 ```
 
 After that, the codegen logic is kind of abstracted away from us, which is a good thing!
-We just need to provide the SSA codegen whatever it needs to do its thing. This is 
+We just need to provide the SSA codegen crate whatever it needs to do its thing. This is 
 done in the form of traits, lots and lots and lots of traits, more traits than you've ever seen, traits
-your subconscious has warned you of in nightmares, anyways. Because talking about how the SSA codegen
+your subconscious has warned you of in nightmares, anyways. Because talking about how the SSA codegen crate
 works is kind of useless, we will instead talk first about general concepts and terminology, then 
 dive into each trait. 
 
@@ -57,7 +57,7 @@ But first, let's talk about the end of the codegen, it is pretty simple, we do a
 
 We will cover the libNVVM steps in more detail later on.
 
-# Codegen Units (CGUs)
+# Codegen units (CGUs)
 
 Ah codegen units, the thing everyone just tells you to set to `1` in Cargo.toml, but what are they?
 Well, to put it simply, codegen units are rustc splitting up a crate into different modules to then 
@@ -65,7 +65,7 @@ run LLVM in parallel over. For example, rustc can run LLVM over two different mo
 save time.
 
 This gets a little bit more complex with generics, because MIR is not monomorphized and monomorphized MIR is not a thing,
-the codegen monomorphizes instances on the fly. Therefore rustc needs to put any generic functions that one CGU relies on
+the compiler monomorphizes instances on the fly. Therefore rustc needs to put any generic functions that one CGU relies on
 inside of the same CGU because it needs to monomorphize them.
 
 # Rlibs

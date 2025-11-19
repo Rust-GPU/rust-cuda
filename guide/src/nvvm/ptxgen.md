@@ -1,4 +1,4 @@
-# PTX Generation 
+# PTX generation 
 
 This is the final and most fun part of codegen, taking our LLVM bitcode and giving it to libNVVM. 
 It is in theory as simple as just giving NVVM every single bitcode module, but in practice, we do a couple 
@@ -40,7 +40,7 @@ and we do not have a linker, NVVM *is* our linker. However, NVVM does not elimin
 I think you can guess why that is a problem, so unless we want `11mb` PTX files (yes this is actually
 how big it was) we need to do something about it.
 
-# Module Merging and DCE
+# Module merging and DCE
 
 To solve our dead code issue, we take a pretty simple approach. We merge every module (one crate maybe be multiple modules
 because of codegen units) into a single module to start. Then, we do the following:
@@ -69,7 +69,7 @@ libdevice is also lazy loaded so we do not import useless intrinsics.
 # libintrinsics
 
 This is the last special module we load, it is simple, it is just a dumping ground for random wrapper functions 
-we need to define that `cuda_std` or the codegen needs. You can find the LLVM IR definition for it in the codegen directory
+we need to define that `cuda_std` or the codegen backend needs. You can find the LLVM IR definition for it in the codegen directory
 called `libintrinsics.ll`. All of its functions should be declared with the `__nvvm_` prefix.
 
 # Compilation

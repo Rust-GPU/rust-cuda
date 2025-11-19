@@ -1,7 +1,7 @@
 # Types
 
 Types! who doesn't love types, especially those that cause libNVVM to randomly segfault or loop forever!
-Anyways, types are an integral part of the codegen and everything revolves around them and you will see them everywhere.
+Anyways, types are an integral part of the codegen backend and everything revolves around them and you will see them everywhere.
 
 `rustc_codegen_ssa` does not actually tell you what your type representation should be, it allows you to decide. For
 example, Rust GPU represents it as a `SpirvType` enum, while both `rustc_codegen_llvm` and our codegen represent it as 
@@ -20,8 +20,8 @@ One important fact about types is that they are opaque, you cannot take a type a
 this is like asking "which chickens were responsible for this omelette?". You can ask if its a number type,
 a vector type, a void type, etc. 
 
-The SSA codegen needs to ask the backend for types for everything it needs to codegen MIR. It does 
-this using a trait called `BaseTypeMethods`:
+The SSA codegen crate needs to ask the backend for types for everything it needs to codegen MIR. It
+does this using a trait called `BaseTypeMethods`:
 
 ```rs
 pub trait BaseTypeMethods<'tcx>: Backend<'tcx> {
@@ -55,8 +55,9 @@ pub trait BaseTypeMethods<'tcx>: Backend<'tcx> {
 }
 ```
 
-Every codegen implements this some way or another, you can find our implementation in `ty.rs`. Our
-implementation is pretty straightforward, LLVM has functions that we link to which get us the types we need:
+Every codegen backend implements this some way or another, you can find our implementation in
+`ty.rs`. Our implementation is pretty straightforward, LLVM has functions that we link to which get
+us the types we need:
 
 ```rs
 impl<'ll, 'tcx> BaseTypeMethods<'tcx> for CodegenCx<'ll, 'tcx> {

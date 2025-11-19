@@ -1,4 +1,4 @@
-# GPU Computing
+# GPU computing
 
 You probably already know what GPU computing is, but if you don't, it is utilizing the extremely parallel
 nature of GPUs for purposes other than rendering. It is widely used in many scientific and consumer fields.

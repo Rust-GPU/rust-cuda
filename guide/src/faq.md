@@ -1,4 +1,4 @@
-# Frequently Asked Questions 
+# Frequently asked questions 
 
 This page will cover a lot of the questions people often have when they encounter this project,
 so they are addressed all at once.
@@ -14,8 +14,8 @@ This can be circumvented by building LLVM in a special way, but this is far beyo
 which yield considerable performance differences (especially on more complex kernels with more information in the IR).
 - For some reason (either rustc giving weird LLVM IR or the LLVM PTX backend being broken) the LLVM PTX backend often
 generates completely invalid PTX for trivial programs, so it is not an acceptable workflow for a production pipeline.
-- GPU and CPU codegen is fundamentally different, creating a codegen that is only for the GPU allows us to 
-seamlessly implement features which would have been impossible or very difficult to implement in the existing codegen, such as:
+- GPU and CPU codegen is fundamentally different, creating a codegen backend that is only for the GPU allows us to 
+seamlessly implement features which would have been impossible or very difficult to implement in the existing codegen backend, such as:
   - Shared memory, this requires some special generation of globals with custom addrspaces, its just not possible to do without backend explicit handling.
   - Custom linking logic to do dead code elimination so as to not end up with large PTX files full of dead functions/globals.
   - Stripping away everything we do not need, no complex ABI handling, no shared lib handling, control over how function calls are generated, etc.
@@ -33,7 +33,7 @@ Long answer, there are a couple of things that make this impossible:
 - NVVM IR is a __subset__ of LLVM IR, there are tons of things that NVVM will not accept. Such as a lot of function attrs not being allowed. 
 This is well documented and you can find the spec [here](https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html). Not to mention
 many bugs in libNVVM that I have found along the way, the most infuriating of which is nvvm not accepting integer types that arent `i1, i8, i16, i32, or i64`.
-This required special handling in the codegen to convert these "irregular" types into vector types.
+This required special handling in the codegen backend to convert these "irregular" types into vector types.
 
 ## What is the point of using Rust if a lot of things in kernels are unsafe?
 

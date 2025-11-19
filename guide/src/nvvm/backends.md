@@ -1,20 +1,21 @@
-# Custom rustc Backends
+# Custom rustc backends
 
-Before we get into the details of `rustc_codegen_nvvm`, we obviously need to explain what a codegen is!
+Before we get into the details of `rustc_codegen_nvvm`, we obviously need to explain what a codegen
+backend is!
 
-Custom codegens are rustc's answer to "well what if I want Rust to compile to X?". This is a problem
+Custom codegen backends are rustc's answer to "well what if I want Rust to compile to X?". This is a problem
 that comes up in many situations, especially conversations of "well LLVM cannot target this, so we are screwed".
 To solve this problem, rustc decided to incrementally decouple itself from being attached/reliant on LLVM exclusively.
 
-Previously, rustc only had a single codegen, the LLVM codegen. The LLVM codegen translated MIR directly to LLVM IR.
+Previously, rustc only had a single codegen backend, the LLVM codegen backed. This translated MIR directly to LLVM IR.
 This is great if you just want to support LLVM, but LLVM is not perfect, and inevitably you will hit limits to what LLVM
 is able to do. Or, you may just want to stop using LLVM, LLVM is not without problems (it is often slow, clunky to deal with, 
 and does not support a lot of targets). 
 
-Nowadays, rustc is almost fully decoupled from LLVM and it is instead generic over the "codegen" backend used.
+Nowadays, rustc is almost fully decoupled from LLVM and it is instead generic over the codegen backend used.
 rustc instead uses a system of codegen backends that implement traits and then get loaded as dynamically linked libraries.
 This allows Rust to compile to virtually anything with a surprisingly small amount of work. At the time of writing, there are
-five publicly known codegens that exist:
+five publicly known codegen backends that exist:
 - `rustc_codegen_cranelift`
 - `rustc_codegen_llvm`
 - `rustc_codegen_gcc`
@@ -32,9 +33,9 @@ What NVVM IR/libNVVM are has been covered in the [CUDA section](../../cuda/pipel
 
 # `rustc_codegen_ssa`
 
-`rustc_codegen_ssa` is the central crate behind every single codegen and does much of the hard work.
-It abstracts away the MIR lowering logic so that custom codegens only have to implement some
-traits and the SSA codegen does everything else. For example:
+`rustc_codegen_ssa` is the central crate behind every single codegen backend and does much of the
+hard work. It abstracts away the MIR lowering logic so that custom codegen backends only have to
+implement some traits and the SSA codegen does everything else. For example:
 - A trait for getting a type like an integer type.
 - A trait for optimizing a module.
 - A trait for linking everything.

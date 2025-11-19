@@ -1,9 +1,9 @@
-# Compute Capability Gating
+# Compute capability gating
 
 This section covers how to write code that adapts to different CUDA compute capabilities
 using conditional compilation.
 
-## What are Compute Capabilities?
+## What are compute capabilities?
 
 CUDA GPUs have different "compute capabilities" that determine which features they
 support. Each capability is identified by a version number like `3.5`, `5.0`, `6.1`,
@@ -17,7 +17,7 @@ For example:
 
 For comprehensive details, see [NVIDIA's CUDA documentation on GPU architectures](https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/#gpu-compilation).
 
-## Virtual vs Real Architectures
+## Virtual vs real Architectures
 
 In CUDA terminology:
 
@@ -28,7 +28,7 @@ In CUDA terminology:
 Rust CUDA works exclusively with virtual architectures since it only generates PTX. The
 `NvvmArch::ComputeXX` enum values correspond to CUDA's virtual architectures.
 
-## Using Target Features
+## Using target features
 
 When building your kernel, the `NvvmArch::ComputeXX` variant you choose enables specific
 `target_feature` flags. These can be used with `#[cfg(...)]` to conditionally compile
@@ -51,12 +51,12 @@ which `NvvmArch::ComputeXX` is used to build the kernel, there is a different an
 These features let you write optimized code paths for specific GPU generations while
 still supporting older ones.
 
-## Specifying Compute Capabilites
+## Specifying compute capabilites
 
 Starting with CUDA 12.9, NVIDIA introduced architecture suffixes that affect
 compatibility.
 
-### Base Architecture (No Suffix)
+### Base architecture (no suffix)
 
 Example: `NvvmArch::Compute70`
 
@@ -79,7 +79,7 @@ CudaBuilder::new("kernels")
 #[cfg(target_feature = "compute_80")]  // ✗ Fail (higher base variant)
 ```
 
-### Family Suffix ('f')
+### Family suffix ('f')
 
 Example: `NvvmArch::Compute101f`
 
@@ -108,7 +108,7 @@ CudaBuilder::new("kernels")
 #[cfg(target_feature = "compute_110")]   // ✗ Fail (higher base variant)
 ```
 
-### Architecture Suffix ('a')
+### Architecture suffix ('a')
 
 Example: `NvvmArch::Compute100a`
 
@@ -142,7 +142,7 @@ Note: While the 'a' variant enables all these features during compilation (allow
 
 For more details on suffixes, see [NVIDIA's blog post on family-specific architecture features](https://developer.nvidia.com/blog/nvidia-blackwell-and-nvidia-cuda-12-9-introduce-family-specific-architecture-features/).
 
-### Manual Compilation (Without `cuda_builder`)
+### Manual compilation (without `cuda_builder`)
 
 If you're invoking `rustc` directly instead of using `cuda_builder`, you only need to specify the architecture through LLVM args:
 
@@ -162,11 +162,11 @@ cargo build --target nvptx64-nvidia-cuda
 
 The codegen backend automatically synthesizes target features based on the architecture type as described above.
 
-### Common Patterns for Base Architectures
+### Common patterns for base architectures
 
 These patterns work when using base architectures (no suffix), which enable all lower capabilities:
 
-#### At Least a Capability (Default)
+#### At least a capability (default)
 
 ```rust,no_run
 // Code that requires compute 6.0 or higher
@@ -176,7 +176,7 @@ These patterns work when using base architectures (no suffix), which enable all 
 }
 ```
 
-#### Exactly One Capability
+#### Exactly one capability
 
 ```rust,no_run
 // Code that targets exactly compute 6.1 (not 6.2+)
@@ -186,7 +186,7 @@ These patterns work when using base architectures (no suffix), which enable all 
 }
 ```
 
-#### Up To a Maximum Capability
+#### Up to a maximum capability
 
 ```rust,no_run
 // Code that works up to compute 6.0 (not 6.1+)
@@ -196,7 +196,7 @@ These patterns work when using base architectures (no suffix), which enable all 
 }
 ```
 
-#### Targeting Specific Architecture Ranges
+#### Targeting specific architecture ranges
 
 ```rust,no_run
 // This block compiles when building for architectures >= 6.0 but < 8.0
@@ -206,7 +206,7 @@ These patterns work when using base architectures (no suffix), which enable all 
 }
 ```
 
-## Debugging Capability Issues
+## Debugging capability issues
 
 If you encounter errors about missing functions or features:
 
@@ -215,7 +215,7 @@ If you encounter errors about missing functions or features:
 3. Use `nvidia-smi` to check your GPU's compute capability
 4. Add appropriate `#[cfg]` guards or increase the target architecture
 
-## Runtime Behavior
+## Runtime behavior
 
 Again, Rust CUDA **only generates PTX**, not pre-compiled GPU binaries
 ("[fatbinaries](https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/#fatbinaries)").

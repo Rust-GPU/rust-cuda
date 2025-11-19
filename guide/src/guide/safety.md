@@ -90,7 +90,7 @@ Note however, that unified memory can be accessed by multiple GPUs and multiple 
 takes care of copying and moving data automatically from GPUs/CPU when a page fault occurs. For this reason
 as well as general ease of use, we suggest that unified memory generally be used over regular device memory.
 
-### Kernel Launches
+### Kernel launches
 
 Kernel Launches are the most unsafe part of CUDA, many things must be checked by the developer to soundly launch a kernel.
 It is fundamentally impossible for us to verify a large portion of the invariants expected by the kernel/CUDA.

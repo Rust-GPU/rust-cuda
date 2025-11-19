@@ -1,4 +1,4 @@
-# Supported Features 
+# Supported features 
 
 This page is used for tracking Cargo/Rust and CUDA features that are currently supported 
 or planned to be supported in the future. As well as tracking some information about how they could 
@@ -14,7 +14,7 @@ around to adding it yet.
 | ✔️ | Fully Supported |
 | 🟨 | Partially Supported |
 
-# Rust Features
+# Rust features
 
 | Feature Name | Support Level | Notes |
 | ------------ | ------------- | ----- |
@@ -40,7 +40,7 @@ around to adding it yet.
 | Float Ops | ✔️ | Maps to libdevice intrinsics, calls to libm are not intercepted though, which we may want to do in the future |
 | Atomics | ❌ | 
 
-# CUDA Libraries
+# CUDA libraries
 
 | Library Name | Support Level | Notes |
 | ------------ | ------------- | ----- |
@@ -54,9 +54,9 @@ around to adding it yet.
 | cuSPARSE | ❌ |
 | AmgX | ❌ |
 | cuTENSOR | ❌ |
-| OptiX | 🟨 | CPU OptiX is mostly complete, GPU OptiX is still heavily in-progress because it needs support from the codegen | 
+| OptiX | 🟨 | CPU OptiX is mostly complete, GPU OptiX is still heavily in-progress because it needs support from the codegen backend | 
 
-# GPU-side Features
+# GPU-side features
 
 Note: Most of these categories are used __very__ rarely in CUDA code, therefore
 do not be alarmed that it seems like many things are not supported. We just focus

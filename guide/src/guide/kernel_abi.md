@@ -1,7 +1,7 @@
 # Kernel ABI
 
-This section details how parameters are passed to GPU kernels by the Codegen at the current time. 
-In other words, how the codegen expects you to pass different types to GPU kernels from the CPU.
+This section details how parameters are passed to GPU kernels by the codegen backend. In other
+words, how the codegen backend expects you to pass different types to GPU kernels from the CPU.
 
 ⚠️ If you find any bugs in the ABI please report them. ⚠️
 
@@ -15,7 +15,7 @@ other ABI we override purely to avoid footguns.
 
 Functions marked as `#[kernel]` are enforced to be `extern "C"` by the kernel macro, and it is expected
 that __all__ GPU kernels be `extern "C"`, not that you should be declaring any kernels without the `#[kernel]` macro,
-because the codegen/`cuda_std` is allowed to rely on the behavior of `#[kernel]` for correctness.
+because the codegen backend/`cuda_std` is allowed to rely on the behavior of `#[kernel]` for correctness.
 
 ## Structs 
 
@@ -119,7 +119,7 @@ unsafe {
 }
 ```
 
-You may get warnings about slices being an improper C-type, but the warnings are safe to ignore, the codegen guarantees 
+You may get warnings about slices being an improper C-type, but the warnings are safe to ignore, the codegen backend guarantees 
 that slices are passed as pairs of params.
 
 You cannot however pass mutable slices, this is because it would violate aliasing rules, each thread receiving a copy of the mutable
@@ -135,7 +135,7 @@ ZSTs (zero-sized types) are ignored and become nothing in the final PTX.
 Primitive types are passed directly by value, same as structs. They map to the special PTX types `.s8`, `.s16`, `.s32`, `.s64`, `.u8`, `.u16`, `.u32`, `.u64`, `.f32`, and `.f64`.
 With the exception that `u128` and `i128` are passed as byte arrays (but this has no impact on how they are passed from the CPU).
 
-## References And Pointers
+## References And pointers
 
 References and Pointers are both passed as expected, as pointers. It is therefore expected that you pass such parameters using device memory:
 

@@ -1,4 +1,4 @@
-# Debugging The Codegen 
+# Debugging the codegen backend
 
 When you try to compile an entire language for a completely different type of hardware, stuff is bound to
 break. In this section we will cover how to debug 🧊, segfaults, and more.
@@ -10,10 +10,10 @@ Segfaults are usually caused in one of two ways:
 - From NVVM when linking (generating PTX). (more common)
 
 The first case can be debugged in two ways:
-- Building the codegen in debug mode and using `RUSTC_LOG="rustc_codegen_nvvm=trace"` (`$env:RUSTC_LOG = "rustc_codegen_nvvm=trace";` if using powershell).
+- Building the codegen backend in debug mode and using `RUSTC_LOG="rustc_codegen_nvvm=trace"` (`$env:RUSTC_LOG = "rustc_codegen_nvvm=trace";` if using powershell).
 Note that this will dump a LOT of output, and when I say a LOT, i am not joking, so please, pipe this to a file.
-This will give you a detailed summary of almost every action the codegen has done, you can examine the final few logs to 
-check what the last action the codegen was doing before segfaulting was. This is usually straightforward because the logs are detailed.
+This will give you a detailed summary of almost every action the codegen backend has done, you can examine the final few logs to 
+check what the last action the codegen backend was doing before segfaulting was. This is usually straightforward because the logs are detailed.
 
 - Building LLVM 7 with debug assertions. This, coupled with logging should give all the info needed to debug a segfault. It should 
 get LLVM to throw an exception whenever something bad happens.
@@ -47,7 +47,7 @@ If that doesn't work, then it might be a bug inside of CUDA itself, but that sho
 is to set up the crate for debug (and see if it still happens in debug). Then you can run your executable under NSight Compute, go to the source tab, and 
 examine the SASS (basically an assembly lower than PTX) to see if ptxas miscompiled it.
 
-If you set up the codegen for debug, it should give you a mapping from Rust code to SASS which should hopefully help to see what exactly is breaking.
+If you set up the codegen backend for debug, it should give you a mapping from Rust code to SASS which should hopefully help to see what exactly is breaking.
 
 Here is an example of the screen you should see:
 
