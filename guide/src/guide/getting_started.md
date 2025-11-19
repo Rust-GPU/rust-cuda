@@ -58,7 +58,7 @@ Where `XX` is the latest version of `cuda_std`.
 We changed our crate's crate types to `cdylib` and `rlib`. We specified `cdylib` because the nvptx targets do not support binary crate types.
 `rlib` is so that we will be able to use the crate as a dependency, such as if we would like to use it on the CPU.
 
-## lib.rs
+## `lib.rs`
 
 Before we can write any GPU kernels, we must add a few directives to our `lib.rs` which are required by the codegen:
 
@@ -86,7 +86,7 @@ If you would like to use `alloc` or things like printing from GPU kernels (which
 extern crate alloc;
 ```
 
-Finally, if you would like to use types such as slices or arrays inside of GPU kernels you must allow `improper_cytypes_definitions` either on the whole crate or the individual GPU kernels. This is because on the CPU, such types are not guaranteed to be passed a certain way, so they should not be used in `extern "C"` functions (which is what kernels are implicitly declared as). However, `rustc_codegen_nvvm` guarantees the way in which things like structs, slices, and arrays are passed. See [Kernel ABI](./kernel_abi.md).
+Finally, if you would like to use types such as slices or arrays inside of GPU kernels you must allow `improper_ctypes_definitions` either on the whole crate or the individual GPU kernels. This is because on the CPU, such types are not guaranteed to be passed a certain way, so they should not be used in `extern "C"` functions (which is what kernels are implicitly declared as). However, `rustc_codegen_nvvm` guarantees the way in which things like structs, slices, and arrays are passed. See [Kernel ABI](./kernel_abi.md).
 
 ```rs
 #![allow(improper_ctypes_definitions)]
@@ -171,7 +171,7 @@ To use it you can simply add it as a build dependency in your CPU crate (the cra
 +cuda_builder = "XX"
 ```
 
-Where `XX` is the current version of cuda_builder.
+Where `XX` is the current version of `cuda_builder`.
 
 Then, you can simply invoke it in the build.rs of your CPU crate:
 

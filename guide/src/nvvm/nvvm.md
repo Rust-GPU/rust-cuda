@@ -1,4 +1,4 @@
-# rustc_codegen_nvvm
+# `rustc_codegen_nvvm`
 
 At the highest level, our codegen workflow goes like this:
 
@@ -14,7 +14,7 @@ Source code -> Typechecking -> MIR -> SSA Codegen -> LLVM IR (NVVM IR) -> PTX ->
 Before we do anything, rustc does its normal job, it typechecks, converts everything to MIR, etc. Then, 
 rustc loads our codegen shared lib and invokes it to codegen the MIR. It creates an instance of
 `NvvmCodegenBackend` and it invokes `codegen_crate`. You could do anything inside `codegen_crate` but 
-we just defer back to rustc_codegen_ssa and tell it to do the job for us:
+we just defer back to `rustc_codegen_ssa` and tell it to do the job for us:
 
 ```rs
 fn codegen_crate<'tcx>(

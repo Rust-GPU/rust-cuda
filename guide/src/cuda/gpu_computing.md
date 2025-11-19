@@ -23,7 +23,7 @@ AMD GPUs with OpenCL, since OpenCL is generally slower, clunkier, and lacks libr
 
 # Why Rust?
 
-Rust is a great choice for GPU programming, however, it has needed a kickstart, which is what rustc_codegen_nvvm tries to 
+Rust is a great choice for GPU programming, however, it has needed a kickstart, which is what `rustc_codegen_nvvm` tries to 
 accomplish; The initial hurdle of getting Rust to compile to something CUDA can run is over, now comes the design and 
 polish part. 
 

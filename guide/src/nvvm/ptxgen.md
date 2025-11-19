@@ -61,7 +61,7 @@ important one is libdevice, libdevice is essentially a bitcode module containing
 that nvidia provides for us. You can find it as a `.bc` file in the libdevice folder inside your NVVM install location.
 Every function inside of it is prefixed with `__nv_`, you can find docs for it [here](https://docs.nvidia.com/cuda/libdevice-users-guide/index.html).
 
-We declare these intrinsics inside of `ctx_intrinsics.rs` and link to them inside cuda_std. We also use them to codegen
+We declare these intrinsics inside of `ctx_intrinsics.rs` and link to them inside `cuda_std`. We also use them to codegen
 a lot of intrinsics inside `intrinsic.rs`, such as `sqrtf32`.
 
 libdevice is also lazy loaded so we do not import useless intrinsics.

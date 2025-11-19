@@ -15,7 +15,7 @@ other ABI we override purely to avoid footguns.
 
 Functions marked as `#[kernel]` are enforced to be `extern "C"` by the kernel macro, and it is expected
 that __all__ GPU kernels be `extern "C"`, not that you should be declaring any kernels without the `#[kernel]` macro,
-because the codegen/cuda_std is allowed to rely on the behavior of `#[kernel]` for correctness.
+because the codegen/`cuda_std` is allowed to rely on the behavior of `#[kernel]` for correctness.
 
 ## Structs 
 
