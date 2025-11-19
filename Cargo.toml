@@ -35,3 +35,4 @@ opt-level = 3
 [workspace.dependencies]
 cuda_std = { path = "crates/cuda_std" }
 cuda_builder = { path = "crates/cuda_builder", version = "=0.3.0", default-features = false }
+rustc_codegen_nvvm = { path = "crates/rustc_codegen_nvvm", version = "=0.3.0" }
