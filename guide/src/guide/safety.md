@@ -25,7 +25,7 @@ Behavior considered undefined inside of GPU kernels:
   undefined on the GPU too. The only exception being invalid sizes for buffers given to a GPU
   kernel.
 
-Currently we declare that the invariant that a buffer given to a gpu kernel must be large enough for any access the
+Currently we declare that the invariant that a buffer given to a GPU kernel must be large enough for any access the
 kernel is going to make is up to the caller of the kernel to uphold. This idiom may be changed in the future.
 
 - Any kind of data race, this has the same semantics as data races in CPU code. Such as:

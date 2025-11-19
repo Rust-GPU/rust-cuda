@@ -29,10 +29,10 @@ over CUDA C/C++ with the same (or better!) performance and features, therefore, 
 Short answer, no.
 
 Long answer, there are a couple of things that make this impossible:
-- At the time of writing, libnvvm expects LLVM 7 bitcode, which is a very old format. Giving it bitcode from later LLVM version (which is what rustc uses) does not work.
-- NVVM IR is a __subset__ of LLVM IR, there are tons of things that nvvm will not accept. Such as a lot of function attrs not being allowed. 
+- At the time of writing, libNVVM expects LLVM 7 bitcode, which is a very old format. Giving it bitcode from later LLVM version (which is what rustc uses) does not work.
+- NVVM IR is a __subset__ of LLVM IR, there are tons of things that NVVM will not accept. Such as a lot of function attrs not being allowed. 
 This is well documented and you can find the spec [here](https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html). Not to mention
-many bugs in libnvvm that i have found along the way, the most infuriating of which is nvvm not accepting integer types that arent `i1, i8, i16, i32, or i64`.
+many bugs in libNVVM that I have found along the way, the most infuriating of which is nvvm not accepting integer types that arent `i1, i8, i16, i32, or i64`.
 This required special handling in the codegen to convert these "irregular" types into vector types.
 
 ## What is the point of using Rust if a lot of things in kernels are unsafe?
@@ -153,13 +153,13 @@ things to gain in terms of safety using Rust.
 The reasoning for this is the same reasoning as to why you would use CUDA over opengl/vulkan compute shaders:
 - CUDA usually outperforms shaders if kernels are written well and launch configurations are optimal.
 - CUDA has many useful features such as shared memory, unified memory, graphs, fine grained thread control, streams, the PTX ISA, etc.
-- rust-gpu does not perform many optimizations, and with rustc_codegen_ssa's less than ideal codegen, the optimizations by llvm and libnvvm are needed.
-- SPIRV is arguably still not suitable for serious GPU kernel codegen, it is underspecced, complex, and does not mention many things which are needed.
-While libnvvm (which uses a well documented subset of LLVM IR) and the PTX ISA are very thoroughly documented/specified.
+- rust-gpu does not perform many optimizations, and with rustc_codegen_ssa's less than ideal codegen, the optimizations by LLVM and libNVVM are needed.
+- SPIR-V is arguably still not suitable for serious GPU kernel codegen, it is underspecced, complex, and does not mention many things which are needed.
+While libNVVM (which uses a well documented subset of LLVM IR) and the PTX ISA are very thoroughly documented/specified.
 - rust-gpu is primarily focused on graphical shaders, compute shaders are secondary, which the rust ecosystem needs, but it also 
 needs a project 100% focused on computing, and computing only.
-- SPIRV cannot access many useful CUDA libraries such as Optix, cuDNN, cuBLAS, etc.
-- SPIRV debug info is still very young and rust-gpu cannot generate it. While rustc_codegen_nvvm does, which can be used
+- SPIR-V cannot access many useful CUDA libraries such as OptiX, cuDNN, cuBLAS, etc.
+- SPIR-V debug info is still very young and rust-gpu cannot generate it. While rustc_codegen_nvvm does, which can be used
 for profiling kernels in something like nsight compute.
 
 Moreover, CUDA is the primary tool used in big computing industries such as VFX and scientific computing. Therefore 
@@ -190,17 +190,17 @@ when it is finished, which causes further uses of CUDA to fail.
 
 Modules are the second big difference in the driver API. Modules are similar to shared libraries, they
 contain all of the globals and functions (kernels) inside of a PTX/cubin file. The driver API
-is language-agnostic, it purely works off of ptx/cubin files. To answer why this is important we
-need to cover what cubins and ptx files are briefly.
+is language-agnostic, it purely works off PTX/cubin files. To answer why this is important we
+need to cover what cubins and PTX files are briefly.
 
 PTX is a low level assembly-like language which is the penultimate step before what the GPU actually
 executes. It is human-readable and you can dump it from a CUDA C++ program with `nvcc ./file.cu --ptx`.
 This PTX is then optimized and lowered into a final format called SASS (Source and Assembly) and 
 turned into a cubin (CUDA binary) file. 
 
-Driver API modules can be loaded as either ptx, cubin, or fatbin files. If they are loaded as 
-ptx then the driver API will JIT compile the PTX to cubin then cache it. You can also
-compile ptx to cubin yourself using ptx-compiler and cache it.
+Driver API modules can be loaded as either PTX, cubin, or fatbin files. If they are loaded as 
+PTX then the driver API will JIT compile the PTX to cubin then cache it. You can also
+compile PTX to cubin yourself using ptx-compiler and cache it.
 
 This pipeline provides much better control over what functions you actually need to load and cache.
 You can separate different functions into different modules you can load dynamically (and even dynamically reload).
@@ -217,7 +217,7 @@ need to manage many kernels being dispatched at the same time as efficiently as 
 
 ## Why target NVIDIA GPUs only instead of using something that can work on AMD?
 
-This is a complex issue with many arguments for both sides, so i will give you
+This is a complex issue with many arguments for both sides, so I will give you
 both sides as well as my opinion. 
 
 Pros for using OpenCL over CUDA:
@@ -235,7 +235,7 @@ new features cannot be reliably relied upon because they are unlikely to work on
 - OpenCL can only be written in OpenCL C (based on C99), OpenCL C++ is a thing, but again, not everything
 supports it. This makes complex programs more difficult to create.
 - OpenCL has less tools and libraries.
-- OpenCL is nowhere near as language-agnostic as CUDA. CUDA works almost fully off of an assembly format (ptx)
+- OpenCL is nowhere near as language-agnostic as CUDA. CUDA works almost fully off of an assembly format (PTX)
 and debug info. Essentially how CPU code works. This makes writing language-agnostic things in OpenCL near impossible and
 locks you into using OpenCL C.
 - OpenCL is plagued with serious driver bugs which have not been fixed, or that occur only on certain vendors.
@@ -245,10 +245,10 @@ Pros for using CUDA over OpenCL:
 VFX computing.
 - CUDA is a proprietary tool, meaning that NVIDIA is able to push out bug fixes and features much faster
 than releasing a new spec and waiting for vendors to implement it. This allows for more features being added, 
-such as cooperative kernels, cuda graphs, unified memory, new profilers, etc.
+such as cooperative kernels, CUDA graphs, unified memory, new profilers, etc.
 - CUDA is a single entity, meaning that if something does or does not work on one system it is unlikely 
 that that will be different on another system. Assuming you are not using different architectures, where
-one gpu may be lacking a feature.
+one GPU may be lacking a feature.
 - CUDA is usually 10-30% faster than OpenCL overall, this is likely due to subpar OpenCL drivers by NVIDIA,
 but it is unlikely this performance gap will change in the near future.
 - CUDA has a much richer set of libraries and tools than OpenCL, such as cuFFT, cuBLAS, cuRand, cuDNN, OptiX, NSight Compute, cuFile, etc.
@@ -264,8 +264,8 @@ Cons for using CUDA over OpenCL:
 
 # What makes cust and RustaCUDA different?
 
-Cust is a fork of rustacuda which changes a lot of things inside of it, as well as adds new features that
-are not inside of rustacuda. 
+Cust is a fork of RustaCUDA which changes a lot of things inside of it, as well as adds new features that
+are not inside of RustaCUDA. 
 
 The most significant changes (This list is not complete!!) are:
 - Drop code no longer panics on failure to drop raw CUDA handles, this is so that InvalidAddress errors, which cause 
@@ -286,8 +286,8 @@ Changes that are currently in progress but not done/experimental:
 - Graphs
 - PTX validation
 
-Just like rustacuda, cust makes no assumptions of what language was used to generate the ptx/cubin. It could be 
+Just like RustaCUDA, cust makes no assumptions of what language was used to generate the PTX/cubin. It could be 
 C, C++, futhark, or best of all, Rust!
 
-Cust's name is literally just rust + cuda mashed together in a horrible way.
+Cust's name is literally just rust + CUDA mashed together in a horrible way.
 Or you can pretend it stands for custard if you really like custard.

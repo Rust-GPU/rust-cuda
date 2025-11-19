@@ -5,7 +5,7 @@ At the highest level, our codegen workflow goes like this:
 ```
 Source code -> Typechecking -> MIR -> SSA Codegen -> LLVM IR (NVVM IR) -> PTX -> PTX opts/function DCE -> Final PTX
                |                                     |                  |      |                                  ^
-               |                                     |          libnvvm +------+                                  |
+               |                                     |          libNVVM +------+                                  |
                |                                     |                                                            |
                |                  rustc_codegen_nvvm +------------------------------------------------------------|
          Rustc +---------------------------------------------------------------------------------------------------
@@ -43,19 +43,19 @@ dive into each trait.
 But first, let's talk about the end of the codegen, it is pretty simple, we do a couple of things:
 *after codegen is done and LLVM has been run to optimize each module*
 1. We gather every LLVM bitcode module we created.
-2. We create a new libnvvm program.
-3. We add every bitcode module to the libnvvm program.
+2. We create a new libNVVM program.
+3. We add every bitcode module to the libNVVM program.
 4. We try to find libdevice and add it to the program (see [nvidia
    docs](https://docs.nvidia.com/cuda/libdevice-users-guide/introduction.html#what-is-libdevice) on
    what libdevice is).
-5. We run the verifier on the nvvm program just to check that we did not create any invalid NVVM IR.
+5. We run the verifier on the NVVM program just to check that we did not create any invalid NVVM IR.
 6. We run the compiler which gives us a final PTX string, hooray!
 7. Finally, the PTX goes through a small stage where its parsed and function DCE is run to
    eliminate most of the bloat in the file. Traditionally this is done by the linker but there's no
    linker to be found for miles here.
 8. We write this PTX file to wherever rustc tells us to write the final file.
 
-We will cover the libnvvm steps in more detail later on.
+We will cover the libNVVM steps in more detail later on.
 
 # Codegen Units (CGUs)
 

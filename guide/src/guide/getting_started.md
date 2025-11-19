@@ -17,9 +17,9 @@ Before you can use the project to write GPU crates, you will need a couple of pr
   - Finally, if neither are present or unusable, it will attempt to download and use prebuilt LLVM. This currently only
     works on Windows however.
 
-- The OptiX SDK if using the optix library (the pathtracer example uses it for denoising).
+- The OptiX SDK if using the OptiX library (the pathtracer example uses it for denoising).
 
-- You may also need to add `libnvvm` to PATH, the builder should do it for you but in case it does not work, add libnvvm to PATH, it should be somewhere like `CUDA_ROOT/nvvm/bin`,
+- You may also need to add `libnvvm` to PATH, the builder should do it for you but in case it does not work, add `libnvvm` to PATH, it should be somewhere like `CUDA_ROOT/nvvm/bin`,
 
 - You may wish to use or consult the bundled [Dockerfile](#docker) to assist in your local config
 
@@ -102,7 +102,7 @@ Now we can finally start writing an actual GPU kernel.
 Firstly, we must explain a couple of things about GPU kernels, specifically, how they are executed. GPU Kernels (functions) are the entry point for executing anything on the GPU, they are the functions which will be executed from the CPU. GPU kernels do not return anything, they write their data to buffers passed into them.
 
 CUDA's execution model is very very complex and it is unrealistic to explain all of it in
-this section, but the TLDR of it is that CUDA will execute the GPU kernel once on every
+this section, but the TL;DR of it is that CUDA will execute the GPU kernel once on every
 thread, with the number of threads being decided by the caller (the CPU).
 
 We call these parameters the launch dimensions of the kernel. Launch dimensions are split
@@ -115,7 +115,7 @@ up into two basic concepts:
   of the current block.
 
 One important thing to note is that block and thread dimensions may be 1d, 2d, or 3d.
-That is to say, i can launch `1` block of `6x6x6`, `6x6`, or `6` threads. I could
+That is to say, I can launch `1` block of `6x6x6`, `6x6`, or `6` threads. I could
 also launch `5x5x5` blocks. This is very useful for 2d/3d applications because it makes
 the 2d/3d index calculations much simpler. CUDA exposes thread and block indices
 for each dimension through special registers. We expose thread index queries through
@@ -229,7 +229,7 @@ You can use it as follows (assuming your clone of Rust CUDA is at the absolute p
 **Notes:**
 
 1. refer to [rust-toolchain.toml](#rust-toolchain.toml) to ensure you are using the correct toolchain in your project.
-2. despite using Docker, your machine will still need to be running a compatible driver, in this case for Cuda 11.4.1 it is >=470.57.02
-3. if you have issues within the container, it can help to start ensuring your gpu is recognized
+2. despite using Docker, your machine will still need to be running a compatible driver, in this case for CUDA 11.4.1 it is >=470.57.02
+3. if you have issues within the container, it can help to start ensuring your GPU is recognized
    - ensure `nvidia-smi` provides meaningful output in the container
-   - NVidia provides a number of samples https://github.com/NVIDIA/cuda-samples. In particular, you may want to try `make`ing and running the [`deviceQuery`](https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery) sample. If all is well you should see many details about your gpu
+   - NVidia provides a number of samples https://github.com/NVIDIA/cuda-samples. In particular, you may want to try `make`ing and running the [`deviceQuery`](https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery) sample. If all is well you should see many details about your GPU

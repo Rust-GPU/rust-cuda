@@ -18,9 +18,9 @@ around to adding it yet.
 
 | Feature Name | Support Level | Notes |
 | ------------ | ------------- | ----- |
-| Opt-Levels | ✔️ | behaves mostly the same (because llvm is still used for optimizations). Except that libnvvm opts are run on anything except no-opts because nvvm only has -O0 and -O3 |
+| Opt-Levels | ✔️ | behaves mostly the same (because LLVM is still used for optimizations). Except that libNVVM opts are run on anything except no-opts because NVVM only has -O0 and -O3 |
 | codegen-units | ✔️ |
-| LTO | ➖ | we load bitcode modules lazily using dependency graphs, which then forms a single module optimized by libnvvm, so all the benefits of LTO are on without pre-libnvvm LTO being needed. |
+| LTO | ➖ | we load bitcode modules lazily using dependency graphs, which then forms a single module optimized by libNVVM, so all the benefits of LTO are on without pre-libNVVM LTO being needed. |
 | Closures | ✔️ |
 | Enums | ✔️ |
 | Loops | ✔️ |

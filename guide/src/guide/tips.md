@@ -10,5 +10,5 @@ will get much better in the future but currently it will cause some undesirable 
 
 - Don't use recursion, CUDA allows it but threads have very limited stacks (local memory) and stack overflows
 yield confusing `InvalidAddress` errors. If you are getting such an error, run the executable in cuda-memcheck,
-it should yield a write failure to `Local` memory at an address of about 16mb. You can also put the ptx file through
+it should yield a write failure to `Local` memory at an address of about 16mb. You can also put the PTX file through
 `cuobjdump` and it should yield ptxas warnings for functions without a statically known stack usage.

@@ -19,13 +19,13 @@ with additional restrictions including the following.
 - Some linkage types are not supported.
 - Function ABIs are ignored; everything uses the PTX calling convention.
 
-libnvvm is a closed source library which takes NVVM IR, optimizes it further, then converts it to
+libNVVM is a closed source library which takes NVVM IR, optimizes it further, then converts it to
 PTX. PTX is a low level, assembly-like format with an open specification which can be targeted by
 any language. For an assembly format, PTX is fairly user-friendly.
 - It is well formatted.
 - It is mostly fully specified (other than the iffy grammar specification).
 - It uses named registers/parameters.
-- It uses virtual registers. (Because gpus have thousands of registers, listing all of them out
+- It uses virtual registers. (Because GPUs have thousands of registers, listing all of them out
   would be unrealistic.)
 - It uses ASCII as a file encoding.
 

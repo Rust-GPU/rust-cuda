@@ -11,7 +11,7 @@ Segfaults are usually caused in one of two ways:
 
 The first case can be debugged in two ways:
 - Building the codegen in debug mode and using `RUSTC_LOG="rustc_codegen_nvvm=trace"` (`$env:RUSTC_LOG = "rustc_codegen_nvvm=trace";` if using powershell).
-Note that this will dump a LOT of output, and when i say a LOT, i am not joking, so please, pipe this to a file.
+Note that this will dump a LOT of output, and when I say a LOT, i am not joking, so please, pipe this to a file.
 This will give you a detailed summary of almost every action the codegen has done, you can examine the final few logs to 
 check what the last action the codegen was doing before segfaulting was. This is usually straightforward because the logs are detailed.
 
@@ -20,23 +20,23 @@ get LLVM to throw an exception whenever something bad happens.
 
 The latter case is a bit worse.
 
-Segfaults in libnvvm are generally because we gave something to libnvvm which it did not expect. In an ideal world, libnvvm would
-just throw a validation error, but it wouldn't be an llvm-based library if it threw friendly errors ;). Libnvvm has been known to segfault 
+Segfaults in libNVVM are generally because we gave something to libnvvm which it did not expect. In an ideal world, libnvvm would
+just throw a validation error, but it wouldn't be an LLVM-based library if it threw friendly errors ;). Libnvvm has been known to segfault 
 on things like:
 - using int types that arent `i1`, `i8`, `i16`, `i32`, or `i64` in functions signatures. (see int_replace.rs).
 - having debug info on multiple modules (this is technically disallowed per the spec but it still shouldn't segfault).
 
-Generally there is no good way to debug these failures other than hoping libnvvm throws a validation error (which will cause an ICE).
-I have created a tiny tool to run `llvm-extract` on an llvm ir file to attempt to isolate segfaulting functions which works to some degree
-which i will add to the project soon.
+Generally there is no good way to debug these failures other than hoping libNVVM throws a validation error (which will cause an ICE).
+I have created a tiny tool to run `llvm-extract` on an LLVM IR file to attempt to isolate segfaulting functions which works to some degree
+which I will add to the project soon.
 
 ## Miscompilations 
 
 Miscompilations are rare but annoying. They usually result in one of two things happening:
 - CUDA rejecting the PTX as a whole (throwing an InvalidPtx error). This is rare but the most common cause is declaring invalid
-extern functions (just grep for `extern` in the ptx file and check if it's odd functions that aren't cuda syscalls like vprintf, malloc, free, etc).
+extern functions (just grep for `extern` in the PTX file and check if it's odd functions that aren't CUDA syscalls like vprintf, malloc, free, etc).
 - The PTX containing invalid behavior. This is very specific and rare but if you find this, the best way to debug it is:
-  - Try to get a minimal working example so we don't have to search through megabytes of llvm ir/ptx.
+  - Try to get a minimal working example so we don't have to search through megabytes of LLVM IR/PTX.
   - Use `RUSTFLAGS="--emit=llvm-ir"` and find `crate_name.ll` in `target/nvptx64-nvidia-cuda/<debug/release>/deps/` and attach it in any bug report.
   - Attach the final PTX file. 
 

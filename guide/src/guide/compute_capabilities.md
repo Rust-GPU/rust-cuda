@@ -142,7 +142,7 @@ Note: While the 'a' variant enables all these features during compilation (allow
 
 For more details on suffixes, see [NVIDIA's blog post on family-specific architecture features](https://developer.nvidia.com/blog/nvidia-blackwell-and-nvidia-cuda-12-9-introduce-family-specific-architecture-features/).
 
-### Manual Compilation (Without CudaBuilder)
+### Manual Compilation (Without `cuda_builder`)
 
 If you're invoking `rustc` directly instead of using `cuda_builder`, you only need to specify the architecture through LLVM args:
 

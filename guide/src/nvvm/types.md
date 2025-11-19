@@ -1,18 +1,18 @@
 # Types
 
-Types! who doesn't love types, especially those that cause libnvvm to randomly segfault or loop forever!
+Types! who doesn't love types, especially those that cause libNVVM to randomly segfault or loop forever!
 Anyways, types are an integral part of the codegen and everything revolves around them and you will see them everywhere.
 
 `rustc_codegen_ssa` does not actually tell you what your type representation should be, it allows you to decide. For
 example, `rust-gpu` represents it as a `SpirvType` enum, while both `rustc_codegen_llvm` and our codegen represent it as 
-opaque llvm types:
+opaque LLVM types:
 
 ```rs
 type Type = &'ll llvm::Type;
 ```
 
 `llvm::Type` is an opaque type that comes from llvm-c. `'ll` is one of the main lifetimes you will see
-throughout the whole codegen, it is used for anything that lasts as long as the current usage of llvm. 
+throughout the whole codegen, it is used for anything that lasts as long as the current usage of LLVM. 
 LLVM gives you back pointers when you ask for a type or value, some time ago rustc_codegen_llvm fully switched to using
 references over pointers, and we follow in their footsteps. 
 
