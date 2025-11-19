@@ -4,7 +4,7 @@ Types! who doesn't love types, especially those that cause libNVVM to randomly s
 Anyways, types are an integral part of the codegen and everything revolves around them and you will see them everywhere.
 
 `rustc_codegen_ssa` does not actually tell you what your type representation should be, it allows you to decide. For
-example, rust-gpu represents it as a `SpirvType` enum, while both `rustc_codegen_llvm` and our codegen represent it as 
+example, Rust GPU represents it as a `SpirvType` enum, while both `rustc_codegen_llvm` and our codegen represent it as 
 opaque LLVM types:
 
 ```rs

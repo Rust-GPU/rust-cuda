@@ -148,18 +148,18 @@ a lot of them, and ease the burden of correctness from the developer.
 Besides, using Rust only adds to safety, it does not make CUDA *more* unsafe. This means there are only
 things to gain in terms of safety using Rust.
 
-## Why not use rust-gpu with compute shaders?
+## Why not use Rust GPU with compute shaders?
 
 The reasoning for this is the same reasoning as to why you would use CUDA over opengl/vulkan compute shaders:
 - CUDA usually outperforms shaders if kernels are written well and launch configurations are optimal.
 - CUDA has many useful features such as shared memory, unified memory, graphs, fine grained thread control, streams, the PTX ISA, etc.
-- rust-gpu does not perform many optimizations, and with `rustc_codegen_ssa`'s less than ideal codegen, the optimizations by LLVM and libNVVM are needed.
+- Rust GPU does not perform many optimizations, and with `rustc_codegen_ssa`'s less than ideal codegen, the optimizations by LLVM and libNVVM are needed.
 - SPIR-V is arguably still not suitable for serious GPU kernel codegen, it is underspecced, complex, and does not mention many things which are needed.
 While libNVVM (which uses a well documented subset of LLVM IR) and the PTX ISA are very thoroughly documented/specified.
-- rust-gpu is primarily focused on graphical shaders, compute shaders are secondary, which the Rust ecosystem needs, but it also 
+- Rust GPU is primarily focused on graphical shaders, compute shaders are secondary, which the Rust ecosystem needs, but it also 
 needs a project 100% focused on computing, and computing only.
 - SPIR-V cannot access many useful CUDA libraries such as OptiX, cuDNN, cuBLAS, etc.
-- SPIR-V debug info is still very young and rust-gpu cannot generate it. While `rustc_codegen_nvvm` does, which can be used
+- SPIR-V debug info is still very young and Rust GPU cannot generate it. While `rustc_codegen_nvvm` does, which can be used
 for profiling kernels in something like nsight compute.
 
 Moreover, CUDA is the primary tool used in big computing industries such as VFX and scientific computing. Therefore 
