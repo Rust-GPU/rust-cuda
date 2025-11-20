@@ -254,11 +254,12 @@ impl FromStr for NvvmOption {
 }
 
 /// Nvvm architecture, default is `Compute52`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, strum::EnumIter)]
 pub enum NvvmArch {
     Compute35,
     Compute37,
     Compute50,
+    #[default]
     Compute52,
     Compute53,
     Compute60,
@@ -343,12 +344,6 @@ impl FromStr for NvvmArch {
             "compute_121a" => NvvmArch::Compute121a,
             _ => return Err("unknown compile target"),
         })
-    }
-}
-
-impl Default for NvvmArch {
-    fn default() -> Self {
-        Self::Compute52
     }
 }
 
