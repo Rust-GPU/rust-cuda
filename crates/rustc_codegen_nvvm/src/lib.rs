@@ -146,7 +146,11 @@ impl CodegenBackend for NvvmCodegenBackend {
             for opt in &args.nvvm_options {
                 if let ::nvvm::NvvmOption::Arch(arch) = opt {
                     // Add all features up to and including the current architecture
-                    features.extend(arch.all_target_features());
+                    features.extend(
+                        arch.all_target_features()
+                            .into_iter()
+                            .map(|feature| feature.target_feature()),
+                    );
                     break;
                 }
             }
@@ -234,7 +238,7 @@ impl CodegenBackend for NvvmCodegenBackend {
                 target_features.extend(
                     backend_features
                         .iter()
-                        .map(|f| rustc_span::Symbol::intern(f)),
+                        .map(|f| rustc_span::Symbol::intern(&f.target_feature())),
                 );
                 break;
             }
