@@ -1,34 +1,51 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/*",
-  "crates/optix/examples/ex*",
-  "crates/optix/examples/ex*/device",
-  "crates/optix/examples/rust/ex*",
+  "crates/blastoff",
+  "crates/cuda_builder",
+  "crates/cuda_std",
+  "crates/cuda_std_macros",
+  "crates/cudnn",
+  "crates/cudnn-sys",
+  "crates/cust",
+  "crates/cust_core",
+  "crates/cust_derive",
+  "crates/cust_raw",
+  "crates/gpu_rand",
+  "crates/nvvm",
+  "crates/optix",
+  "crates/optix_device",
+  "crates/optix_device_macros",
+  "crates/optix-sys",
+  "crates/optix/examples/ex02_pipeline",
+  "crates/optix/examples/ex02_pipeline/device",
+  "crates/optix/examples/ex03_window",
+  "crates/optix/examples/ex04_mesh",
+  "crates/optix/examples/rust/ex04_mesh_gpu",
+  "crates/ptx",
+  "crates/ptx_compiler",
+  "crates/rustc_codegen_nvvm",
+  "crates/rustc_codegen_nvvm_macros",
 
-  "xtask",
-
-  "examples/cuda/vecadd",
-  "examples/cuda/vecadd/kernels",
   "examples/cuda/gemm",
   "examples/cuda/gemm/kernels",
+  "examples/cuda/i128_demo",
+  "examples/cuda/i128_demo/kernels",
   "examples/cuda/path_tracer",
   "examples/cuda/path_tracer/kernels",
   "examples/cuda/sha2_crates_io",
   "examples/cuda/sha2_crates_io/kernels",
-  "examples/cuda/i128_demo",
-  "examples/cuda/i128_demo/kernels",
-
-  "examples/optix/*",
-  "tests/compiletests",
-  "tests/compiletests/deps-helper",
+  "examples/cuda/vecadd",
+  "examples/cuda/vecadd/kernels",
+  "examples/optix/denoiser",
 
   "samples/introduction/async_api",
   "samples/introduction/async_api/kernels",
-]
 
-exclude = [
-    "crates/optix/examples/common",
+  "tests/compiletests",
+  "tests/compiletests/deps-helper",
+
+  "xtask",
 ]
 
 [profile.dev.package.rustc_codegen_nvvm]
