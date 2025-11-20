@@ -44,7 +44,7 @@ impl Display for CodegenErr {
 }
 
 /// Take a list of bitcode module bytes and their names and codegen it
-/// into ptx bytes. The final PTX *should* be utf8, but just to be on the safe side
+/// into PTX bytes. The final PTX *should* be utf8, but just to be on the safe side
 /// it returns a vector of bytes.
 ///
 /// Note that this will implicitly try to find libdevice and add it, so don't do that
@@ -57,15 +57,15 @@ pub fn codegen_bitcode_modules(
 ) -> Result<Vec<u8>, CodegenErr> {
     debug!("Codegenning bitcode to PTX");
 
-    // make sure the nvvm version is high enough so users don't get confusing compilation errors.
+    // Make sure the nvvm version is high enough so users don't get confusing compilation errors.
     let (major, minor) = nvvm::ir_version();
 
-    if major <= 1 && minor < 6 {
+    if major <= 2 && minor < 0 {
         sess.dcx()
-            .fatal("rustc_codegen_nvvm requires at least libnvvm 1.6 (CUDA 11.2)");
+            .fatal("rustc_codegen_nvvm requires at least libnvvm 2.0 (CUDA 12.0)");
     }
 
-    // first, create the nvvm program we will add modules to.
+    // First, create the nvvm program we will add modules to.
     let prog = NvvmProgram::new()?;
 
     let module = merge_llvm_modules(modules, llcx);

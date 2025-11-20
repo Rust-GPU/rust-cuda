@@ -105,6 +105,6 @@ jobs:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex0*" --exclude "cudnn*" --exclude "sha2*" --exclude "cust_raw"
 
-      # Disabled due to dll issues, someone with  Windows knowledge needed
+      # Disabled due to dll issues, someone with Windows knowledge needed
       # - name: Compiletest
-      #  run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_70,compute_90
+      #  run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90

@@ -1,4 +1,5 @@
 use clap::Parser;
+use nvvm::NvvmArch;
 use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -13,8 +14,9 @@ struct Opt {
 
     /// The CUDA compute capability to target (e.g., compute_70, compute_80, compute_90).
     /// Can specify multiple architectures comma-separated.
-    #[arg(long, default_value = "compute_70", value_delimiter = ',')]
-    target_arch: Vec<String>,
+    // WARNING: This should be kept in sync with the default on `CudaBuilder::arch`.
+    #[arg(long, default_values_t = [NvvmArch::default()], value_delimiter = ',')]
+    target_arch: Vec<NvvmArch>,
 
     /// Only run tests that match these filters.
     #[arg(name = "FILTER")]
@@ -22,8 +24,8 @@ struct Opt {
 }
 
 impl Opt {
-    pub fn architectures(&self) -> impl Iterator<Item = &str> {
-        self.target_arch.iter().map(|s| s.as_str())
+    pub fn architectures(&self) -> impl Iterator<Item = NvvmArch> + use<'_> {
+        self.target_arch.iter().copied()
     }
 }
 
@@ -136,18 +138,18 @@ impl Runner {
             extra_flags: "",
         }];
 
-        for (arch, variation) in self
-            .opt
-            .architectures()
-            .flat_map(|arch| VARIATIONS.iter().map(move |variation| (arch, variation)))
-        {
+        for (arch, variation) in self.opt.architectures().flat_map(|arch| {
+            VARIATIONS
+                .iter()
+                .map(move |variation| (arch.target_feature(), variation))
+        }) {
             // HACK(eddyb) in order to allow *some* tests to have separate output
             // in different testing variations (i.e. experimental features), while
             // keeping *most* of the tests unchanged, we make use of "stage IDs",
             // which offer `// only-S` and `// ignore-S` for any stage ID `S`.
             let stage_id = if variation.name == "default" {
                 // Use the architecture name as the stage ID.
-                arch.to_string()
+                arch.clone()
             } else {
                 // Include the variation name in the stage ID.
                 format!("{}-{}", arch, variation.name)
@@ -159,7 +161,7 @@ impl Runner {
                 &self.deps_target_dir,
                 &self.codegen_backend_path,
                 CUDA_TARGET,
-                arch,
+                &arch,
             );
             let mut flags = test_rustc_flags(
                 &self.codegen_backend_path,
@@ -172,7 +174,7 @@ impl Runner {
                         .deps_target_dir
                         .join(DepKind::ProcMacro.target_dir_suffix(CUDA_TARGET)),
                 ],
-                arch,
+                &arch,
             );
             flags += variation.extra_flags;
 

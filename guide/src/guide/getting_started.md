@@ -6,7 +6,9 @@ This section covers how to get started writing GPU crates with `cuda_std` and `c
 
 Before you can use the project to write GPU crates, you will need a couple of prerequisites:
 
-- [The CUDA SDK](https://developer.nvidia.com/cuda-downloads), version 11.2 or later (and the appropriate driver - [see CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html)).
+- [The CUDA SDK](https://developer.nvidia.com/cuda-downloads), version 12.0 or later (and the
+  appropriate driver - [see CUDA release
+  notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html)).
 
   This is only for building GPU crates, to execute built PTX you only need CUDA `9+`.
 

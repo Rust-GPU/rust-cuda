@@ -22,7 +22,7 @@ cargo run --release
 ### Options
 
 - `--bless` - Update expected output files
-- `--target-arch=compute_61,compute_70,compute_90` - Test multiple CUDA compute capabilities (comma-separated)
+- `--target-arch=compute_61,compute_75,compute_90` - Test multiple CUDA compute capabilities (comma-separated)
 - Filter by test name: `cargo compiletest simple`
 - `RUST_LOG=info` - Enable progress logging
 - `RUST_LOG=debug` - Enable detailed debug logging

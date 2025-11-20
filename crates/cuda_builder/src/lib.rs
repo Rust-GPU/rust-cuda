@@ -91,10 +91,7 @@ pub struct CudaBuilder {
     /// will not work on older capabilities. It means that if it uses certain features
     /// it may not work.
     ///
-    /// This currently defaults to `6.1`. Which corresponds to Pascal, GPUs such as the
-    /// GTX 1030, GTX 1050, GTX 1080, Tesla P40, etc. We default to this because Maxwell
-    /// (5.x) will be deprecated in CUDA 12 and we anticipate for that. Moreover, `6.x`
-    /// contains support for things like f64 atomic add and half precision float ops.
+    /// This defaults to the default value of `NvvmArch`.
     ///
     /// Starting with CUDA 12.9, architectures can have suffixes:
     ///
@@ -207,7 +204,7 @@ impl CudaBuilder {
             ptx_file_copy_path: None,
             generate_line_info: true,
             nvvm_opts: true,
-            arch: NvvmArch::Compute61,
+            arch: NvvmArch::default(),
             ftz: false,
             fast_sqrt: false,
             fast_div: false,

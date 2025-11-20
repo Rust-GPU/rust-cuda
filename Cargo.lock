@@ -599,6 +599,7 @@ dependencies = [
  "clap 4.5.45",
  "compiletest_rs",
  "cuda_builder",
+ "nvvm",
  "tracing",
  "tracing-subscriber",
 ]

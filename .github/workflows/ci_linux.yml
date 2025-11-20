@@ -289,4 +289,4 @@ jobs:
         shell: bash
         run: shopt -s globstar && rustfmt --check tests/compiletests/ui/**/*.rs
       - name: Compiletest
-        run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_70,compute_90
+        run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90

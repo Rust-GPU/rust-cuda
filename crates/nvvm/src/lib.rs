@@ -253,13 +253,53 @@ impl FromStr for NvvmOption {
     }
 }
 
-/// Nvvm architecture, default is `Compute52`
+/// Nvvm architecture.
+///
+/// The following table indicates which `compute_*` values are supported by which CUDA versions.
+///
+/// ```text
+/// -----------------------------------------------------------------------------
+///             | Supported `compute_*` values (written vertically)
+/// -----------------------------------------------------------------------------
+/// CUDA        |                                 1 1 1 1 1 1
+/// Toolkit     | 5 5 5 6 6 6 7 7 7 7 8 8 8 8 8 9 0 0 0 1 2 2
+/// version     | 0 2 3 0 1 2 0 2 3 5 0 6 7 8 9 0 0 1 3 0 0 1
+/// -----------------------------------------------------------------------------
+/// 12.[01].0   | b b b b b b b b b b b b - - b b - - - - - -
+/// 12.2.0      | b b b b b b b b b b b b - - b a - - - - - -
+/// 12.[3456].0 | b b b b b b b b b b b b b - b a - - - - - -
+/// 12.8.0      | b b b b b b b b b b b b b - b a a a - - a -
+/// 12.9.0      | b b b b b b b b - b b b b - b a f f f - f f
+/// 13.0.0      | - - - - - - - - - b b b b b b a f - f f f f
+/// -----------------------------------------------------------------------------  
+/// Legend:
+/// - 'b': baseline features only
+/// - 'a': baseline + architecture-specific features
+/// - 'f': baseline + architecture-specific + family-specific features
+///
+/// Note: there was no 12.7 release.
+/// ```
+///
+/// For example, CUDA 12.9.0 supports `compute_89`, `compute_90{,a}`, `compute_100{,a,f}`.
+///
+/// This information is from "PTX Compiler APIs" documents under
+/// <https://developer.nvidia.com/cuda-toolkit-archive>, e.g.
+/// <https://docs.nvidia.com/cuda/archive/13.0.0/ptx-compiler-api/index.html>. (Adjust the version
+/// in that URL as necessary.) Specifically, the `compute-*` values allowed with the `--gpu-name`
+/// option.
+///
+/// # Example
+///
+/// ```
+/// // The default value is `NvvmArch::Compute75`.
+/// # use nvvm::NvvmArch;
+/// assert_eq!(NvvmArch::default(), NvvmArch::Compute75);
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, strum::EnumIter)]
 pub enum NvvmArch {
     Compute35,
     Compute37,
     Compute50,
-    #[default]
     Compute52,
     Compute53,
     Compute60,
@@ -267,6 +307,12 @@ pub enum NvvmArch {
     Compute62,
     Compute70,
     Compute72,
+    /// This default value of 7.5 corresponds to Turing and later devices. We default to this
+    /// because it is the minimum supported by CUDA 13.0 while being in the middle of the range
+    /// supported by CUDA 12.x.
+    // WARNING: If you change the default, consider updating the `--target-arch` values used for
+    // compiletests in `ci_linux.yml` and `.github/workflows/ci_{linux,windows}.yml`.
+    #[default]
     Compute75,
     Compute80,
     Compute86,
