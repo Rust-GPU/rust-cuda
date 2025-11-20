@@ -979,15 +979,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "device"
-version = "0.1.0"
-dependencies = [
- "cuda_std",
- "cust_core",
- "optix_device",
-]
-
-[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1141,9 +1132,18 @@ dependencies = [
  "anyhow",
  "cuda_builder",
  "cust",
- "device",
+ "ex02_pipeline-kernels",
  "optix",
  "optix-sys",
+]
+
+[[package]]
+name = "ex02_pipeline-kernels"
+version = "0.1.0"
+dependencies = [
+ "cuda_std",
+ "cust_core",
+ "optix_device",
 ]
 
 [[package]]

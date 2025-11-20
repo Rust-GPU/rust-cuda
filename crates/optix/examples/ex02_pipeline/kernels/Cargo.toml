@@ -1,5 +1,5 @@
 [package]
-name = "device"
+name = "ex02_pipeline-kernels"
 version = "0.1.0"
 edition = "2021"
 

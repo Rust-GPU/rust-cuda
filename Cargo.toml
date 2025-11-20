@@ -18,7 +18,7 @@ members = [
   "crates/optix_device_macros",
   "crates/optix-sys",
   "crates/optix/examples/ex02_pipeline",
-  "crates/optix/examples/ex02_pipeline/device",
+  "crates/optix/examples/ex02_pipeline/kernels",
   "crates/optix/examples/ex03_window",
   "crates/optix/examples/ex04_mesh",
   "crates/optix/examples/rust/ex04_mesh_gpu",
