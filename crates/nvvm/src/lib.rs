@@ -243,46 +243,10 @@ impl FromStr for NvvmOption {
             }
             _ if s.starts_with("-arch=") => {
                 let slice = &s[6..];
-                if !slice.starts_with("compute_") {
-                    return Err(format!("unknown -arch value: {slice}"));
+                match NvvmArch::from_str(slice) {
+                    Ok(arch) => Self::Arch(arch),
+                    Err(_) => return Err(format!("unknown -arch value: {slice}")),
                 }
-                let arch_num = &slice[8..];
-                let arch = match arch_num {
-                    "35" => NvvmArch::Compute35,
-                    "37" => NvvmArch::Compute37,
-                    "50" => NvvmArch::Compute50,
-                    "52" => NvvmArch::Compute52,
-                    "53" => NvvmArch::Compute53,
-                    "60" => NvvmArch::Compute60,
-                    "61" => NvvmArch::Compute61,
-                    "62" => NvvmArch::Compute62,
-                    "70" => NvvmArch::Compute70,
-                    "72" => NvvmArch::Compute72,
-                    "75" => NvvmArch::Compute75,
-                    "80" => NvvmArch::Compute80,
-                    "86" => NvvmArch::Compute86,
-                    "87" => NvvmArch::Compute87,
-                    "89" => NvvmArch::Compute89,
-                    "90" => NvvmArch::Compute90,
-                    "90a" => NvvmArch::Compute90a,
-                    "100" => NvvmArch::Compute100,
-                    "100f" => NvvmArch::Compute100f,
-                    "100a" => NvvmArch::Compute100a,
-                    "101" => NvvmArch::Compute101,
-                    "101f" => NvvmArch::Compute101f,
-                    "101a" => NvvmArch::Compute101a,
-                    "103" => NvvmArch::Compute103,
-                    "103f" => NvvmArch::Compute103f,
-                    "103a" => NvvmArch::Compute103a,
-                    "120" => NvvmArch::Compute120,
-                    "120f" => NvvmArch::Compute120f,
-                    "120a" => NvvmArch::Compute120a,
-                    "121" => NvvmArch::Compute121,
-                    "121f" => NvvmArch::Compute121f,
-                    "121a" => NvvmArch::Compute121a,
-                    _ => return Err(format!("unknown -arch=compute_NN value: {arch_num}")),
-                };
-                Self::Arch(arch)
             }
             _ => return Err(format!("unknown option: {s}")),
         })
@@ -337,6 +301,48 @@ impl Display for NvvmArch {
             // Fallback for unexpected format
             f.write_str(&raw)
         }
+    }
+}
+
+impl FromStr for NvvmArch {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "compute_35" => NvvmArch::Compute35,
+            "compute_37" => NvvmArch::Compute37,
+            "compute_50" => NvvmArch::Compute50,
+            "compute_52" => NvvmArch::Compute52,
+            "compute_53" => NvvmArch::Compute53,
+            "compute_60" => NvvmArch::Compute60,
+            "compute_61" => NvvmArch::Compute61,
+            "compute_62" => NvvmArch::Compute62,
+            "compute_70" => NvvmArch::Compute70,
+            "compute_72" => NvvmArch::Compute72,
+            "compute_75" => NvvmArch::Compute75,
+            "compute_80" => NvvmArch::Compute80,
+            "compute_86" => NvvmArch::Compute86,
+            "compute_87" => NvvmArch::Compute87,
+            "compute_89" => NvvmArch::Compute89,
+            "compute_90" => NvvmArch::Compute90,
+            "compute_90a" => NvvmArch::Compute90a,
+            "compute_100" => NvvmArch::Compute100,
+            "compute_100f" => NvvmArch::Compute100f,
+            "compute_100a" => NvvmArch::Compute100a,
+            "compute_101" => NvvmArch::Compute101,
+            "compute_101f" => NvvmArch::Compute101f,
+            "compute_101a" => NvvmArch::Compute101a,
+            "compute_103" => NvvmArch::Compute103,
+            "compute_103f" => NvvmArch::Compute103f,
+            "compute_103a" => NvvmArch::Compute103a,
+            "compute_120" => NvvmArch::Compute120,
+            "compute_120f" => NvvmArch::Compute120f,
+            "compute_120a" => NvvmArch::Compute120a,
+            "compute_121" => NvvmArch::Compute121,
+            "compute_121f" => NvvmArch::Compute121f,
+            "compute_121a" => NvvmArch::Compute121a,
+            _ => return Err("unknown compile target"),
+        })
     }
 }
 
@@ -1116,8 +1122,8 @@ mod tests {
         err("blah", "unknown option: blah");
         err("-aardvark", "unknown option: -aardvark");
         err("-arch=compute75", "unknown -arch value: compute75");
-        err("-arch=compute_10", "unknown -arch=compute_NN value: 10");
-        err("-arch=compute_100x", "unknown -arch=compute_NN value: 100x");
+        err("-arch=compute_10", "unknown -arch value: compute_10");
+        err("-arch=compute_100x", "unknown -arch value: compute_100x");
         err("-opt=3", "-opt=3 is the default");
         err("-opt=99", "unknown -opt value: 99");
     }
