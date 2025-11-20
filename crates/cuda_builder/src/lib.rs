@@ -257,23 +257,6 @@ impl CudaBuilder {
         self
     }
 
-    /// The virtual compute architecture to target for PTX generation. This
-    /// dictates how certain things are codegenned and may affect performance
-    /// and/or which gpus the code can run on.
-    ///
-    /// You should generally try to pick an arch that will work with most
-    /// GPUs you want your program to work with.
-    ///
-    /// If you are unsure, either leave this option to default, or pick something around 5.2 to 7.x.
-    ///
-    /// You can find a list of features supported on each arch and a list of GPUs for every
-    /// arch [`here`](https://en.wikipedia.org/wiki/CUDA#Version_features_and_specifications).
-    ///
-    /// NOTE that this does not necessarily mean that code using a certain capability
-    /// will not work on older capabilities. It means that if it uses certain
-    /// features it may not work.
-    ///
-    /// The chosen architecture enables target features for conditional compilation.
     /// See the documentation on the `arch` field for more details.
     pub fn arch(mut self, arch: NvvmArch) -> Self {
         self.arch = arch;
