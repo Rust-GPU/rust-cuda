@@ -472,8 +472,15 @@ impl NvvmArch {
         }
     }
 
-    /// Gets all target features up to and including this architecture. This effectively answers
+    /// Gets all target features supported by this compilation target. This effectively answers
     /// the question "for a given compilation target, what architectural features can be used?"
+    /// E.g. the "compute_90" compilation target includes features from "compute_80" and earlier.
+    /// This set of features does not change over time.
+    ///
+    /// Note that this is different to the question "for a given compilation target, what devices
+    /// can the generated PTX code run on?" E.g. PTX code compiled for the "compute_90" compilation
+    /// target can run on devices with compute capability 9.0 and later. This set of devices will
+    /// expand over time, as new devices are released.
     ///
     /// # Examples
     ///
