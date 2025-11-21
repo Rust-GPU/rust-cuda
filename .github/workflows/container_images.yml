@@ -30,9 +30,6 @@ jobs:
           - runner: ubuntu-24.04-arm
             arch: arm64
         variance:
-          - name: Ubuntu-22.04/CUDA-11.8.0
-            image: "rust-gpu/rust-cuda-ubuntu22-cuda11"
-            dockerfile: ./container/ubuntu22-cuda11/Dockerfile
           - name: Ubuntu-22.04/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-ubuntu22-cuda12"
             dockerfile: ./container/ubuntu22-cuda12/Dockerfile
@@ -157,8 +154,6 @@ jobs:
       fail-fast: false
       matrix:
         variance:
-          - name: Ubuntu-22.04/CUDA-11.8.0
-            image: "rust-gpu/rust-cuda-ubuntu22-cuda11"
           - name: Ubuntu-22.04/CUDA-12.8.1
             image: "rust-gpu/rust-cuda-ubuntu22-cuda12"
           - name: Ubuntu-24.04/CUDA-12.8.1
