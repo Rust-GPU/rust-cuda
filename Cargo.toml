@@ -21,7 +21,7 @@ members = [
   "crates/optix/examples/ex02_pipeline/kernels",
   "crates/optix/examples/ex03_window",
   "crates/optix/examples/ex04_mesh",
-  "crates/optix/examples/rust/ex04_mesh_gpu",
+  "crates/optix/examples/ex04_mesh/kernels",
   "crates/ptx",
   "crates/ptx_compiler",
   "crates/rustc_codegen_nvvm",

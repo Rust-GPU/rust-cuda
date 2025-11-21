@@ -1,5 +1,5 @@
 [package]
-name = "ex04_mesh_gpu"
+name = "ex04_mesh-kernels"
 version = "0.1.0"
 edition = "2021"
 
