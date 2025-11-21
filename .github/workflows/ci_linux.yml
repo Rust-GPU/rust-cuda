@@ -148,24 +148,14 @@ jobs:
       - name: Build workspace
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
-            cargo build --workspace \
-              --exclude "optix*" \
-              --exclude "path-tracer" \
-              --exclude "denoiser" \
-              --exclude "ex0*" \
-              --exclude "cudnn*"
+            cargo build
           '
 
       - name: Clippy
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
             export RUSTFLAGS=-Dwarnings
-            cargo clippy --workspace \
-              --exclude "optix*" \
-              --exclude "path-tracer" \
-              --exclude "denoiser" \
-              --exclude "ex0*" \
-              --exclude "cudnn*"
+            cargo clippy
           '
 
       # Very limited testing because we can only run tests that don't rely on having a CUDA GPU.
@@ -185,11 +175,6 @@ jobs:
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
             export RUSTDOCFLAGS=-Dwarnings
             cargo doc --workspace --all-features --document-private-items --no-deps \
-              --exclude "optix*" \
-              --exclude "path-tracer" \
-              --exclude "denoiser" \
-              --exclude "ex0*" \
-              --exclude "cudnn*" \
               --exclude "cust_raw"
           '
 
