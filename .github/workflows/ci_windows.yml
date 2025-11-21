@@ -96,9 +96,9 @@ jobs:
           RUSTFLAGS: -Dwarnings
         run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "vecadd*" --exclude "gemm*" --exclude "ex0*" --exclude "cudnn*" --exclude "sha2*"
 
-      # Don't currently test because many tests rely on the system having a CUDA GPU
-      # - name: Test
-      #   run: cargo test --workspace
+      # Very limited testing because we can only run tests that don't rely on having a CUDA GPU.
+      - name: Test
+        run: cargo test -p cuda_std -p gpu_rand -p nvvm -p rustc_codegen_nvvm
 
       - name: Check documentation
         env:

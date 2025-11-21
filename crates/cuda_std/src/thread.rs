@@ -42,16 +42,24 @@
 //! ## Computing global indices (examples)
 //!
 //! 1D global thread index:
-//! ```rust
-//! use cuda_std::thread;
-//! let gx = thread::block_idx_x() * thread::block_dim_x() + thread::thread_idx_x();
+//! ```no_run
+//! # use cuda_std::kernel;
+//! ##[kernel]
+//! pub unsafe fn f1d() {
+//!     use cuda_std::thread;
+//!     let gx = thread::block_idx_x() * thread::block_dim_x() + thread::thread_idx_x();
+//! }
 //! ```
 //!
 //! 2D global coordinates (x, y):
 //! ```rust
-//! use cuda_std::thread;
-//! let x = thread::block_idx_x() * thread::block_dim_x() + thread::thread_idx_x();
-//! let y = thread::block_idx_y() * thread::block_dim_y() + thread::thread_idx_y();
+//! # use cuda_std::kernel;
+//! ##[kernel]
+//! pub unsafe fn f2d() {
+//!     use cuda_std::thread;
+//!     let x = thread::block_idx_x() * thread::block_dim_x() + thread::thread_idx_x();
+//!     let y = thread::block_idx_y() * thread::block_dim_y() + thread::thread_idx_y();
+//! }
 //! ```
 //!
 //! Note: Hardware limits for block dimensions, grid dimensions, and total threads per block

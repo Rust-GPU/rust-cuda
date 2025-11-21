@@ -171,6 +171,18 @@ jobs:
               --exclude "cudnn*"
           '
 
+      # Very limited testing because we can only run tests that don't rely on having a CUDA GPU.
+      - name: Test
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            export RUSTFLAGS=-Dwarnings
+            cargo test \
+              -p cuda_std \
+              -p gpu_rand \
+              -p nvvm \
+              -p rustc_codegen_nvvm
+          '
+
       - name: Check documentation
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail

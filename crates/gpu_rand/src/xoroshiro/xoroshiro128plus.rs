@@ -27,8 +27,8 @@ impl Xoroshiro128Plus {
     /// parallel computations.
     ///
     /// ```
-    /// use rand_xoshiro::rand_core::SeedableRng;
-    /// use rand_xoshiro::Xoroshiro128Plus;
+    /// use gpu_rand::xoroshiro::rand_core::SeedableRng;
+    /// use gpu_rand::xoroshiro::Xoroshiro128Plus;
     ///
     /// let rng1 = Xoroshiro128Plus::seed_from_u64(0);
     /// let mut rng2 = rng1.clone();
