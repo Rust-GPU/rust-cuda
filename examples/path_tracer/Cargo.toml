@@ -6,13 +6,11 @@ edition = "2018"
 [dependencies]
 glam = { version = "0.30", features = ["bytemuck", "cuda", "mint"] }
 bytemuck = { version = "1.21", features = ["derive"] }
-cust = { version = "0.3", path = "../../../crates/cust", features = [
-    "impl_glam",
-] }
+cust = { version = "0.3", path = "../../crates/cust", features = ["impl_glam"] }
 image = "0.25.5"
 path-tracer-kernels = { path = "kernels" }
-gpu_rand = { version = "0.1", path = "../../../crates/gpu_rand" }
-optix = { version = "0.1", path = "../../../crates/optix" }
+gpu_rand = { version = "0.1", path = "../../crates/gpu_rand" }
+optix = { version = "0.1", path = "../../crates/optix" }
 glium = "0.32.0"
 glutin = "0.28.0"
 imgui = "0.9.0"

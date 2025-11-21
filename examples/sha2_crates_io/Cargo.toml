@@ -1,10 +1,12 @@
 [package]
-name = "i128_demo"
+name = "sha2_crates_io"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cust = { path = "../../../crates/cust" }
+cust = { path = "../../crates/cust" }
+sha2_crates_io_kernels = { path = "kernels" }
+sha2 = "0.10"
 
 [build-dependencies]
 cuda_builder = { workspace = true, default-features = false }

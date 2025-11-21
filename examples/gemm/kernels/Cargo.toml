@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cuda_std = { path = "../../../../crates/cuda_std" }
+cuda_std = { path = "../../../crates/cuda_std" }
 glam = { version = "0.30.1", default-features = false, features = ["cuda", "nostd-libm"] }
 
 [lib]

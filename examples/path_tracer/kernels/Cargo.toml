@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-cuda_std = { version = "0.2", path = "../../../../crates/cuda_std" }
+cuda_std = { version = "0.2", path = "../../../crates/cuda_std" }
 glam = { version = "0.30", default-features = false, features = ["libm", "cuda"] }
 enum_dispatch = "0.3.13"
-gpu_rand = { version = "0.1", path = "../../../../crates/gpu_rand" }
-cust_core = { path = "../../../../crates/cust_core", features=["glam"] }
-optix_device = { path = "../../../../crates/optix_device" }
+gpu_rand = { version = "0.1", path = "../../../crates/gpu_rand" }
+cust_core = { path = "../../../crates/cust_core", features = ["glam"] }
+optix_device = { path = "../../../crates/optix_device" }
 approx = { version = "0.5" }
 
 [lib]
