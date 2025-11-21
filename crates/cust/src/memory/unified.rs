@@ -640,10 +640,19 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
         let mem_size = std::mem::size_of_val(slice);
 
         unsafe {
+            let id = -1; // -1 is CU_DEVICE_CPU
             driver_sys::cuMemPrefetchAsync(
                 slice.as_ptr() as driver_sys::CUdeviceptr,
                 mem_size,
-                -1, // CU_DEVICE_CPU #define
+                #[cfg(cuMemPrefetchAsync_v2)]
+                driver_sys::CUmemLocation {
+                    type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    id,
+                },
+                #[cfg(not(cuMemPrefetchAsync_v2))]
+                id,
+                #[cfg(cuMemPrefetchAsync_v2)]
+                0, // flags for future use, must be 0 as of CUDA 13.0
                 stream.as_inner(),
             )
             .to_result()?;
@@ -677,10 +686,19 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
         let mem_size = std::mem::size_of_val(slice);
 
         unsafe {
+            let id = device.as_raw();
             driver_sys::cuMemPrefetchAsync(
                 slice.as_ptr() as driver_sys::CUdeviceptr,
                 mem_size,
-                device.as_raw(),
+                #[cfg(cuMemPrefetchAsync_v2)]
+                driver_sys::CUmemLocation {
+                    type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    id,
+                },
+                #[cfg(not(cuMemPrefetchAsync_v2))]
+                id,
+                #[cfg(cuMemPrefetchAsync_v2)]
+                0, // flags for future use, must be 0 as of CUDA 13.0
                 stream.as_inner(),
             )
             .to_result()?;
@@ -709,11 +727,18 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
         };
 
         unsafe {
+            let id = 0;
             driver_sys::cuMemAdvise(
                 slice.as_ptr() as driver_sys::CUdeviceptr,
                 mem_size,
                 advice,
-                0,
+                #[cfg(cuMemAdvise_v2)]
+                driver_sys::CUmemLocation {
+                    type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    id,
+                },
+                #[cfg(not(cuMemAdvise_v2))]
+                id,
             )
             .to_result()?;
         }
@@ -744,11 +769,18 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
         let mem_size = std::mem::size_of_val(slice);
 
         unsafe {
+            let id = preferred_location.map(|d| d.as_raw()).unwrap_or(-1); // -1 is CU_DEVICE_CPU
             driver_sys::cuMemAdvise(
                 slice.as_ptr() as driver_sys::CUdeviceptr,
                 mem_size,
                 driver_sys::CUmem_advise::CU_MEM_ADVISE_SET_PREFERRED_LOCATION,
-                preferred_location.map(|d| d.as_raw()).unwrap_or(-1),
+                #[cfg(cuMemAdvise_v2)]
+                driver_sys::CUmemLocation {
+                    type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    id,
+                },
+                #[cfg(not(cuMemAdvise_v2))]
+                id,
             )
             .to_result()?;
         }
@@ -761,11 +793,18 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
         let mem_size = std::mem::size_of_val(slice);
 
         unsafe {
+            let id = 0;
             driver_sys::cuMemAdvise(
                 slice.as_ptr() as driver_sys::CUdeviceptr,
                 mem_size,
                 driver_sys::CUmem_advise::CU_MEM_ADVISE_UNSET_PREFERRED_LOCATION,
-                0,
+                #[cfg(cuMemAdvise_v2)]
+                driver_sys::CUmemLocation {
+                    type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    id,
+                },
+                #[cfg(not(cuMemAdvise_v2))]
+                id,
             )
             .to_result()?;
         }

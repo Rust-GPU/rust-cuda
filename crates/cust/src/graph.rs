@@ -415,6 +415,8 @@ impl Graph {
                 self.raw,
                 ptr::null_mut(),
                 ptr::null_mut(),
+                #[cfg(cuGraphGetEdges_v2)]
+                ptr::null_mut(),
                 size.as_mut_ptr(),
             )
             .to_result()?;
@@ -439,6 +441,8 @@ impl Graph {
                 self.raw,
                 from.as_mut_ptr(),
                 to.as_mut_ptr(),
+                #[cfg(cuGraphGetEdges_v2)]
+                ptr::null_mut(),
                 &num_edges as *const _ as *mut usize,
             )
             .to_result()?;
