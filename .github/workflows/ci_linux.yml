@@ -24,8 +24,6 @@ jobs:
   build:
     name: Build / ${{ matrix.variance.name }}
     runs-on: ${{ matrix.variance.runner }}
-    container:
-      image: ${{ matrix.variance.image }}
     strategy:
       fail-fast: false
       matrix:
@@ -108,34 +106,81 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Pull build image
+        run: docker pull ${{ matrix.variance.image }}
+
+      - name: Set container name
+        run: echo "CONTAINER_NAME=ci-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.variance.runner }}" >> $GITHUB_ENV
+
+      - name: Start build container
+        run: |
+          docker create --name "$CONTAINER_NAME" \
+            -v "$PWD":/workspace \
+            -w /workspace \
+            -e RUST_LOG \
+            -e RUST_BACKTRACE \
+            ${{ matrix.variance.image }} \
+            sleep infinity
+          docker start "$CONTAINER_NAME"
+
       - name: Verify CUDA, Rust installation
         run: |
-          nvcc --version
-          rustup show
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            nvcc --version
+            rustup show
+          '
 
       - name: Rustfmt
-        run: cargo fmt --all -- --check
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            cargo fmt --all -- --check
+          '
 
       - name: Build all bindings
-        run: cargo build --all-features -p cust_raw
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            cargo build --all-features -p cust_raw
+          '
 
       - name: Build workspace
-        run: cargo build --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*"
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            cargo build --workspace \
+              --exclude "optix*" \
+              --exclude "path-tracer" \
+              --exclude "denoiser" \
+              --exclude "ex0*" \
+              --exclude "cudnn*"
+          '
 
       - name: Clippy
-        env:
-          RUSTFLAGS: -Dwarnings
-        run: cargo clippy --workspace --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*"
-
-      # Don't currently test because many tests rely on the system having a CUDA GPU
-      # - name: Test
-      #   run: cargo test --workspace
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            export RUSTFLAGS=-Dwarnings
+            cargo clippy --workspace \
+              --exclude "optix*" \
+              --exclude "path-tracer" \
+              --exclude "denoiser" \
+              --exclude "ex0*" \
+              --exclude "cudnn*"
+          '
 
       - name: Check documentation
-        env:
-          RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "optix*" --exclude "path-tracer" --exclude "denoiser" --exclude "ex0*" --exclude "cudnn*" --exclude "cust_raw"
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
+            export RUSTDOCFLAGS=-Dwarnings
+            cargo doc --workspace --all-features --document-private-items --no-deps \
+              --exclude "optix*" \
+              --exclude "path-tracer" \
+              --exclude "denoiser" \
+              --exclude "ex0*" \
+              --exclude "cudnn*" \
+              --exclude "cust_raw"
+          '
 
+      - name: Stop build container
+        run: |
+          docker rm -f "$CONTAINER_NAME" || true
       - name: Prepare artifact details
         id: artifact_details
         run: |
