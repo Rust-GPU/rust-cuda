@@ -17,6 +17,7 @@ members = [
   "crates/optix_device",
   "crates/optix_device_macros",
   "crates/optix-sys",
+  "crates/optix/examples/denoiser",
   "crates/optix/examples/ex02_pipeline",
   "crates/optix/examples/ex02_pipeline/kernels",
   "crates/optix/examples/ex03_window",
@@ -37,7 +38,6 @@ members = [
   "examples/cuda/sha2_crates_io/kernels",
   "examples/cuda/vecadd",
   "examples/cuda/vecadd/kernels",
-  "examples/optix/denoiser",
 
   "samples/introduction/async_api",
   "samples/introduction/async_api/kernels",
