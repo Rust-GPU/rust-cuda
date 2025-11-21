@@ -109,6 +109,11 @@ jobs:
       - name: Pull build image
         run: docker pull ${{ matrix.variance.image }}
 
+      - name: Record host UID/GID
+        run: |
+          echo "HOST_UID=$(id -u)" >> $GITHUB_ENV
+          echo "HOST_GID=$(id -g)" >> $GITHUB_ENV
+
       - name: Set container name
         run: echo "CONTAINER_NAME=ci-build-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.variance.runner }}" >> $GITHUB_ENV
 
@@ -177,6 +182,11 @@ jobs:
               --exclude "cudnn*" \
               --exclude "cust_raw"
           '
+
+      - name: Normalize build artifacts ownership
+        run: |
+          docker exec "$CONTAINER_NAME" bash -lc "rm -rf /workspace/target/debug/incremental || true"
+          docker exec "$CONTAINER_NAME" bash -lc "chown -R ${HOST_UID}:${HOST_GID} /workspace/target || true"
 
       - name: Stop build container
         run: |
