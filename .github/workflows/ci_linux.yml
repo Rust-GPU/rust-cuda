@@ -55,6 +55,7 @@ jobs:
 
     steps:
       - name: Free up space
+        # Without this the job will likely run out of disk space.
         run: |
           df -h
 

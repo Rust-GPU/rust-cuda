@@ -44,6 +44,7 @@ jobs:
             dockerfile: ./container/rockylinux9-cuda12/Dockerfile
     steps:
       - name: Free up space
+        # Without this the job will likely run out of disk space.
         run: |
           df -h
 
