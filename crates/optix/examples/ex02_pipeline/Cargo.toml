@@ -10,7 +10,7 @@ optix = { path = "../../" }
 optix-sys = { path = "../../../optix-sys" }
 cust = { path = "../../../cust" }
 anyhow = "1.0.44"
-device = { path = "./device" }
+ex02_pipeline-kernels = { path = "./kernels" }
 
 [build-dependencies]
 cuda_builder = { workspace = true, default-features = false }

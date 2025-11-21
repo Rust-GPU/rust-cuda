@@ -1,8 +1,12 @@
+use std::env;
+use std::path;
+
 use cuda_builder::CudaBuilder;
 
 fn main() {
-    CudaBuilder::new("../rust/ex04_mesh_gpu")
-        .copy_to("../resources/ex04_mesh.ptx")
+    let ptx_path = path::PathBuf::from(env::var("OUT_DIR").unwrap()).join("kernels.ptx");
+    CudaBuilder::new("kernels")
+        .copy_to(ptx_path)
         .build()
         .unwrap();
 }

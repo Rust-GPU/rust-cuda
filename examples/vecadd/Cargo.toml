@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-cust = { path = "../../../crates/cust" }
+cust = { path = "../../crates/cust" }
 nanorand = "0.7"
 
 [build-dependencies]

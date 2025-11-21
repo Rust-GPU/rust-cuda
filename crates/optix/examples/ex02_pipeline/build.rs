@@ -18,9 +18,9 @@ fn main() {
         .collect::<Vec<_>>();
     compile_to_ptx("src/ex02_pipeline.cu", &args);
 
-    let ptx_path = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("device.ptx");
+    let ptx_path = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("kernels.ptx");
 
-    CudaBuilder::new("device")
+    CudaBuilder::new("kernels")
         .copy_to(ptx_path)
         .arch(cuda_builder::NvvmArch::Compute75)
         .optix(true)

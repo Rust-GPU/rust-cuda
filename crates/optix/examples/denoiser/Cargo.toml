@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-optix = { version = "0.1", path = "../../../crates/optix" }
+optix = { version = "0.1", path = "../../" }
 structopt = "0.3"
-cust = { version = "0.3", path = "../../../crates/cust", features = ["impl_glam", "bytemuck"] }
+cust = { version = "0.3", path = "../../../cust", features = ["impl_glam", "bytemuck"] }
 image = "0.25.5"
 glam = { version = "0.30", features = ["bytemuck"] }

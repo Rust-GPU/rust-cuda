@@ -28,7 +28,7 @@ pub struct Renderer {
     cuda_context: CuContext,
 }
 
-use device::LaunchParams;
+use kernels::LaunchParams;
 
 impl Renderer {
     pub fn new(width: usize, height: usize) -> Result<Renderer, Box<dyn std::error::Error>> {
@@ -62,7 +62,7 @@ impl Renderer {
             .exception_flags(ExceptionFlags::NONE);
 
         // let ptx = include_str!(concat!(env!("OUT_DIR"), "/src/ex02_pipeline.ptx"));
-        let ptx = include_str!(concat!(env!("OUT_DIR"), "/device.ptx"));
+        let ptx = include_str!(concat!(env!("OUT_DIR"), "/kernels.ptx"));
 
         let (module, _log) = Module::new(
             &mut ctx,
