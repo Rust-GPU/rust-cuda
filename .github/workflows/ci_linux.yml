@@ -253,14 +253,23 @@ jobs:
             image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12:latest"
             runner: ubuntu-latest
     steps:
+      - name: Compute artifact name
+        id: test_artifact
+        run: |
+          SANITIZED_NAME=$(echo '${{ matrix.variance.name }}' | sed 's/[^a-zA-Z0-9.-]/-/g')
+          ARTIFACT_NAME="target_debug-${SANITIZED_NAME}-${{ github.run_id }}"
+          ARTIFACT_PATH="target/debug"
+          echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "path=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build.outputs.artifact_name }}
-          path: ${{ needs.build.outputs.artifact_path }}
+          name: ${{ steps.test_artifact.outputs.name }}
+          path: ${{ steps.test_artifact.outputs.path }}
 
       - name: List downloaded files
-        run: ls -lR ${{ needs.build.outputs.artifact_path }}
+        run: ls -lR ${{ steps.test_artifact.outputs.path }}
 
       - name: Run remote tests
         env:
