@@ -43,6 +43,46 @@ jobs:
             image: "rust-gpu/rust-cuda-rockylinux9-cuda12"
             dockerfile: ./container/rockylinux9-cuda12/Dockerfile
     steps:
+      - name: Free up space
+        run: |
+          df -h
+
+          # Remove Java
+          sudo rm -rf /usr/lib/jvm
+
+          # Remove .NET
+          sudo rm -rf /usr/share/dotnet
+
+          # Remove Swift
+          sudo rm -rf /usr/share/swift
+
+          # Remove Haskell
+          sudo rm -rf /usr/local/.ghcup
+
+          # Remove Julia
+          sudo rm -rf /usr/local/julia*
+
+          # Remove Android SDKs
+          sudo rm -rf /usr/local/lib/android
+
+          # Remove Chromium
+          sudo rm -rf /usr/local/share/chromium
+
+          # Remove Microsoft/Edge and Google Chrome builds
+          sudo rm -rf /opt/microsoft /opt/google
+
+          # Remove Azure CLI
+          sudo rm -rf /opt/az
+
+          # Remove PowerShell
+          sudo rm -rf /usr/local/share/powershell
+
+          # Remove CodeQL and other toolcaches
+          sudo rm -rf /opt/hostedtoolcache
+
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Validate platform
