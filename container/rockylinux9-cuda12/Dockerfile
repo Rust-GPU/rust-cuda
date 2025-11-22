@@ -57,6 +57,7 @@ RUN dnf -y install \
     --nobest \
     --allowerasing \
     --setopt=install_weak_deps=False \
+    clang \
     openssl-devel \
     pkgconfig \
     which \
