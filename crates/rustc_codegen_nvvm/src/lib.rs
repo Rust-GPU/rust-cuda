@@ -146,7 +146,11 @@ impl CodegenBackend for NvvmCodegenBackend {
             for opt in &args.nvvm_options {
                 if let ::nvvm::NvvmOption::Arch(arch) = opt {
                     // Add all features up to and including the current architecture
-                    features.extend(arch.all_target_features());
+                    features.extend(
+                        arch.all_target_features()
+                            .into_iter()
+                            .map(|s| s.to_string()),
+                    );
                     break;
                 }
             }
