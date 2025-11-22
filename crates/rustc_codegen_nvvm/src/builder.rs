@@ -518,8 +518,20 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         order: AtomicOrdering,
         _size: Size,
     ) -> &'ll Value {
-        // Since for any A, A | 0 = A, and performing atomics on constant memory is UB in Rust, we can abuse or to perform atomic reads.
-        self.atomic_rmw(AtomicRmwBinOp::AtomicOr, ptr, self.const_int(ty, 0), order)
+        // Since for any A, A | 0 = A, and performing atomics on constant memory is UB in Rust, we
+        // can abuse bitwise-or to perform atomic reads.
+        //
+        // njn: is `ty` the type of the loaded value, or the type of the
+        // pointer to the loaded-from address? i.e. `T` or `*const T`? I'm
+        // assuming `T`
+        let ret_ptr = unsafe { llvm::LLVMRustGetTypeKind(ty) == llvm::TypeKind::Pointer };
+        self.atomic_rmw(
+            AtomicRmwBinOp::AtomicOr,
+            ptr,
+            self.const_int(ty, 0),
+            order,
+            ret_ptr,
+        )
     }
 
     fn load_operand(&mut self, place: PlaceRef<'tcx, &'ll Value>) -> OperandRef<'tcx, &'ll Value> {
@@ -752,7 +764,9 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         _size: Size,
     ) {
         // We can exchange *ptr with val, and then discard the result.
-        self.atomic_rmw(AtomicRmwBinOp::AtomicXchg, ptr, val, order);
+        let ret_ptr =
+            unsafe { llvm::LLVMRustGetTypeKind(llvm::LLVMTypeOf(val)) == llvm::TypeKind::Pointer };
+        self.atomic_rmw(AtomicRmwBinOp::AtomicXchg, ptr, val, order, ret_ptr);
     }
 
     fn gep(&mut self, ty: &'ll Type, ptr: &'ll Value, indices: &[&'ll Value]) -> &'ll Value {
@@ -1209,17 +1223,19 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         let success = self.extract_value(res, 1);
         (val, success)
     }
+
     fn atomic_rmw(
         &mut self,
         op: AtomicRmwBinOp,
         dst: &'ll Value,
         src: &'ll Value,
         order: AtomicOrdering,
+        ret_ptr: bool,
     ) -> &'ll Value {
         if matches!(op, AtomicRmwBinOp::AtomicNand) {
             self.fatal("Atomic NAND not supported yet!")
         }
-        self.atomic_op(
+        let mut res = self.atomic_op(
             dst,
             |builder, dst| {
                 // We are in a supported address space - just use ordinary atomics
@@ -1235,8 +1251,8 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 }
             },
             |builder, dst| {
-                // Local space is only accessible to the current thread.
-                // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
+                // Local space is only accessible to the current thread. So, there are no
+                // synchronization issues, and we can emulate it using a simple load/compare/store.
                 let load: &'ll Value =
                     unsafe { llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
                 let next_val = match op {
@@ -1270,7 +1286,17 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 unsafe { llvm::LLVMBuildStore(builder.llbuilder, next_val, dst) };
                 load
             },
-        )
+        );
+
+        // njn:
+        // - copied from rustc_codegen_llvm
+        // - but Fractal said: Here, if ret_ptr is true, we should cast dst to *usize, src to
+        //   usize, and then cast the return value back to a *T(by checking the original type of
+        //   src).
+        if ret_ptr && self.val_ty(res) != self.type_ptr() {
+            res = self.inttoptr(res, self.type_ptr());
+        }
+        res
     }
 
     fn atomic_fence(
