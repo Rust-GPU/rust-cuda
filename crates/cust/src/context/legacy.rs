@@ -262,8 +262,14 @@ impl Context {
             // lifetime guarantees so we create-and-push, then pop, then the programmer has to
             // push again.
             let mut ctx: CUcontext = ptr::null_mut();
-            driver_sys::cuCtxCreate(&mut ctx as *mut CUcontext, flags.bits(), device.as_raw())
-                .to_result()?;
+            driver_sys::cuCtxCreate(
+                &mut ctx as *mut CUcontext,
+                #[cfg(cuCtxCreate_v4)]
+                &mut driver_sys::CUctxCreateParams::default(),
+                flags.bits(),
+                device.as_raw(),
+            )
+            .to_result()?;
             Ok(Context { inner: ctx })
         }
     }

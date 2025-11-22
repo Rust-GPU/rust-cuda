@@ -2,7 +2,7 @@
 //! The build script for the cust_raw generates bindings for libraries in the
 //! CUDA SDK. The build scripts searches for the CUDA SDK by reading the
 //! `CUDA_PATH`, `CUDA_ROOT`, or `CUDA_TOOLKIT_ROOT_DIR` environment variables
-//! in that order. If none of these variables are set to a vaild CUDA Toolkit
+//! in that order. If none of these variables are set to a valid CUDA Toolkit
 //! SDK path, the build script will attempt to search for any SDK in the
 //! default installation locations for the current platform.
 //!
