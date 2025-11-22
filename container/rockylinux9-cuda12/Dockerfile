@@ -59,6 +59,13 @@ RUN dnf -y install \
     --setopt=install_weak_deps=False \
     clang \
     openssl-devel \
+    fontconfig-devel \
+    libX11-devel \
+    libXcursor-devel \
+    libXi-devel \
+    libXrandr-devel \
+    libxml2-devel \
+    ncurses-devel \
     pkgconfig \
     which \
     xz \
