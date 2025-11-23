@@ -1,3 +1,4 @@
+use core::mem::MaybeUninit;
 use cuda_std::address_space;
 use cuda_std::kernel;
 use cuda_std::thread;
@@ -38,11 +39,17 @@ pub unsafe fn gemm_tiled(
     beta: f32,
 ) {
     const TILE_SIZE: usize = 16;
+    const TILE_SIZE_2D: usize = TILE_SIZE * TILE_SIZE;
 
+    // Shared GPU memory is modelled with `#[address_space(shared)] static mut`. Unlike normal
+    // `static mut`, it is not initialized, and only exists for the duration of the kernel's
+    // (multi-)execution. Because it is not initialized, it must be marked with `MaybeUninit`,
+    // written with `write` (in unsafe blocks because writing a `static mut` is unsafe), and
+    // subsequently read with `assume_init`.
     #[address_space(shared)]
-    static mut TILE_A: [f32; TILE_SIZE * TILE_SIZE] = [0.; TILE_SIZE * TILE_SIZE];
+    static mut TILE_A: [MaybeUninit<f32>; TILE_SIZE_2D] = [MaybeUninit::uninit(); TILE_SIZE_2D];
     #[address_space(shared)]
-    static mut TILE_B: [f32; TILE_SIZE * TILE_SIZE] = [0.; TILE_SIZE * TILE_SIZE];
+    static mut TILE_B: [MaybeUninit<f32>; TILE_SIZE_2D] = [MaybeUninit::uninit(); TILE_SIZE_2D];
 
     // Thread indices within the block.
     let tx = thread::thread_idx_x() as usize;
@@ -57,20 +64,30 @@ pub unsafe fn gemm_tiled(
     for kk in (0..k).step_by(TILE_SIZE) {
         // Collaborative loading of tiles into shared memory.
         if row < m && (kk + tx) < k {
-            unsafe { TILE_A[ty * TILE_SIZE + tx] = mat_a[row * k + (kk + tx)] };
+            unsafe {
+                TILE_A[ty * TILE_SIZE + tx].write(mat_a[row * k + (kk + tx)]);
+            }
         } else {
-            unsafe { TILE_A[ty * TILE_SIZE + tx] = 0.0f32 };
+            unsafe {
+                TILE_A[ty * TILE_SIZE + tx].write(0.0f32);
+            }
         }
         if col < n && (kk + ty) < k {
-            unsafe { TILE_B[ty * TILE_SIZE + tx] = mat_b[(kk + ty) * n + col] };
+            unsafe {
+                TILE_B[ty * TILE_SIZE + tx].write(mat_b[(kk + ty) * n + col]);
+            }
         } else {
-            unsafe { TILE_B[ty * TILE_SIZE + tx] = 0.0f32 };
+            unsafe {
+                TILE_B[ty * TILE_SIZE + tx].write(0.0f32);
+            }
         }
         thread::sync_threads();
 
         // Perform the computation on the tile.
         for i in 0..TILE_SIZE {
-            sum += unsafe { TILE_A[ty * TILE_SIZE + i] * TILE_B[i * TILE_SIZE + tx] };
+            sum += unsafe {
+                TILE_A[ty * TILE_SIZE + i].assume_init() * TILE_B[i * TILE_SIZE + tx].assume_init()
+            };
         }
         thread::sync_threads();
     }
