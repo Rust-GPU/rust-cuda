@@ -1,82 +1,8 @@
-//! Static and Dynamic shared memory handling.
+//! Dynamic shared memory handling.
+//!
+//! Static shared memory is done via `#[address_space(shared)] static mut ...;`.
 
 use crate::gpu_only;
-
-/// Statically allocates a buffer large enough for `len` elements of `array_type`,
-/// yielding a `*mut array_type` that points to uninitialized shared memory. `len` must
-/// be a constant expression.
-///
-/// Note that this allocates the memory __statically__, it expands to a static in the
-/// `shared` address space. Therefore, calling this macro multiple times in a loop will
-/// always yield the same data. However, separate invocations of the macro will yield
-/// different buffers.
-///
-/// The data is uninitialized by default, therefore, you must be careful to not read the
-/// data before it is written to. The semantics of what "uninitialized" actually means
-/// on the GPU (i.e. if it yields unknown data or if it is UB to read it whatsoever) are
-/// not well known, so even if the type is valid for any backing memory, make sure to
-/// not read uninitialized data.
-///
-/// # Safety
-///
-/// Shared memory usage is fundamentally extremely unsafe and impossible to statically
-/// prove, therefore the burden of correctness is on the user. Some of the things you
-/// must ensure in your usage of shared memory are:
-///
-///  - Shared memory is only shared across __thread blocks__, not the entire device,
-///    therefore it is unsound to try and rely on sharing data across more than one
-///    block.
-///   - You must write to the shared buffer before reading from it as the data is
-///     uninitialized by default.
-///   - [`thread::sync_threads`](crate::thread::sync_threads) must be called before
-///     relying on the results of other threads, this ensures every thread has reached
-///     that point before going on. For example, reading another thread's data after
-///     writing to the buffer.
-///   - No access may be out of bounds, this usually means making sure the amount of
-///     threads and their dimensions are correct.
-///
-/// It is suggested to run your executable in `cuda-memcheck` to make sure usages of
-/// shared memory are right.
-///
-/// # Examples
-///
-/// ```no_run
-/// # use cuda_std::kernel;
-/// # use cuda_std::shared_array;
-/// # use cuda_std::thread;
-/// ##[kernel]
-/// pub unsafe fn reverse_array(d: *mut i32, n: usize) {
-///    let s = shared_array![i32; 64];
-///    let t = thread::thread_idx_x() as usize;
-///    let tr = n - t - 1;
-///    *s.add(t) = *d.add(t);
-///    thread::sync_threads();
-///    *d.add(t) = *s.add(tr);
-/// }
-/// ```
-#[macro_export]
-macro_rules! shared_array {
-    ($array_type:ty; $len:expr) => {{
-        #[$crate::gpu_only]
-        #[inline(always)]
-        fn shared_array() -> *mut $array_type {
-            use ::core::{cell::UnsafeCell, mem::MaybeUninit};
-            struct SyncWrapper(UnsafeCell<MaybeUninit<[$array_type; $len]>>);
-            // SAFETY: it is up to the user to verify sound shared memory usage, we cannot
-            // fundamentally check it for soundness.
-            unsafe impl Send for SyncWrapper {}
-            // SAFETY: see above
-            unsafe impl Sync for SyncWrapper {}
-
-            // the initializer is discarded when declaring shared globals, so it is unimportant.
-            #[$crate::address_space(shared)]
-            static SHARED: SyncWrapper = SyncWrapper(UnsafeCell::new(MaybeUninit::uninit()));
-
-            SHARED.0.get() as *mut $array_type
-        }
-        shared_array()
-    }};
-}
 
 /// Gets a pointer to the dynamic shared memory that was allocated by the caller of the kernel. The
 /// data is left uninitialized.

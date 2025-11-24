@@ -600,6 +600,7 @@ dependencies = [
  "compiletest_rs",
  "cuda_builder",
  "nvvm",
+ "rustc_codegen_nvvm",
  "tracing",
  "tracing-subscriber",
 ]

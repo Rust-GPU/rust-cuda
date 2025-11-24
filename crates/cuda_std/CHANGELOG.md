@@ -7,6 +7,7 @@ Notable changes to this project will be documented in this file.
 - Added warp shuffles, matches, reductions, and votes in the `warp` module.
 - Added `activemask` in the `warp` module to query a mask of the active threads.
 - Fixed `lane_id` generating invalid ptx.
+- Removed `shared_array!` due to unsoundness.
 
 ## 0.2.2 - 2/7/22
 

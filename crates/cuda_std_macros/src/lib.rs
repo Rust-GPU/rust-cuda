@@ -205,12 +205,61 @@ pub fn externally_visible(
 }
 
 /// Notifies the codegen to put a `static`/`static mut` inside of a specific memory address space.
-/// This is mostly for internal use and/or advanced users, as the codegen and `cuda_std` handle address space placement
-/// implicitly. **Improper use of this macro could yield weird or undefined behavior**.
+/// This is mostly for internal use and/or advanced users, as the codegen and `cuda_std` handle
+/// address space placement implicitly. **Improper use of this macro could yield weird or undefined
+/// behavior**.
 ///
-/// This macro takes a single argument which can either be `global`, `shared`, `constant`, or `local`.
+/// This macro takes a single argument which can either be `global`, `shared`, `constant`, or
+/// `local`.
 ///
 /// This macro does nothing on the CPU.
+///
+/// # Shared memory
+///
+/// The item `#[address_space(shared) static mut FOO: [MaybeUninit<T>; N];` statically allocates a
+/// buffer large enough for `N` elements of type `T`, yielding an uninitialized array in shared
+/// memory.
+///
+/// Note that this allocates the memory __statically__, i.e. it expands to a static in the `shared`
+/// address space. Therefore, calling this macro multiple times in a loop will always yield the
+/// same data. However, separate invocations of the macro will yield different buffers.
+///
+/// Because the data is uninitialized by default, the type within the array must be `MaybeUninit`,
+/// and uses must follow the usual rules of `MaybeUninit`, such as using `write`/`assume_init`.
+/// Using a non-`MaybeUninit` type is undefined behaviour.
+///
+/// # Safety
+///
+/// Shared memory usage is fundamentally unsafe and much of the burden of correctness is on the
+/// user. For example:
+/// - Shared memory is only shared across __thread blocks__, not the entire device, therefore it is
+///   unsound to rely on sharing data across more than one block.
+/// - You must write to the shared buffer before reading from it as the data is uninitialized by
+///   default.
+/// - `cuda_std::thread::sync_threads` must be called before relying on the results of other
+///   threads. This ensures every thread has reached that point before going on. For example, when
+///   reading another thread's data after writing to the buffer.
+///
+/// It is suggested to run your executable in `cuda-memcheck` to make sure usages of
+/// shared memory are right.
+///
+/// # Examples
+///
+/// ```ignore
+/// use core::mem::MaybeUninit;
+/// use cuda_std::*;
+///
+/// ##[kernel]
+/// pub unsafe fn reverse_array(d: *mut u32, n: usize) {
+///     ##[address_space(shared)]
+///     static mut S: [MaybeUninit<u32>; 64] = [const { MaybeUninit::uninit() }; 64];
+///     let i = thread::thread_idx_x() as usize;
+///     let ir = n - i - 1;
+///     unsafe { S[i].write(*d.add(i)); };
+///     thread::sync_threads();
+///     unsafe { *d.add(i) = S[ir].assume_init(); }
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn address_space(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> TokenStream {
     let mut global = syn::parse_macro_input!(item as syn::ItemStatic);
