@@ -190,7 +190,7 @@ These patterns work when using base architectures (no suffix), which enable all 
 
 ```rust,no_run
 // Code that works up to compute 6.0 (not 6.1+)
-#[cfg(all(target_feature = "compute_35", not(target_feature = "compute_61")))]
+#[cfg(not(target_feature = "compute_61"))]
 {
     // Maximum compatibility implementation
 }

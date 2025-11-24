@@ -300,8 +300,6 @@ impl FromStr for NvvmOption {
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, strum::EnumIter)]
 pub enum NvvmArch {
-    Compute35,
-    Compute37,
     Compute50,
     Compute52,
     Compute53,
@@ -310,6 +308,7 @@ pub enum NvvmArch {
     Compute62,
     Compute70,
     Compute72,
+    Compute73,
     /// This default value of 7.5 corresponds to Turing and later devices. We default to this
     /// because it is the minimum supported by CUDA 13.0 while being in the middle of the range
     /// supported by CUDA 12.x.
@@ -320,6 +319,7 @@ pub enum NvvmArch {
     Compute80,
     Compute86,
     Compute87,
+    Compute88,
     Compute89,
     Compute90,
     Compute90a,
@@ -332,6 +332,9 @@ pub enum NvvmArch {
     Compute103,
     Compute103f,
     Compute103a,
+    Compute110,
+    Compute110f,
+    Compute110a,
     Compute120,
     Compute120f,
     Compute120a,
@@ -351,8 +354,6 @@ impl FromStr for NvvmArch {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(match s {
-            "compute_35" => NvvmArch::Compute35,
-            "compute_37" => NvvmArch::Compute37,
             "compute_50" => NvvmArch::Compute50,
             "compute_52" => NvvmArch::Compute52,
             "compute_53" => NvvmArch::Compute53,
@@ -361,10 +362,12 @@ impl FromStr for NvvmArch {
             "compute_62" => NvvmArch::Compute62,
             "compute_70" => NvvmArch::Compute70,
             "compute_72" => NvvmArch::Compute72,
+            "compute_73" => NvvmArch::Compute73,
             "compute_75" => NvvmArch::Compute75,
             "compute_80" => NvvmArch::Compute80,
             "compute_86" => NvvmArch::Compute86,
             "compute_87" => NvvmArch::Compute87,
+            "compute_88" => NvvmArch::Compute88,
             "compute_89" => NvvmArch::Compute89,
             "compute_90" => NvvmArch::Compute90,
             "compute_90a" => NvvmArch::Compute90a,
@@ -377,6 +380,9 @@ impl FromStr for NvvmArch {
             "compute_103" => NvvmArch::Compute103,
             "compute_103f" => NvvmArch::Compute103f,
             "compute_103a" => NvvmArch::Compute103a,
+            "compute_110" => NvvmArch::Compute110,
+            "compute_110f" => NvvmArch::Compute110f,
+            "compute_110a" => NvvmArch::Compute110a,
             "compute_120" => NvvmArch::Compute120,
             "compute_120f" => NvvmArch::Compute120f,
             "compute_120a" => NvvmArch::Compute120a,
@@ -389,11 +395,9 @@ impl FromStr for NvvmArch {
 }
 
 impl NvvmArch {
-    /// Get the numeric capability value (e.g., 35 for Compute35)
+    /// Get the numeric capability value (e.g., 90 for `Compute90` or `Compute90a`).
     pub fn capability_value(&self) -> u32 {
         match self {
-            Self::Compute35 => 35,
-            Self::Compute37 => 37,
             Self::Compute50 => 50,
             Self::Compute52 => 52,
             Self::Compute53 => 53,
@@ -402,10 +406,12 @@ impl NvvmArch {
             Self::Compute62 => 62,
             Self::Compute70 => 70,
             Self::Compute72 => 72,
+            Self::Compute73 => 73,
             Self::Compute75 => 75,
             Self::Compute80 => 80,
             Self::Compute86 => 86,
             Self::Compute87 => 87,
+            Self::Compute88 => 88,
             Self::Compute89 => 89,
             Self::Compute90 => 90,
             Self::Compute90a => 90,
@@ -418,6 +424,9 @@ impl NvvmArch {
             Self::Compute103 => 103,
             Self::Compute103f => 103,
             Self::Compute103a => 103,
+            Self::Compute110 => 110,
+            Self::Compute110f => 110,
+            Self::Compute110a => 110,
             Self::Compute120 => 120,
             Self::Compute120f => 120,
             Self::Compute120a => 120,
@@ -437,11 +446,10 @@ impl NvvmArch {
         self.capability_value() % 10
     }
 
-    /// Get the target feature string (e.g., "compute_35" for Compute35, "compute_90a" for Compute90a)
+    /// Get the target feature string (e.g., "compute_50" for `Compute50`, "compute_90a" for
+    /// `Compute90a`).
     pub fn target_feature(&self) -> &'static str {
         match self {
-            Self::Compute35 => "compute_35",
-            Self::Compute37 => "compute_37",
             Self::Compute50 => "compute_50",
             Self::Compute52 => "compute_52",
             Self::Compute53 => "compute_53",
@@ -450,10 +458,12 @@ impl NvvmArch {
             Self::Compute62 => "compute_62",
             Self::Compute70 => "compute_70",
             Self::Compute72 => "compute_72",
+            Self::Compute73 => "compute_73",
             Self::Compute75 => "compute_75",
             Self::Compute80 => "compute_80",
             Self::Compute86 => "compute_86",
             Self::Compute87 => "compute_87",
+            Self::Compute88 => "compute_88",
             Self::Compute89 => "compute_89",
             Self::Compute90 => "compute_90",
             Self::Compute90a => "compute_90a",
@@ -466,6 +476,9 @@ impl NvvmArch {
             Self::Compute103 => "compute_103",
             Self::Compute103f => "compute_103f",
             Self::Compute103a => "compute_103a",
+            Self::Compute110 => "compute_110",
+            Self::Compute110f => "compute_110f",
+            Self::Compute110a => "compute_110a",
             Self::Compute120 => "compute_120",
             Self::Compute120f => "compute_120f",
             Self::Compute120a => "compute_120a",
@@ -489,10 +502,10 @@ impl NvvmArch {
     ///
     /// ```
     /// use nvvm::NvvmArch::*;
-    /// let features = Compute53.all_target_features();
+    /// let features = Compute61.all_target_features();
     /// assert_eq!(
     ///     features,
-    ///     vec![Compute35, Compute37, Compute50, Compute52, Compute53]
+    ///     vec![Compute50, Compute52, Compute53, Compute60, Compute61]
     /// );
     /// ```
     ///
@@ -558,9 +571,7 @@ impl NvvmArch {
     pub fn base_architecture(&self) -> Self {
         match self {
             // Already base variants
-            Self::Compute35
-            | Self::Compute37
-            | Self::Compute50
+            Self::Compute50
             | Self::Compute52
             | Self::Compute53
             | Self::Compute60
@@ -568,15 +579,18 @@ impl NvvmArch {
             | Self::Compute62
             | Self::Compute70
             | Self::Compute72
+            | Self::Compute73
             | Self::Compute75
             | Self::Compute80
             | Self::Compute86
             | Self::Compute87
+            | Self::Compute88
             | Self::Compute89
             | Self::Compute90
             | Self::Compute100
             | Self::Compute101
             | Self::Compute103
+            | Self::Compute110
             | Self::Compute120
             | Self::Compute121 => *self,
 
@@ -584,6 +598,7 @@ impl NvvmArch {
             Self::Compute100f => Self::Compute100,
             Self::Compute101f => Self::Compute101,
             Self::Compute103f => Self::Compute103,
+            Self::Compute110f => Self::Compute110,
             Self::Compute120f => Self::Compute120,
             Self::Compute121f => Self::Compute121,
 
@@ -592,6 +607,7 @@ impl NvvmArch {
             Self::Compute100a => Self::Compute100,
             Self::Compute101a => Self::Compute101,
             Self::Compute103a => Self::Compute103,
+            Self::Compute110a => Self::Compute110,
             Self::Compute120a => Self::Compute120,
             Self::Compute121a => Self::Compute121,
         }
@@ -733,8 +749,6 @@ mod tests {
 
     #[test]
     fn nvvm_arch_capability_value() {
-        assert_eq!(Compute35.capability_value(), 35);
-        assert_eq!(Compute37.capability_value(), 37);
         assert_eq!(Compute50.capability_value(), 50);
         assert_eq!(Compute52.capability_value(), 52);
         assert_eq!(Compute53.capability_value(), 53);
@@ -743,19 +757,37 @@ mod tests {
         assert_eq!(Compute62.capability_value(), 62);
         assert_eq!(Compute70.capability_value(), 70);
         assert_eq!(Compute72.capability_value(), 72);
+        assert_eq!(Compute73.capability_value(), 73);
         assert_eq!(Compute75.capability_value(), 75);
         assert_eq!(Compute80.capability_value(), 80);
         assert_eq!(Compute86.capability_value(), 86);
         assert_eq!(Compute87.capability_value(), 87);
+        assert_eq!(Compute88.capability_value(), 88);
         assert_eq!(Compute89.capability_value(), 89);
         assert_eq!(Compute90.capability_value(), 90);
+        assert_eq!(Compute90a.capability_value(), 90);
+        assert_eq!(Compute100.capability_value(), 100);
+        assert_eq!(Compute100f.capability_value(), 100);
+        assert_eq!(Compute100a.capability_value(), 100);
+        assert_eq!(Compute101.capability_value(), 101);
+        assert_eq!(Compute101f.capability_value(), 101);
+        assert_eq!(Compute101a.capability_value(), 101);
+        assert_eq!(Compute103.capability_value(), 103);
+        assert_eq!(Compute103f.capability_value(), 103);
+        assert_eq!(Compute103a.capability_value(), 103);
+        assert_eq!(Compute110.capability_value(), 110);
+        assert_eq!(Compute110f.capability_value(), 110);
+        assert_eq!(Compute110a.capability_value(), 110);
+        assert_eq!(Compute120.capability_value(), 120);
+        assert_eq!(Compute120f.capability_value(), 120);
+        assert_eq!(Compute120a.capability_value(), 120);
     }
 
     #[test]
     fn nvvm_arch_major_minor_version() {
         // Test major/minor version extraction
-        assert_eq!(Compute35.major_version(), 3);
-        assert_eq!(Compute35.minor_version(), 5);
+        assert_eq!(Compute53.major_version(), 5);
+        assert_eq!(Compute53.minor_version(), 3);
 
         assert_eq!(Compute70.major_version(), 7);
         assert_eq!(Compute70.minor_version(), 0);
@@ -774,7 +806,7 @@ mod tests {
     #[test]
     fn nvvm_arch_target_feature() {
         // Test baseline features
-        assert_eq!(Compute35.target_feature(), "compute_35");
+        assert_eq!(Compute50.target_feature(), "compute_50");
         assert_eq!(Compute61.target_feature(), "compute_61");
         assert_eq!(Compute90.target_feature(), "compute_90");
         assert_eq!(Compute100.target_feature(), "compute_100");
@@ -798,32 +830,18 @@ mod tests {
 
     #[test]
     fn nvvm_arch_all_target_features() {
-        assert_eq!(Compute35.all_target_features(), vec![Compute35]);
-
-        assert_eq!(
-            Compute50.all_target_features(),
-            vec![Compute35, Compute37, Compute50],
-        );
-
-        assert_eq!(
-            Compute61.all_target_features(),
-            vec![Compute35, Compute37, Compute50, Compute52, Compute53, Compute60, Compute61]
-        );
+        assert_eq!(Compute50.all_target_features(), vec![Compute50]);
 
         assert_eq!(
             Compute70.all_target_features(),
-            vec![
-                Compute35, Compute37, Compute50, Compute52, Compute53, Compute60, Compute61,
-                Compute62, Compute70,
-            ]
+            vec![Compute50, Compute52, Compute53, Compute60, Compute61, Compute62, Compute70]
         );
 
-        let compute90_features = Compute90.all_target_features();
         assert_eq!(
-            compute90_features,
+            Compute90.all_target_features(),
             vec![
-                Compute35, Compute37, Compute50, Compute52, Compute53, Compute60, Compute61,
-                Compute62, Compute70, Compute72, Compute75, Compute80, Compute86, Compute87,
+                Compute50, Compute52, Compute53, Compute60, Compute61, Compute62, Compute70,
+                Compute72, Compute73, Compute75, Compute80, Compute86, Compute87, Compute88,
                 Compute89, Compute90,
             ]
         );
@@ -831,8 +849,8 @@ mod tests {
         assert_eq!(
             Compute90a.all_target_features(),
             vec![
-                Compute35, Compute37, Compute50, Compute52, Compute53, Compute60, Compute61,
-                Compute62, Compute70, Compute72, Compute75, Compute80, Compute86, Compute87,
+                Compute50, Compute52, Compute53, Compute60, Compute61, Compute62, Compute70,
+                Compute72, Compute73, Compute75, Compute80, Compute86, Compute87, Compute88,
                 Compute89, Compute90, Compute90a,
             ]
         );
@@ -840,8 +858,6 @@ mod tests {
         assert_eq!(
             Compute100a.all_target_features(),
             vec![
-                Compute35,
-                Compute37,
                 Compute50,
                 Compute52,
                 Compute53,
@@ -850,10 +866,12 @@ mod tests {
                 Compute62,
                 Compute70,
                 Compute72,
+                Compute73,
                 Compute75,
                 Compute80,
                 Compute86,
                 Compute87,
+                Compute88,
                 Compute89,
                 Compute90,
                 Compute100,
@@ -865,8 +883,6 @@ mod tests {
         assert_eq!(
             Compute100f.all_target_features(),
             vec![
-                Compute35,
-                Compute37,
                 Compute50,
                 Compute52,
                 Compute53,
@@ -875,10 +891,12 @@ mod tests {
                 Compute62,
                 Compute70,
                 Compute72,
+                Compute73,
                 Compute75,
                 Compute80,
                 Compute86,
                 Compute87,
+                Compute88,
                 Compute89,
                 Compute90,
                 Compute100,
@@ -889,8 +907,6 @@ mod tests {
         assert_eq!(
             Compute101a.all_target_features(),
             vec![
-                Compute35,
-                Compute37,
                 Compute50,
                 Compute52,
                 Compute53,
@@ -899,10 +915,12 @@ mod tests {
                 Compute62,
                 Compute70,
                 Compute72,
+                Compute73,
                 Compute75,
                 Compute80,
                 Compute86,
                 Compute87,
+                Compute88,
                 Compute89,
                 Compute90,
                 Compute100,
@@ -916,8 +934,6 @@ mod tests {
         assert_eq!(
             Compute101f.all_target_features(),
             vec![
-                Compute35,
-                Compute37,
                 Compute50,
                 Compute52,
                 Compute53,
@@ -926,10 +942,12 @@ mod tests {
                 Compute62,
                 Compute70,
                 Compute72,
+                Compute73,
                 Compute75,
                 Compute80,
                 Compute86,
                 Compute87,
+                Compute88,
                 Compute89,
                 Compute90,
                 Compute100,
@@ -942,17 +960,15 @@ mod tests {
         assert_eq!(
             Compute120.all_target_features(),
             vec![
-                Compute35, Compute37, Compute50, Compute52, Compute53, Compute60, Compute61,
-                Compute62, Compute70, Compute72, Compute75, Compute80, Compute86, Compute87,
-                Compute89, Compute90, Compute100, Compute101, Compute103, Compute120,
+                Compute50, Compute52, Compute53, Compute60, Compute61, Compute62, Compute70,
+                Compute72, Compute73, Compute75, Compute80, Compute86, Compute87, Compute88,
+                Compute89, Compute90, Compute100, Compute101, Compute103, Compute110, Compute120,
             ]
         );
 
         assert_eq!(
             Compute120f.all_target_features(),
             vec![
-                Compute35,
-                Compute37,
                 Compute50,
                 Compute52,
                 Compute53,
@@ -961,15 +977,18 @@ mod tests {
                 Compute62,
                 Compute70,
                 Compute72,
+                Compute73,
                 Compute75,
                 Compute80,
                 Compute86,
                 Compute87,
+                Compute88,
                 Compute89,
                 Compute90,
                 Compute100,
                 Compute101,
                 Compute103,
+                Compute110,
                 Compute120,
                 Compute120f,
             ]
@@ -978,8 +997,6 @@ mod tests {
         assert_eq!(
             Compute120a.all_target_features(),
             vec![
-                Compute35,
-                Compute37,
                 Compute50,
                 Compute52,
                 Compute53,
@@ -988,15 +1005,18 @@ mod tests {
                 Compute62,
                 Compute70,
                 Compute72,
+                Compute73,
                 Compute75,
                 Compute80,
                 Compute86,
                 Compute87,
+                Compute88,
                 Compute89,
                 Compute90,
                 Compute100,
                 Compute101,
                 Compute103,
+                Compute110,
                 Compute120,
                 Compute120f,
                 Compute120a,
@@ -1011,8 +1031,6 @@ mod tests {
         let ok = |opt, val| assert_eq!(NvvmOption::from_str(opt), Ok(val));
         let err = |opt, s: &str| assert_eq!(NvvmOption::from_str(opt), Err(s.to_string()));
 
-        ok("-arch=compute_35", Arch(Compute35));
-        ok("-arch=compute_37", Arch(Compute37));
         ok("-arch=compute_50", Arch(Compute50));
         ok("-arch=compute_52", Arch(Compute52));
         ok("-arch=compute_53", Arch(Compute53));
@@ -1021,10 +1039,12 @@ mod tests {
         ok("-arch=compute_62", Arch(Compute62));
         ok("-arch=compute_70", Arch(Compute70));
         ok("-arch=compute_72", Arch(Compute72));
+        ok("-arch=compute_73", Arch(Compute73));
         ok("-arch=compute_75", Arch(Compute75));
         ok("-arch=compute_80", Arch(Compute80));
         ok("-arch=compute_86", Arch(Compute86));
         ok("-arch=compute_87", Arch(Compute87));
+        ok("-arch=compute_88", Arch(Compute88));
         ok("-arch=compute_89", Arch(Compute89));
         ok("-arch=compute_90", Arch(Compute90));
         ok("-arch=compute_90a", Arch(Compute90a));
@@ -1034,6 +1054,9 @@ mod tests {
         ok("-arch=compute_101", Arch(Compute101));
         ok("-arch=compute_101f", Arch(Compute101f));
         ok("-arch=compute_101a", Arch(Compute101a));
+        ok("-arch=compute_110", Arch(Compute110));
+        ok("-arch=compute_110f", Arch(Compute110f));
+        ok("-arch=compute_110a", Arch(Compute110a));
         ok("-arch=compute_120", Arch(Compute120));
         ok("-arch=compute_120f", Arch(Compute120f));
         ok("-arch=compute_120a", Arch(Compute120a));
@@ -1116,7 +1139,7 @@ mod tests {
         // Capability with multiple variants
         assert_eq!(
             NvvmArch::variants_for_capability(101),
-            vec![Compute101, Compute101f, Compute101a,]
+            vec![Compute101, Compute101f, Compute101a]
         );
 
         // Non-existent capability
