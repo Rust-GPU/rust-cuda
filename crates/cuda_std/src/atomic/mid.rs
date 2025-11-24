@@ -7,19 +7,14 @@
 #![allow(dead_code, unused_imports)]
 
 use super::intrinsics;
-use crate::cfg::ComputeCapability;
 use crate::gpu_only;
 use core::sync::atomic::Ordering::{self, *};
 use paste::paste;
 
-fn ge_sm70() -> bool {
-    ComputeCapability::from_cuda_arch_env() >= ComputeCapability::Compute70
-}
-
 #[gpu_only]
 pub fn device_thread_fence(ordering: Ordering) {
     unsafe {
-        if ge_sm70() {
+        if cfg!(target_feature = "compute_70") {
             if ordering == SeqCst {
                 return intrinsics::fence_sc_device();
             }
@@ -38,7 +33,7 @@ pub fn device_thread_fence(ordering: Ordering) {
 #[gpu_only]
 pub fn block_thread_fence(ordering: Ordering) {
     unsafe {
-        if ge_sm70() {
+        if cfg!(target_feature = "compute_70") {
             if ordering == SeqCst {
                 return intrinsics::fence_sc_block();
             }
@@ -57,7 +52,7 @@ pub fn block_thread_fence(ordering: Ordering) {
 #[gpu_only]
 pub fn system_thread_fence(ordering: Ordering) {
     unsafe {
-        if ge_sm70() {
+        if cfg!(target_feature = "compute_70") {
             if ordering == SeqCst {
                 return intrinsics::fence_sc_system();
             }
@@ -80,7 +75,7 @@ macro_rules! load {
                 #[$crate::gpu_only]
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn [<atomic_load_ $width _ $scope>](ptr: *mut $type, ordering: Ordering) -> $type {
-                    if ge_sm70() {
+                    if cfg!(target_feature = "compute_70") {
                         match ordering {
                             SeqCst => {
                                 intrinsics::[<fence_sc_ $scope>]();
@@ -136,7 +131,7 @@ macro_rules! store {
                 #[$crate::gpu_only]
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn [<atomic_store_ $width _ $scope>](ptr: *mut $type, ordering: Ordering, val: $type) {
-                    if ge_sm70() {
+                    if cfg!(target_feature = "compute_70") {
                         match ordering {
                             SeqCst => {
                                 intrinsics::[<fence_sc_ $scope>]();
@@ -185,7 +180,7 @@ macro_rules! inner_fetch_ops_1_param {
                 #[$crate::gpu_only]
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn [<atomic_fetch_ $op _ $type _ $scope>](ptr: *mut $type, ordering: Ordering, val: $type) -> $type {
-                    if ge_sm70() {
+                    if cfg!(target_feature = "compute_70") {
                         match ordering {
                             SeqCst => {
                                 intrinsics::[<fence_sc_ $scope>]();
@@ -259,7 +254,7 @@ macro_rules! inner_cas {
                 #[$crate::gpu_only]
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn [<atomic_compare_and_swap_ $type _ $scope>](ptr: *mut $type, current: $type, new: $type, ordering: Ordering) -> $type {
-                    if ge_sm70() {
+                    if cfg!(target_feature = "compute_70") {
                         match ordering {
                             SeqCst => {
                                 intrinsics::[<fence_sc_ $scope>]();

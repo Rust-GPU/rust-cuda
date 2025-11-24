@@ -17,12 +17,6 @@ static REQUIRED_MAJOR_LLVM_VERSION: u8 = 7;
 
 fn main() {
     rustc_llvm_build();
-
-    // this is set by cuda_builder, but in case somebody is using the codegen
-    // manually, default to 520 (which is what nvvm defaults to).
-    if option_env!("CUDA_ARCH").is_none() {
-        println!("cargo:rustc-env=CUDA_ARCH=520")
-    }
 }
 
 fn fail(s: &str) -> ! {

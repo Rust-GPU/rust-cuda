@@ -241,7 +241,6 @@ fn build_deps(
         .arg("--target-dir")
         .arg(deps_target_dir)
         .env("CARGO_ENCODED_RUSTFLAGS", cargo_encoded_rustflags)
-        .env("CUDA_ARCH", "70")
         .stderr(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .status()
