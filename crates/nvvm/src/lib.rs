@@ -532,12 +532,6 @@ impl NvvmArch {
         }
     }
 
-    /// Create an iterator over all architectures from Compute35 up to and including this one
-    pub fn iter_up_to(&self) -> impl Iterator<Item = Self> {
-        let current = self.capability_value();
-        NvvmArch::iter().filter(move |arch| arch.capability_value() <= current)
-    }
-
     /// Check if this architecture is a base variant (no suffix)
     pub fn is_base_variant(&self) -> bool {
         !self
@@ -1003,27 +997,6 @@ mod tests {
                 Compute120,
                 Compute120f,
                 Compute120a,
-            ]
-        );
-    }
-
-    #[test]
-    fn nvvm_arch_iter_up_to_includes_only_lower_or_equal() {
-        // Compute35 only includes itself
-        let archs: Vec<_> = Compute35.iter_up_to().collect();
-        assert_eq!(archs, vec![Compute35]);
-
-        // Compute52 includes all up to 52
-        let archs: Vec<_> = Compute52.iter_up_to().collect();
-        assert_eq!(archs, vec![Compute35, Compute37, Compute50, Compute52,]);
-
-        // Compute75 includes all up to 75
-        let archs: Vec<_> = Compute75.iter_up_to().collect();
-        assert_eq!(
-            archs,
-            vec![
-                Compute35, Compute37, Compute50, Compute52, Compute53, Compute60, Compute61,
-                Compute62, Compute70, Compute72, Compute75,
             ]
         );
     }
