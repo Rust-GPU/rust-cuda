@@ -34,30 +34,6 @@ pub enum OptLevel {
     O4 = 4,
 }
 
-/// The possible targets when JIT compiling a PTX module.
-#[non_exhaustive]
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum JitTarget {
-    Compute20 = 20,
-    Compute21 = 21,
-    Compute30 = 30,
-    Compute32 = 32,
-    Compute35 = 35,
-    Compute37 = 37,
-    Compute50 = 50,
-    Compute52 = 52,
-    Compute53 = 53,
-    Compute60 = 60,
-    Compute61 = 61,
-    Compute62 = 62,
-    Compute70 = 70,
-    Compute72 = 72,
-    Compute75 = 75,
-    Compute80 = 80,
-    Compute86 = 86,
-}
-
 /// How to handle cases where a loaded module's data does not contain an exact match for the
 /// specified architecture.
 #[repr(u32)]
@@ -82,7 +58,7 @@ pub enum ModuleJitOption {
     /// [`ModuleJitOption::Target`].
     DetermineTargetFromContext,
     /// Specifies the target for the JIT compiler. Cannot be combined with [`ModuleJitOption::DetermineTargetFromContext`].
-    Target(JitTarget),
+    Target(driver_sys::CUjit_target),
     /// Specifies how to handle cases where a loaded module's data does not have an exact match for the specified
     /// architecture.
     Fallback(JitFallback),
