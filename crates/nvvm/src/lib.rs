@@ -540,12 +540,9 @@ impl NvvmArch {
 
     /// Check if this architecture is a base variant (no suffix)
     pub fn is_base_variant(&self) -> bool {
-        let feature = self.target_feature();
-        // A base variant doesn't end with any letter suffix
-        !feature
-            .chars()
-            .last()
-            .is_some_and(|c| c.is_ascii_alphabetic())
+        !self
+            .target_feature()
+            .ends_with(|c| char::is_ascii_alphabetic(&c))
     }
 
     /// Check if this architecture is a family-specific variant (f suffix)
