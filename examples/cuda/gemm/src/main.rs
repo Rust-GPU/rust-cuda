@@ -13,6 +13,7 @@ use cust::memory::CopyDestination as _;
 use cust::module;
 use cust::stream;
 use cust::util::SliceExt as _;
+use gemm_kernels::TILE_SIZE;
 use ndarray::Array;
 use ndarray_rand::RandomExt as _;
 use ndarray_rand::rand_distr::Uniform;
@@ -429,9 +430,6 @@ pub fn gemm_tiled(
     assert_eq!(mat_a.len(), m * k);
     assert_eq!(mat_b.len(), k * n);
     assert_eq!(mat_c.len(), m * n);
-
-    // These values must be aligned with the kernel code.
-    const TILE_SIZE: usize = 16;
 
     let kernel_cell = cell::LazyCell::new(|| {
         module

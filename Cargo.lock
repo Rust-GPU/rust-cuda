@@ -1323,6 +1323,7 @@ dependencies = [
  "cuda_std",
  "cust",
  "cust_raw",
+ "gemm-kernels",
  "ndarray",
  "ndarray-rand",
  "rand 0.9.2",

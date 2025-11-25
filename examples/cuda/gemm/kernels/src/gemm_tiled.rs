@@ -3,6 +3,8 @@ use cuda_std::address_space;
 use cuda_std::kernel;
 use cuda_std::thread;
 
+pub const TILE_SIZE: usize = 16;
+
 #[kernel]
 #[allow(improper_ctypes_definitions)]
 /// Tiled GEMM kernel for C = alpha * A * B + beta * C.
@@ -38,7 +40,6 @@ pub unsafe fn gemm_tiled(
     alpha: f32,
     beta: f32,
 ) {
-    const TILE_SIZE: usize = 16;
     const TILE_SIZE_2D: usize = TILE_SIZE * TILE_SIZE;
 
     // Shared GPU memory is modelled with `#[address_space(shared)] static mut`. Unlike normal

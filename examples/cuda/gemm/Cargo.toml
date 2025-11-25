@@ -8,6 +8,7 @@ blastoff = { path = "../../../crates/blastoff" }
 cuda_std = { path = "../../../crates/cuda_std" }
 cust = { path = "../../../crates/cust" }
 cust_raw = { path = "../../../crates/cust_raw", features = ["driver"] }
+gemm-kernels = { path = "kernels" }
 ndarray = { version = "0.16", features = ["approx"] }
 ndarray-rand = "0.15.0"
 rand = "0.9"
