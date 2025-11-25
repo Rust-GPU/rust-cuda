@@ -293,6 +293,8 @@ jobs:
         run: cargo --version
       - name: Rustfmt compiletests
         shell: bash
+        # Uses rustfmt directly, rather than via `cargo fmt`, because the compiletests .rs files
+        # are not within a package.
         run: shopt -s globstar && rustfmt --check tests/compiletests/ui/**/*.rs
       - name: Compiletest
         run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90
