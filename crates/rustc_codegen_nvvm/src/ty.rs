@@ -108,7 +108,7 @@ impl<'ll> CodegenCx<'ll, '_> {
     pub(crate) fn type_vector(&self, ty: &'ll Type, len: u64) -> &'ll Type {
         unsafe { llvm::LLVMVectorType(ty, len as c_uint) }
     }
-
+    #[track_caller]
     pub(crate) fn type_ptr_to(&self, ty: &'ll Type) -> &'ll Type {
         assert_ne!(
             self.type_kind(ty),
@@ -116,11 +116,12 @@ impl<'ll> CodegenCx<'ll, '_> {
             "don't call ptr_to on function types, use ptr_to_llvm_type on FnAbi instead or explicitly specify an address space if it makes sense"
         );
 
-        unsafe { llvm::LLVMPointerType(ty, AddressSpace::ZERO.0) }
+        unsafe { self.type_ptr_to_ext(ty, AddressSpace::ZERO) }
     }
-
+    #[track_caller]
     pub(crate) fn type_ptr_to_ext(&self, ty: &'ll Type, address_space: AddressSpace) -> &'ll Type {
-        unsafe { llvm::LLVMPointerType(ty, address_space.0) }
+        //assert_eq!(ty,self.type_ix(8),"rustc_codegen_nvvm uses opaque pointers - specifying pointer type other than `i8` is not valid!");
+        unsafe { llvm::LLVMPointerType(self.type_ix(8), address_space.0) }
     }
 
     pub(crate) fn func_params_types(&self, ty: &'ll Type) -> Vec<&'ll Type> {

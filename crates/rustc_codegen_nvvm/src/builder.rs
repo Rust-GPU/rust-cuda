@@ -232,6 +232,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             // Get the return type.
             let sig = llvm::LLVMGetElementType(self.val_ty(self.llfn()));
             let return_ty = llvm::LLVMGetReturnType(sig);
+;
             // Check if new_ty & return_ty are different pointers.
             // FIXME: get rid of this nonsense once we are past LLVM 7 and don't have
             // to suffer from typed pointers.
@@ -481,6 +482,10 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             // Cast to default addrspace if necessary
             let alloca_ty = llvm::LLVMTypeOf(alloca);
             let alloca_addrspace = llvm::LLVMGetPointerAddressSpace(alloca_ty);
+            let alloca = self.pointercast(
+                alloca,
+                self.type_i8p_ext(rustc_abi::AddressSpace(alloca_addrspace)),
+            );
             let dest_ty = self.cx().type_ptr();
             let dest_addrspace = llvm::LLVMGetPointerAddressSpace(dest_ty);
             if alloca_addrspace != dest_addrspace {
@@ -493,7 +498,9 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn load(&mut self, ty: &'ll Type, ptr: &'ll Value, align: Align) -> &'ll Value {
         trace!("Load {ty:?} {:?}", ptr);
-        let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
+        let ptr = self.pointercast(ptr, unsafe {
+            llvm::LLVMPointerType(ty, llvm::LLVMGetPointerAddressSpace(self.val_ty(ptr)))
+        });
         unsafe {
             let load = llvm::LLVMBuildLoad(self.llbuilder, ptr, UNNAMED);
             llvm::LLVMSetAlignment(load, align.bytes() as c_uint);
@@ -503,7 +510,9 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn volatile_load(&mut self, ty: &'ll Type, ptr: &'ll Value) -> &'ll Value {
         trace!("Volatile load `{:?}`", ptr);
-        let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
+        let ptr = self.pointercast(ptr, unsafe {
+            llvm::LLVMPointerType(ty, llvm::LLVMGetPointerAddressSpace(self.val_ty(ptr)))
+        });
         unsafe {
             let load = llvm::LLVMBuildLoad(self.llbuilder, ptr, UNNAMED);
             llvm::LLVMSetVolatile(load, llvm::True);
@@ -711,14 +720,21 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         align: Align,
         flags: MemFlags,
     ) -> &'ll Value {
+        assert_eq!(self.cx.type_kind(self.cx.val_ty(ptr)), TypeKind::Pointer);
+        let ptr = self.check_store(val, ptr);
+        let address_space = unsafe { llvm::LLVMGetPointerAddressSpace(self.val_ty(ptr)) };
+        let store_pointer_ty = unsafe { llvm::LLVMPointerType(self.val_ty(val), address_space) };
+
+        let ptr = unsafe {
+            llvm::LLVMBuildBitCast(self.llbuilder, ptr, store_pointer_ty, c"NAME".as_ptr())
+        };
         trace!(
             "store_with_flags: {:?} into {:?} with align {:?}",
             val,
             ptr,
             align.bytes()
         );
-        assert_eq!(self.cx.type_kind(self.cx.val_ty(ptr)), TypeKind::Pointer);
-        let ptr = self.check_store(val, ptr);
+
         unsafe {
             let store = llvm::LLVMBuildStore(self.llbuilder, val, ptr);
             let align = if flags.contains(MemFlags::UNALIGNED) {
@@ -757,15 +773,20 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn gep(&mut self, ty: &'ll Type, ptr: &'ll Value, indices: &[&'ll Value]) -> &'ll Value {
         trace!("gep: {ty:?} {:?} with indices {:?}", ptr, indices);
-        let ptr = self.pointercast(ptr, self.cx().type_ptr_to(ty));
+        let address_space = unsafe { llvm::LLVMGetPointerAddressSpace(self.val_ty(ptr)) };
+        let ptr = self.pointercast(ptr, unsafe { llvm::LLVMPointerType(ty, address_space) });
         unsafe {
-            llvm::LLVMBuildGEP2(
+            let res = llvm::LLVMBuildGEP2(
                 self.llbuilder,
                 ty,
                 ptr,
                 indices.as_ptr(),
                 indices.len() as c_uint,
                 UNNAMED,
+            );
+            self.pointercast(
+                ptr,
+                self.type_i8p_ext(rustc_abi::AddressSpace(address_space)),
             )
         }
     }
@@ -777,15 +798,20 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         indices: &[&'ll Value],
     ) -> &'ll Value {
         trace!("gep inbounds: {ty:?} {:?} with indices {:?}", ptr, indices);
-        let ptr = self.pointercast(ptr, self.cx().type_ptr_to(ty));
+        let address_space = unsafe { llvm::LLVMGetPointerAddressSpace(self.val_ty(ptr)) };
+        let ptr = self.pointercast(ptr, unsafe { llvm::LLVMPointerType(ty, address_space) });
         unsafe {
-            llvm::LLVMBuildInBoundsGEP2(
+            let res = llvm::LLVMBuildInBoundsGEP2(
                 self.llbuilder,
                 ty,
                 ptr,
                 indices.as_ptr(),
                 indices.len() as c_uint,
                 UNNAMED,
+            );
+            self.pointercast(
+                ptr,
+                self.type_i8p_ext(rustc_abi::AddressSpace(address_space)),
             )
         }
     }
@@ -1066,6 +1092,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn insert_value(&mut self, agg_val: &'ll Value, mut elt: &'ll Value, idx: u64) -> &'ll Value {
         trace!("insert value {:?}, {:?}, {:?}", agg_val, elt, idx);
+
         assert_eq!(idx as c_uint as u64, idx);
 
         let elt_ty = self.cx.val_ty(elt);
@@ -1168,9 +1195,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 );
             }
         };
+        let tuple = self.type_struct(&[self.val_ty(src),self.type_i1()], false);
         let res = self.atomic_op(
             dst,
-            |builder, dst| {
+            tuple,
+            |builder, dst,ty| {
+                builder.abort();
+                return builder.const_undef(ty);
                 // We are in a supported address space - just use ordinary atomics
                 unsafe {
                     llvm::LLVMRustBuildAtomicCmpXchg(
@@ -1184,7 +1215,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     )
                 }
             },
-            |builder, dst| {
+            |builder, dst,ty| {
                 // Local space is only accessible to the current thread.
                 // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
                 let load: &'ll Value =
@@ -1221,8 +1252,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
         self.atomic_op(
             dst,
-            |builder, dst| {
+            self.val_ty(src),
+            |builder, dst,ty| {
                 // We are in a supported address space - just use ordinary atomics
+                let address_space = unsafe { llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)) };
+                let dst_ty = unsafe { llvm::LLVMPointerType(ty, address_space) };
+                let dst = builder.pointercast(dst,dst_ty);
+                let src = if matches!(op, AtomicRmwBinOp::AtomicXchg)  {builder.pointercast(src,dst_ty)} else {src};
                 unsafe {
                     llvm::LLVMBuildAtomicRMW(
                         builder.llbuilder,
@@ -1234,7 +1270,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     )
                 }
             },
-            |builder, dst| {
+            |builder, dst,ty| {
                 // Local space is only accessible to the current thread.
                 // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
                 let load: &'ll Value =
@@ -1314,6 +1350,15 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         let args = self.check_call("call", llty, llfn, args);
 
         let mut call = unsafe {
+            let llfn = if self.cx.type_kind(llty) == TypeKind::Pointer {
+                self.pointercast(llfn, llty)
+            } else if self.cx.type_kind(self.val_ty(llfn)) == TypeKind::Pointer  {
+                let target_fnptr = llvm::LLVMPointerType(llty, 0);
+                self.pointercast(llfn, target_fnptr)
+            } else {
+                llfn
+            };
+            
             llvm::LLVMRustBuildCall(
                 self.llbuilder,
                 llfn,
@@ -1719,7 +1764,6 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         if !self.cx().sess().emit_lifetime_markers() {
             return;
         }
-
         self.call_intrinsic(intrinsic, &[self.cx.const_u64(size), ptr]);
     }
 
@@ -1750,9 +1794,16 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
     fn atomic_op(
         &mut self,
         dst: &'ll Value,
-        atomic_supported: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value) -> &'ll Value,
-        emulate_local: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value) -> &'ll Value,
+        ty:&'ll Type,
+        atomic_supported: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value,&'ll Type) -> &'ll Value,
+        emulate_local: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value,&'ll Type) -> &'ll Value,
     ) -> &'ll Value {
+      
+        let emulate_local = |builder:&mut Self,_,_|{
+            // ATOMICS don't work with untyped pointers *YET*.
+            builder.abort();
+            builder.const_undef(ty)
+        };
         // (FractalFir) Atomics in CUDA have some limitations, and we have to work around them.
         // For example, they are restricted in what address space they operate on.
         // CUDA has 4 address spaces(and a generic one, which is an union of all of those).
@@ -1803,7 +1854,7 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
         let merge_bb = self.append_sibling_block("atomic_op_done");
         // Execute atomic op if supported, then jump to merge
         self.switch_to_block(supported_bb);
-        let supported_res = atomic_supported(self, dst);
+        let supported_res = atomic_supported(self, dst, ty);
         self.br(merge_bb);
         // Check if the pointer is in the thread space. If so, we can emulate it.
         self.switch_to_block(unsupported_bb);
@@ -1822,7 +1873,7 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
         self.cond_br(isspacep_local, local_bb, atomic_ub_bb);
         // The pointer is in the thread(local) space.
         self.switch_to_block(local_bb);
-        let local_res = emulate_local(self, dst);
+        let local_res = emulate_local(self, dst,ty);
         self.br(merge_bb);
         // The pointer is neither in the supported address space, nor the local space.
         // This is very likely UB. So, we trap here.
@@ -1830,7 +1881,7 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
         self.switch_to_block(atomic_ub_bb);
         self.abort();
         self.unreachable();
-        // Atomic is impl has finished, and we can now switch to the merge_bb
+        // Atomic impl has finished, and we can now switch to the merge_bb
         self.switch_to_block(merge_bb);
         self.phi(
             self.val_ty(local_res),

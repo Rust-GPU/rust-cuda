@@ -378,12 +378,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
     }
 
     fn ptr_to_llvm_type(&self, cx: &CodegenCx<'ll, 'tcx>) -> &'ll Type {
-        unsafe {
-            llvm::LLVMPointerType(
-                self.llvm_type(cx),
-                cx.data_layout().instruction_address_space.0 as c_uint,
-            )
-        }
+        cx.type_i8p()
     }
 
     fn apply_attrs_llfn(&self, cx: &CodegenCx<'ll, 'tcx>, llfn: &'ll Value) {
