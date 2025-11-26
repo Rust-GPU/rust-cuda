@@ -21,7 +21,7 @@ pub fn ir_version() -> (i32, i32) {
         let mut minor_ir = MaybeUninit::uninit();
         let mut major_dbg = MaybeUninit::uninit();
         let mut minor_dbg = MaybeUninit::uninit();
-        // according to the docs this cant fail
+        // according to the docs this can't fail
         let _ = nvvm_sys::nvvmIRVersion(
             major_ir.as_mut_ptr(),
             minor_ir.as_mut_ptr(),
@@ -39,7 +39,7 @@ pub fn dbg_version() -> (i32, i32) {
         let mut minor_ir = MaybeUninit::uninit();
         let mut major_dbg = MaybeUninit::uninit();
         let mut minor_dbg = MaybeUninit::uninit();
-        // according to the docs this cant fail
+        // according to the docs this can't fail
         let _ = nvvm_sys::nvvmIRVersion(
             major_ir.as_mut_ptr(),
             minor_ir.as_mut_ptr(),
@@ -55,12 +55,17 @@ pub fn nvvm_version() -> (i32, i32) {
     unsafe {
         let mut major = MaybeUninit::uninit();
         let mut minor = MaybeUninit::uninit();
-        // according to the docs this cant fail
+        // according to the docs this can't fail
         let _ = nvvm_sys::nvvmVersion(major.as_mut_ptr(), minor.as_mut_ptr());
         (major.assume_init(), minor.assume_init())
     }
 }
 
+/// Rust version of `nvvmResult`.
+/// - `NVVM_SUCCESS` isn't covered because this type only covers the error cases, due to Rust
+///   having `Result` where the success case is separate from the error cases.
+/// - `NVVM_ERROR_INVALID_PROGRAM` isn't covered because it's not possible to get an invalid
+///   program handle through this safe api.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NvvmError {
     /// The NVVM compiler ran out of memory.
@@ -79,8 +84,6 @@ pub enum NvvmError {
     /// Compilation failed because of bad IR or other reasons. Getting the compiler
     /// log should yield more info.
     CompilationError,
-    // InvalidProgram isnt handled because its not possible
-    // to get an invalid program handle through this safe api
 }
 
 impl Display for NvvmError {
