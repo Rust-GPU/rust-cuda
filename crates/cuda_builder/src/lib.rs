@@ -715,6 +715,12 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
         rustflags.push(format!("--emit={string}"));
     }
 
+    if builder.debug == DebugInfo::None {
+        // Default dev builds: strip debuginfo to avoid libnvvm crashes with unoptimized IR.
+        // TODO: drop this once newer libnvvm toolchains are stable with debuginfo in opt=0 builds.
+        rustflags.push("-Cdebuginfo=0".into());
+    }
+
     let mut llvm_args = vec![NvvmOption::Arch(builder.arch).to_string()];
 
     if !builder.nvvm_opts {

@@ -228,10 +228,16 @@ impl<'ll, 'tcx> BaseTypeCodegenMethods for CodegenCx<'ll, 'tcx> {
 
     fn float_width(&self, ty: &'ll Type) -> usize {
         match self.type_kind(ty) {
+            TypeKind::Half => 16,
             TypeKind::Float => 32,
             TypeKind::Double => 64,
             TypeKind::X86_FP80 => 80,
             TypeKind::FP128 | TypeKind::PPC_FP128 => 128,
+            TypeKind::BFloat => 16,
+            TypeKind::Vector | TypeKind::ScalableVector => {
+                // Recurse on element type for vector floats
+                self.float_width(self.element_type(ty))
+            }
             _ => bug!("llvm_float_width called on a non-float type"),
         }
     }
