@@ -1,0 +1,43 @@
+#! /bin/sh
+#----------------------------------------------------------------------------
+# Create a rust-cuda Docker container that will persist until explicitly
+# stopped, even if the host machine is rebooted.
+#
+# Useful docker commands:
+# - `docker ps` shows details about the running container.
+# - `docker stop rust-cuda` stops the running container, and `docker rm
+#   rust-cuda` deletes the running container. This is only necessary if you
+#   have no more use for the container.
+# - `docker exec -it rust-cuda bash` starts a bash shell within the container.
+#
+# Operations within the container can be performed from outside the container
+# with the accompanying `dex` script, e.g. `./dex cargo build`. This may be
+# easier than using a shell within the container, because the packages
+# available within the container are limited.
+#
+# Because the container name is hard-wired as `rust-cuda`, as written this
+# script can only work with one container at a time.
+#----------------------------------------------------------------------------
+
+# Explanation
+# - `--restart`/`sleep infinity` keeps it running (including restarting as
+#   necessary, e.g. after a reboot) until explicitly stopped.
+# - The `-e`/`-v` options for cargo and rustup means files downloaded by those
+#   programs will persist when the container is restarted.
+# - The `-v`/`-w` for the workspace mean the current directory will be the
+#   workspace, i.e. the files visible within the container.
+docker create \
+    --name rust-cuda \
+    --restart unless-stopped \
+    --entrypoint "" \
+    --gpus all \
+    -e CARGO_HOME=/cargo \
+    -v rust-cuda-cargo:/cargo \
+    -e RUSTUP_HOME=/rustup \
+    -v rust-cuda-rustup:/rustup \
+    -v "$PWD":/workspace \
+    -w /workspace \
+    ghcr.io/rust-gpu/rust-cuda-ubuntu24-cuda12:main \
+    sleep infinity
+
+docker start "$CONTAINER_NAME"

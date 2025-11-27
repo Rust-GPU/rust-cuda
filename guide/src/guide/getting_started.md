@@ -1,237 +1,338 @@
 # Getting started
 
-This section covers how to get started writing GPU crates with `cuda_std` and `cuda_builder`.
-
 ## Required libraries
 
-Before you can use the project to write GPU crates, you will need a couple of prerequisites:
+Rust CUDA has several prerequisites.
 
-- [The CUDA SDK](https://developer.nvidia.com/cuda-downloads), version 12.0 or later (and the
-  appropriate driver - [see CUDA release
-  notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html)).
+- A machine with an NVIDIA GPU with a Compute Capability of 5.0 (Maxwell) or later.
+- [CUDA](https://developer.nvidia.com/cuda-downloads) version 12.0 or later.
+- An appropriate NVIDIA driver.
+  - For CUDA 12, the driver version `N` should be in the range `525 <= N < 580`.
+  - For CUDA 13, the driver version `N` should be in the range `580 <= N`.
+- LLVM 7.x (7.0 to 7.4). This is (unfortunately) a very old version of LLVM. The codegen backend
+  searches multiple places for LLVM.
+  - If `LLVM_CONFIG` is present, the backend will use that path as `llvm-config`.
+  - Or, if `llvm-config` is present as a binary, the backend will use that, assuming that
+    `llvm-config --version` returns `7.x.x`.
+  - Failing that, the backend will attempt to download and use a prebuilt LLVM. This currently only
+    works on Windows, however.
 
-  This is only for building GPU crates, to execute built PTX you only need CUDA `9+`.
+Because the required libraries can be difficult to install, we provide Docker images containing
+CUDA and LLVM 7. There are instructions on using these Docker images [below](#docker).
+Alternatively, if you do want to install these libraries yourself, the steps within the [Docker
+files] are a good starting point.
 
-- LLVM 7.x (7.0 to 7.4), The codegen backend searches multiple places for LLVM:
+[Docker files]: https://github.com/Rust-GPU/rust-cuda/tree/main/container
 
-  - If `LLVM_CONFIG` is present, it will use that path as `llvm-config`.
-  - Or, if `llvm-config` is present as a binary, it will use that, assuming that `llvm-config --version` returns `7.x.x`.
-  - Finally, if neither are present or unusable, it will attempt to download and use prebuilt LLVM. This currently only
-    works on Windows however.
+## CUDA basics
 
-- The OptiX SDK if using the OptiX library (the pathtracer example uses it for denoising).
+GPU kernels are functions launched from the CPU that run on the GPU. They do not have a return
+value, instead writing data into mutable buffers passed to them. CUDA executes multiple (possibly
+hundreds) of invocations of a GPU kernel at once, each one on a different thread, and each thread
+typically works on only part of the input and output buffers, sometimes just a single element
+thereof.
 
-- You may also need to add `libnvvm` to PATH, the builder should do it for you but in case it does not work, add `libnvvm` to PATH, it should be somewhere like `CUDA_ROOT/nvvm/bin`,
+The caller decides the *launch dimensions*.
+- **Threads:** A single thread executes the GPU kernel **once**. CUDA makes the thread's index
+  available to the kernel.
+- **Blocks:** A single block houses multiple threads that it execute on its own. CUDA also makes
+  the blocks index avaiable to the kernel.
 
-- You may wish to use or consult the bundled [Dockerfile](#docker) to assist in your local config
+Block and thread dimensions may be 1D, 2D, or 3D. For example, you can launch 1 block of 6 threads,
+or `6x6` threads, or `6x6x6` threads. Likewise, you can launch 5 or 5x5 or 5x5x5 blocks. This can
+make index calculations for programs with 2D or 3D data simpler.
 
-## rust-toolchain.toml
+## A first example: the code
 
-NVVM codegen currently requires a specific version of Rust nightly, because it uses rustc internals
-that are subject to change. Therefore, you must copy the `rust-toolchain.toml` file in the project
-repository so that your own project uses the correct nightly version.
+This section will walk through a simple Rust CUDA program that adds two small 1D vectors on the
+GPU. It consists of two tiny crates and some connecting pieces.
 
-Note: `cust` and other CPU-side libraries work with stable Rust, but they will end up being
-compiled with the version of nightly specified in `rust-toolchain.toml`.
+The file structure looks like this:
+```
+.
+├── rust-toolchain.toml  # Specifies which nightly version to use
+├── build.rs             # Build script that compiles the code that runs on the GPU
+├── kernels
+│   ├── Cargo.toml       # Cargo manifest for code that runs on the GPU
+│   └── src
+│       └── lib.rs       # Code that runs on the GPU
+├── Cargo.toml           # Cargo manifest for code that runs on the CPU
+└── src
+    └── main.rs          # Code that runs on the CPU
+```
 
-## Cargo.toml
+### `rust-toolchain.toml`
 
-Now we can actually get started creating our GPU crate 🎉
+`rustc_codegen_nvvm` currently requires a specific version of Rust nightly because it uses rustc
+internals that are subject to change. You must copy the appropriate revision of
+[`rust-toolchain.toml` from the rust-cuda repository][repo] so that your own project uses the
+correct nightly version.
 
-Start by making a normal crate as you normally would, manually or with `cargo init`: `cargo init name --lib`.
+[repo]: https://github.com/Rust-GPU/rust-cuda/blob/7fa76f3d717038a92c90bf4a482b0b8dd3259344/rust-toolchain.toml
 
-After this, we just need to add a couple of things to our Cargo.toml:
+### `Cargo.toml` and `kernels/Cargo.toml`
 
-```diff
+The top-level `Cargo.toml` looks like this:
+```toml
 [package]
-name = "name"
+name = "rust-cuda-basic"
 version = "0.1.0"
-edition = "2021"
-
-+[lib]
-+crate-type = ["cdylib", "rlib"]
+edition = "2024"
 
 [dependencies]
-+cuda_std = "XX"
+cust = { git = "https://github.com/rust-gpu/rust-cuda", rev = "7fa76f3d717038a92c90bf4a482b0b8dd3259344" }
+kernels = { path = "kernels" }
+
+[build-dependencies]
+cuda_builder = { git = "https://github.com/rust-gpu/rust-cuda", rev = "7fa76f3d717038a92c90bf4a482b0b8dd3259344", features = ["rustc_codegen_nvvm"] }
 ```
 
-Where `XX` is the latest version of `cuda_std`.
+`kernels/Cargo.toml` looks like this:
+```toml
+[package]
+name = "kernels"
+version = "0.1.0"
+edition = "2024"
 
-We changed our crate's crate types to `cdylib` and `rlib`. We specified `cdylib` because the nvptx targets do not support binary crate types.
-`rlib` is so that we will be able to use the crate as a dependency, such as if we would like to use it on the CPU.
+[dependencies]
+cuda_std = { git = "https://github.com/rust-gpu/rust-cuda", rev = "7fa76f3d717038a92c90bf4a482b0b8dd3259344" }
 
-## `lib.rs`
-
-Before we can write any GPU kernels, we must add a few directives to our `lib.rs` which are required by the codegen backend:
-
-```rs
-#![cfg_attr(
-    target_os = "cuda",
-    no_std,
-    register_attr(nvvm_internal)
-)]
-
-use cuda_std::*;
+[lib]
+# - cdylib: because the nvptx targets do not support binary crate types.
+# - rlib: so the `kernels` crate can be used as a dependency by `rust-cuda-basic`.
+crate-type = ["cdylib", "rlib"]
 ```
 
-This does a couple of things:
+At the time of writing there are no recent releases of any Rust CUDA crates so it is best
+to use code directly from the GitHub repository via `git` and `rev`. The above revision works but
+later revisions should also work.
 
-- It only applies the attributes if we are compiling the crate for the GPU (target_os = "cuda").
-- It declares the crate to be `no_std` on CUDA targets.
-- It registers a special attribute required by the codegen backend for things like figuring out
-  what functions are GPU kernels.
-- It explicitly includes `kernel` macro and `thread`
+### `kernels/src/lib.rs`
 
-If you would like to use `alloc` or things like printing from GPU kernels (which requires alloc) then you need to declare `alloc` too:
+This file defines the code that will run on the GPU.
+```rust
+use cuda_std::prelude::*;
 
-```rs
-extern crate alloc;
-```
+// Input/output type shared with the `rustc-cuda-basic` crate.
+pub type T = f32;
 
-Finally, if you would like to use types such as slices or arrays inside of GPU kernels you must allow `improper_ctypes_definitions` either on the whole crate or the individual GPU kernels. This is because on the CPU, such types are not guaranteed to be passed a certain way, so they should not be used in `extern "C"` functions (which is what kernels are implicitly declared as). However, `rustc_codegen_nvvm` guarantees the way in which things like structs, slices, and arrays are passed. See [Kernel ABI](./kernel_abi.md).
-
-```rs
-#![allow(improper_ctypes_definitions)]
-```
-
-## Writing our first GPU kernel
-
-Now we can finally start writing an actual GPU kernel.
-
-<details>
-  <summary>Expand this section if you are not familiar with how GPU-side CUDA works</summary>
-
-Firstly, we must explain a couple of things about GPU kernels, specifically, how they are executed. GPU Kernels (functions) are the entry point for executing anything on the GPU, they are the functions which will be executed from the CPU. GPU kernels do not return anything, they write their data to buffers passed into them.
-
-CUDA's execution model is very very complex and it is unrealistic to explain all of it in
-this section, but the TL;DR of it is that CUDA will execute the GPU kernel once on every
-thread, with the number of threads being decided by the caller (the CPU).
-
-We call these parameters the launch dimensions of the kernel. Launch dimensions are split
-up into two basic concepts:
-
-- **Threads:** A single thread executes the GPU kernel **once**, and it makes the index
-  of itself available to the kernel through special registers (functions in our case).
-- **Blocks:** A single block houses multiple threads that it execute on its own. Thread indices
-  are only unique across the thread's block, therefore CUDA also exposes the index
-  of the current block.
-
-One important thing to note is that block and thread dimensions may be 1d, 2d, or 3d.
-That is to say, I can launch `1` block of `6x6x6`, `6x6`, or `6` threads. I could
-also launch `5x5x5` blocks. This is very useful for 2d/3d applications because it makes
-the 2d/3d index calculations much simpler. CUDA exposes thread and block indices
-for each dimension through special registers. We expose thread index queries through
-`cuda_std::thread`.
-
-</details>
-
-Now that we know how GPU functions work, let's write a simple kernel. We will write
-a kernel which does `[1, 2, 3, 4] + [1, 2, 3, 4] = [2, 4, 6, 8]`. We will use
-a 1-dimensional index and use the `cuda_std::thread::index_1d` utility method to
-calculate a globally-unique thread index for us (this index is only unique if the kernel was launched with a 1d launch config!).
-
-```rs
 #[kernel]
-pub unsafe fn add(a: &[f32], b: &[f32], c: *mut f32) {
-    let idx = thread::index_1d() as usize;
-    if idx < a.len() {
-        let elem = &mut *c.add(idx);
-        *elem = a[idx] + b[idx];
+#[allow(improper_ctypes_definitions)]
+pub unsafe fn add(a: &[T], b: &[T], c: *mut T) {
+    let i = thread::index_1d() as usize;
+    if i < a.len() {
+        let elem = unsafe { &mut *c.add(i) };
+        *elem = a[i] + b[i];
     }
 }
 ```
 
-If you have used CUDA C++ before, this should seem fairly familiar, with a few oddities:
+It defines the addition of a single pair of elements in `a` and `b`. Some parts of this file look
+like normal Rust code, but some parts are unusual.
+- The type `T` will be shared with the CPU code in a way that minimizes the chances of certain
+  kinds of errors. More on this below.
+- The `#[kernel]` attribute indicates this is code that runs on the GPU. It is similar to
+  `__global__` in CUDA C++. Multiple invocations of this kernel will run in parallel and share
+  `a`, `b`, and `c`.
+- The proc macro that processes the `#[kernel]` attribute marks the kernel as `no_mangle` so that
+  the name is obvious in both GPU code and CPU code. The proc macro also checks that the kernel is
+  marked `unsafe`, all parameters are `Copy`, and there is no return value.
+- All GPU functions are unsafe because the parallel execution and sharing of data typical for GPU
+  kernels is incompatible with safe Rust.
+- The inputs (`a` and `b`) are normal slices but the output (`c`) is a raw pointer. Again, this
+  is because `c` is mutable state shared by multiple kernels executing in parallel. Using `&mut
+  [T]` would incorrectly indicate that it is non-shared mutable state, and therefore Rust CUDA does
+  not allow mutable references as argument to kernels. Raw pointers do not have this restriction.
+  Therefore, we use a pointer and only make a mutable reference once we have an element
+  (`c.add(i)`) that we know won't be touched by other kernel invocations.
+- The `#[allow(improper_ctypes_definitions)]` follows on from this. The kernel boundary is like an
+  FFI boundary, and slices are not normally allowed there because they are not guaranteed to be
+  passed in a particular way. However, `rustc_codegen_nvvm` *does* guarantee the way in which
+  things like structs, slices, and arrays are passed (see [Kernel ABI](./kernel_abi.md)). Therefore
+  this lint can be disabled.
+- `thread::index_1d()` gives the globally-unique thread index. The check `i < a.len()` bounds check
+  is necessary because threads run in blocks, and sometimes indices that exceed an inputs bounds
+  occur.
+- The entire crate is compiled as `no_std`. If you want to use `alloc`, just add `extern crate
+  alloc;` to the file.
+- The crate is actually compiled twice. Once by `cuda_builder` to produce PTX code for the kernels,
+  and once normally by Cargo to produce the rlib for definitions (such as `T`) shared with the
+  top-level crate.
 
-- Kernel functions must be unsafe currently, this is because the semantics of Rust safety
-  on the GPU are still very much undecided. This restriction will probably be removed in the future.
-- We use `*mut f32` and not `&mut [f32]`. This is because using `&mut` in function arguments
-  is unsound. The reason being that rustc assumes `&mut` does not alias. However, because every thread gets a copy of the arguments, this would cause it to alias, thereby violating
-  this invariant and yielding technically unsound code. Pointers do not have such an invariant on the other hand. Therefore, we use a pointer and only make a mutable reference once we
-  are sure the elements are disjoint: `let elem = &mut *c.add(idx);`.
-- We check that the index is not out of bounds before doing anything, because it is common to
-  launch kernels with thread counts that are not exactly divisible by the length for optimization.
+Although this example only includes one kernel, larger examples contain multiple kernels, which is
+why the name `kernels` is used.
 
-Internally what this does is it first checks that a couple of things are right in the kernel:
+### `build.rs`
 
-- All parameters are `Copy`.
-- The function is `unsafe`.
-- The function does not return anything.
+The build script uses `cuda_builder` to compile the kernel to PTX code. Under the covers,
+`cuda_builder` uses rustc with `rustc_codegen_nvvm`. `kernels.ptx` will be embedded in the main
+executable.
+```rust
+use std::env;
+use std::path;
 
-Then it declares this kernel to the codegen backend so it can tell CUDA this is a GPU kernel.
-It also applies `#[no_mangle]` so the name of the kernel is the same as it is declared in the code.
-
-## Building the GPU crate
-
-Now that you have some kernels defined in a crate, you can build them easily using `cuda_builder`.
-which builds GPU crates while passing everything needed by rustc.
-
-To use it you can simply add it as a build dependency in your CPU crate (the crate running the GPU kernels):
-
-```diff
-+[build-dependencies]
-+cuda_builder = "XX"
-```
-
-Where `XX` is the current version of `cuda_builder`.
-
-Then, you can simply invoke it in the build.rs of your CPU crate:
-
-```rs
 use cuda_builder::CudaBuilder;
 
 fn main() {
-    CudaBuilder::new("path/to/gpu/crate/root")
-        .copy_to("some/path.ptx")
+    println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=kernels");
+
+    let out_dir = path::PathBuf::from(env::var("OUT_DIR").unwrap());
+    let manifest_dir = path::PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+
+    // Compile the `kernels` crate to `$OUT_DIR/kernels.ptx`.
+    CudaBuilder::new(manifest_dir.join("kernels"))
+        .copy_to(out_dir.join("kernels.ptx"))
         .build()
         .unwrap();
 }
 ```
 
-The first argument is the path to the root of the GPU crate you are trying to build, which would probably be `../name` in our case.
-The second function `.copy_to(path)` tells the builder to copy the built PTX file somewhere. By default the builder puts the PTX file
-inside of `target/cuda-builder/nvptx64-nvidia-cuda/release/crate_name.ptx`, but it is usually helpful to copy it to another path, which is
-what such method does. Finally, `build()` actually runs rustc to compile the crate. This may take a while since it needs to build things like core
-from scratch, but after the first compile, incremental will make it much faster.
+You can specify a different compilation target by inserting an `arch` call in the method chain,
+e.g.:
 
-You can also specify a different compute capability with `.arch()`:
+```rust
+        .arch(cuda_builder::NvvmArch::Compute90)  // Target compute capability 9.0
+```
+The compile target determines which GPU features are available. See the [Compute Capability
+Gating](./compute_capabilities.md) guide for details on writing code that adapts to different GPU
+capabilities.
 
-```rs
-CudaBuilder::new("path/to/gpu/crate")
-    .arch(cuda_builder::NvvmArch::Compute75)  // Target compute 7.5 GPUs
-    .copy_to("kernel.ptx")
-    .build()
-    .unwrap();
+### `src/main.rs`
+
+The final file contains `main`, which ties everything together.
+```rust
+use cust::prelude::*;
+use kernels::T;
+use std::error::Error;
+
+// Embed the PTX code as a static string.
+static PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/kernels.ptx"));
+
+fn main() -> Result<(), Box<dyn Error>> {
+    // Initialize the CUDA Driver API. `_ctx` must be kept alive until the end.
+    let _ctx = cust::quick_init()?;
+
+    // Create a module from the PTX code compiled by `cuda_builder`.
+    let module = Module::from_ptx(PTX, &[])?;
+
+    // Create a stream, which is like a thread for dispatching GPU calls.
+    let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
+
+    // Initialize input and output buffers in CPU memory.
+    let a: [T; _] = [1.0, 2.0, 3.0, 4.0];
+    let b: [T; _] = [2.0, 3.0, 4.0, 5.0];
+    let mut c: Vec<T> = vec![0.0 as T; a.len()];
+
+    // Allocate memory on the GPU and copy the contents from the CPU memory.
+    let a_gpu = a.as_dbuf()?;
+    let b_gpu = b.as_dbuf()?;
+    let c_gpu = c.as_slice().as_dbuf()?;
+
+    // Launch the kernel on the GPU.
+    // - The first two parameters between the triple angle brackets specify 1
+    //   block of 4 threads.
+    // - The third parameter is the number of bytes of dynamic shared memory.
+    //   This is usually zero.
+    // - These threads run in parallel, so each kernel invocation must modify
+    //   separate parts of `c_gpu`. It is the kernel author's responsibility to
+    //   ensure this.
+    // - Immutable slices are passed via pointer/length pairs. This is unsafe
+    //   because the kernel function is unsafe, but also because, like an FFI
+    //   call, any mismatch between this call and the called kernel could
+    //   result in incorrect behaviour or even uncontrolled crashes.
+    let add_kernel = module.get_function("add")?;
+    unsafe {
+        launch!(
+            add_kernel<<<1, 4, 0, stream>>>(
+                a_gpu.as_device_ptr(),
+                a_gpu.len(),
+                b_gpu.as_device_ptr(),
+                b_gpu.len(),
+                c_gpu.as_device_ptr(),
+            )
+        )?;
+    }
+
+    // Synchronize all threads, i.e. ensure they have all completed before continuing.
+    stream.synchronize()?;
+
+    // Copy the GPU memory back to the CPU.
+    c_gpu.copy_to(&mut c)?;
+
+    println!("c = {:?}", c);
+
+    Ok(())
+}
 ```
 
-The architecture you choose affects which GPU features are available. See the [Compute Capability Gating](./compute_capabilities.md) guide for details on writing code that adapts to different GPU capabilities.
+Because `T` is shared between the crates, the type used in the buffers could be changed from `f32`
+to `f64` by modifying just the definition of `T`. Without that, such a change would require
+modifying lines in both crates, and any inconsistencies could cause correctness problems.
 
-Finally, you can include the PTX as a static string in your program:
+## A first example: building and running
 
-```rs
-static PTX: &str = include_str!("some/path.ptx");
+There are two ways to build and run this example: natively, and with docker.
+
+### Native
+
+If you have all the required libraries installed, try building with `cargo build`. If you get an
+error "libnvvm.so.4: cannot open shared object file", you will need to adjust `LD_LIBRARY_PATH`,
+something like this:
+```
+export LD_LIBRARY_PATH="/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
+```
+You should then be able to `cargo run`, and see the expected output:
+```
+c = [3.0, 5.0, 7.0, 9.0]
 ```
 
-Then execute it using cust.
+### Docker
 
-Don't forget to include the current `rust-toolchain.toml` at the top of your project.
+Docker is complicated. If you already know how it works, feel free to use the provided images
+however you like. The rest of this section aims to provide basic instructions for those who are
+less confident.
 
-## Docker
+First, ensure you have Docker setup to [use GPUs]. Even with Docker, your machine will need an
+appropriate driver.
 
-There are also some [Dockerfiles](https://github.com/Rust-GPU/rust-cuda/tree/main/container) prepared as a quickstart with all the necessary libraries for base CUDA development.
+[use GPUs]: https://docs.docker.com/config/containers/resource_constraints/#gpu
 
-You can use it as follows (assuming your clone of Rust CUDA is at the absolute path `RUST_CUDA`):
+You can build your own docker image but it is easier to use a prebuilt one. The [`dcr`] script
+uses `docker create` with a prebuilt image to create a container that contains the required
+libraries. It then uses `docker start` to start the container in such a way that it will run
+indefinitely unless explicitly stopped. Even if the host machine is rebooted the container will
+automatically restart.
 
-- Ensure you have Docker setup to [use gpus](https://docs.docker.com/config/containers/resource_constraints/#gpu)
-- Build `docker build -t rust-cuda $RUST_CUDA`
-- Run `docker run -it --gpus all -v $RUST_CUDA:/root/rust-cuda --entrypoint /bin/bash rust-cuda`
-  - Running will drop you into the container's shell and you will find the project at `~/rust-cuda`
-- If all is well, you'll be able to `cargo run` in `~/rust-cuda/examples/cuda/cpu/add`
+Once the container is started, the [`dex`] script uses `docker exec` to run arbitrary commands
+within the container. For example, `dex cargo build` will execute `cargo build` within the
+container.
 
-**Notes:**
+[`dcr`]: https://github.com/Rust-GPU/rust-cuda/blob/main/container/scripts/dcr
+[`dex`]: https://github.com/Rust-GPU/rust-cuda/blob/main/container/scripts/dex
 
-1. refer to [rust-toolchain.toml](#rust-toolchain.toml) to ensure you are using the correct toolchain in your project.
-2. despite using Docker, your machine will still need to be running a compatible driver, in this case for CUDA 11.4.1 it is >=470.57.02
-3. if you have issues within the container, it can help to start ensuring your GPU is recognized
-   - ensure `nvidia-smi` provides meaningful output in the container
-   - NVIDIA provides a number of samples https://github.com/NVIDIA/cuda-samples. In particular, you may want to try `make`ing and running the [`deviceQuery`](https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery) sample. If all is well you should see many details about your GPU
+Some useful docker commands:
+- `docker exec -it rust-cuda bash`: run a bash shell within the container. This lets you operate
+  inside the container indefinitely. But facilities within the container are limited, so using
+  `dex` to run commands one at a time is generally easier.
+- `docker images`: show the status of all local images.
+- `docker ps`: show the status of running containers.
+- `docker ps --all`: show the status of all containers.
+- `docker stop rust-cuda`: stop the `rust-cuda` container.
+- `docker rm rust-cuda`: remove the `rust-cuda` container, which must have been stopped.
+
+If you have problems with the container, the following steps may help with checking that your GPU
+is recognized.
+- Check if `dex nvidia-smi` provides meaningful output.
+- NVIDIA provides a number of [samples](https://github.com/NVIDIA/cuda-samples). You could try
+  `make`ing and running the [`deviceQuery`] sample. If all is well it will print various details
+  about your GPU.
+
+[`deviceQuery`]: https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery
+
+## More examples
+
+The [`examples`] directory has more complex examples. They all follow the same basic structure as
+this first example.
+
+[`examples`]: https://github.com/Rust-GPU/rust-cuda/tree/main/examples

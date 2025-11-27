@@ -1,0 +1,9 @@
+#! /bin/sh
+#----------------------------------------------------------------------------
+# Execute a command within a rust-cuda Docker container created with the
+# accompanying `dcr` script.
+#
+# E.g. `./dex cargo build` runs `cargo build` within the container.
+#----------------------------------------------------------------------------
+
+docker exec rust-cuda bash -lc "$*"
