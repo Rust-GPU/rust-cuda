@@ -88,22 +88,29 @@ jobs:
       - name: Build all bindings
         run: cargo build --all-features -p cust_raw
 
+      # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
+      # Exclude vecadd because of a link error involving nanorand and `SystemFunction036` (a.k.a.
+      # `RtlGenRandom`).
       - name: Build workspace
-        run: cargo build --workspace --exclude "cudnn*" --exclude "gemm*" --exclude "i128*" --exclude "sha2*" --exclude "vecadd*"
+        run: cargo build --workspace --exclude cudnn --exclude cudnn-sys --exclude "vecadd*"
 
+      # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
       - name: Clippy
         env:
           RUSTFLAGS: -Dwarnings
-        run: cargo clippy --workspace --exclude "cudnn*" --exclude "gemm*" --exclude "i128*" --exclude "sha2*" --exclude "vecadd*"
+        run: cargo clippy --workspace --exclude cudnn --exclude cudnn-sys
 
-      # Very limited testing because we can only run tests that don't rely on having a CUDA GPU.
+      # Exclude crates with tests that require an NVIDIA GPU: blastoff, cudnn, cust.
+      # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
       - name: Test
-        run: cargo test -p cuda_std -p gpu_rand -p nvvm -p rustc_codegen_nvvm
+        run: cargo test --workspace --exclude blastoff --exclude cudnn --exclude cudnn-sys --exclude cust
 
+      # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
+      # Exclude cust_raw because it triggers hundreds of warnings.
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude "cudnn*" --exclude "cust_raw" --exclude "gemm*" --exclude "i128*" --exclude "sha2*" --exclude "vecadd*"
+        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude cudnn --exclude cudnn-sys --exclude cust_raw
 
       # Disabled due to dll issues, someone with Windows knowledge needed
       # - name: Compiletest

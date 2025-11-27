@@ -158,24 +158,24 @@ jobs:
             cargo clippy
           '
 
-      # Very limited testing because we can only run tests that don't rely on having a CUDA GPU.
+      # Exclude crates with tests that require an NVIDIA GPU: blastoff, cudnn, cust.
       - name: Test
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
             export RUSTFLAGS=-Dwarnings
-            cargo test \
-              -p cuda_std \
-              -p gpu_rand \
-              -p nvvm \
-              -p rustc_codegen_nvvm
+            cargo test --workspace \
+              --exclude blastoff \
+              --exclude cudnn \
+              --exclude cust
           '
 
+      # Exclude cust_raw because it triggers hundreds of warnings.
       - name: Check documentation
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
             export RUSTDOCFLAGS=-Dwarnings
             cargo doc --workspace --all-features --document-private-items --no-deps \
-              --exclude "cust_raw"
+              --exclude cust_raw
           '
 
       - name: Normalize build artifacts ownership
