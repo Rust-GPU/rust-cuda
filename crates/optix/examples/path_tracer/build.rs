@@ -14,9 +14,12 @@ fn main() {
         .copy_to(out_path.join("kernels.ptx"))
         .build()
         .unwrap();
-    CudaBuilder::new(manifest_dir.join("kernels"))
-        .copy_to(out_path.join("kernels_optix.ptx"))
-        .build_args(&["--features", "optix"])
-        .build()
-        .unwrap();
+
+    // See the OPTIX_DISABLED comment.
+    // #[cfg(feature = "optix")]
+    // CudaBuilder::new(manifest_dir.join("kernels"))
+    //     .copy_to(out_path.join("kernels_optix.ptx"))
+    //     .build_args(&["--features", "optix"])
+    //     .build()
+    //     .unwrap();
 }

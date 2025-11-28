@@ -5,7 +5,8 @@ extern crate alloc;
 pub mod hittable;
 pub mod material;
 pub mod math;
-pub mod optix;
+// See the OPTIX_DISABLED comment.
+// pub mod optix;
 pub mod render;
 pub mod render_kernels;
 pub mod scene;
@@ -51,12 +52,13 @@ impl Ray {
         self.origin + t * self.dir
     }
 
-    pub fn from_optix() -> Self {
-        use optix_device::intersection;
-
-        Self {
-            dir: Vec3::from(intersection::ray_world_direction().to_array()),
-            origin: Vec3::from(intersection::ray_world_origin().to_array()),
-        }
-    }
+    // See the OPTIX_DISABLED comment.
+    // pub fn from_optix() -> Self {
+    //     use optix_device::intersection;
+    //
+    //     Self {
+    //         dir: Vec3::from(intersection::ray_world_direction().to_array()),
+    //         origin: Vec3::from(intersection::ray_world_origin().to_array()),
+    //     }
+    // }
 }

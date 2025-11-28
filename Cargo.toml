@@ -18,8 +18,18 @@ members = [
   "crates/rustc_codegen_nvvm",
   "crates/rustc_codegen_nvvm_macros",
 
-  # These crates that rely on OptiX are disabled because OptiX is less important than CUDA and the
-  # OptiX SDK is a pain to install.
+  # OPTIX_DISABLED: These crates that rely on OptiX are disabled because OptiX is less important
+  # than CUDA and the OptiX SDK is a pain to install.
+  #
+  # The `path-tracer` crates are an exception because the OptiX use is currently commented out. I
+  # originally tried putting the OptiX use within these crates behind a feature, but `crates/optix`
+  # would be built by `cargo build` even when the feature was disabled, even though it's not listed
+  # in `members`. This would break the build if you don't have OptiX installed. (There were also
+  # problems with `cargo doc --all-features`.) Commenting out the OptiX-specific code is crude, but
+  # at least that way the non-OptiX-specific code (which is a majority of it) can be built and
+  # tested, and the OptiX-specific code is still available to be used if necessary with only
+  # moderate effort required to uncomment it. (Search for comments mentioning `OPTIX_DISABLED`.)
+  #
   # "crates/optix",
   # "crates/optix_device",
   # "crates/optix_device_macros",
@@ -30,8 +40,8 @@ members = [
   # "crates/optix/examples/ex03_window",
   # "crates/optix/examples/ex04_mesh",
   # "crates/optix/examples/ex04_mesh/kernels",
-  # "crates/optix/examples/path_tracer",
-  # "crates/optix/examples/path_tracer/kernels",
+  "crates/optix/examples/path_tracer",
+  "crates/optix/examples/path_tracer/kernels",
 
   "examples/gemm",
   "examples/gemm/kernels",
