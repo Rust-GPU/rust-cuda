@@ -232,7 +232,6 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             // Get the return type.
             let sig = llvm::LLVMGetElementType(self.val_ty(self.llfn()));
             let return_ty = llvm::LLVMGetReturnType(sig);
-;
             // Check if new_ty & return_ty are different pointers.
             // FIXME: get rid of this nonsense once we are past LLVM 7 and don't have
             // to suffer from typed pointers.
@@ -1195,13 +1194,15 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 );
             }
         };
-        let tuple = self.type_struct(&[self.val_ty(src),self.type_i1()], false);
+        let tuple = self.type_struct(&[self.val_ty(src), self.type_i1()], false);
         let res = self.atomic_op(
             dst,
             tuple,
-            |builder, dst,ty| {
-                builder.abort();
-                return builder.const_undef(ty);
+            |builder, dst, ty| {
+                let address_space =
+                    unsafe { llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)) };
+                let dst_ty = unsafe { llvm::LLVMPointerType(builder.val_ty(cmp), address_space) };
+                let dst = builder.pointercast(dst, dst_ty);
                 // We are in a supported address space - just use ordinary atomics
                 unsafe {
                     llvm::LLVMRustBuildAtomicCmpXchg(
@@ -1215,7 +1216,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     )
                 }
             },
-            |builder, dst,ty| {
+            |builder, dst, ty| {
+                let dst = builder.pointercast(dst, unsafe {
+                    llvm::LLVMPointerType(
+                        builder.val_ty(cmp),
+                        llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)),
+                    )
+                });
                 // Local space is only accessible to the current thread.
                 // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
                 let load: &'ll Value =
@@ -1253,12 +1260,12 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         self.atomic_op(
             dst,
             self.val_ty(src),
-            |builder, dst,ty| {
+            |builder, dst, ty| {
                 // We are in a supported address space - just use ordinary atomics
-                let address_space = unsafe { llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)) };
+                let address_space =
+                    unsafe { llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)) };
                 let dst_ty = unsafe { llvm::LLVMPointerType(ty, address_space) };
-                let dst = builder.pointercast(dst,dst_ty);
-                let src = if matches!(op, AtomicRmwBinOp::AtomicXchg)  {builder.pointercast(src,dst_ty)} else {src};
+                let dst = builder.pointercast(dst, dst_ty);
                 unsafe {
                     llvm::LLVMBuildAtomicRMW(
                         builder.llbuilder,
@@ -1270,9 +1277,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     )
                 }
             },
-            |builder, dst,ty| {
+            |builder, dst, ty| {
                 // Local space is only accessible to the current thread.
                 // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
+                let dst = builder.pointercast(dst, unsafe {
+                    llvm::LLVMPointerType(ty, llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)))
+                });
+
                 let load: &'ll Value =
                     unsafe { llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED) };
                 let next_val = match op {
@@ -1352,13 +1363,13 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         let mut call = unsafe {
             let llfn = if self.cx.type_kind(llty) == TypeKind::Pointer {
                 self.pointercast(llfn, llty)
-            } else if self.cx.type_kind(self.val_ty(llfn)) == TypeKind::Pointer  {
+            } else if self.cx.type_kind(self.val_ty(llfn)) == TypeKind::Pointer {
                 let target_fnptr = llvm::LLVMPointerType(llty, 0);
                 self.pointercast(llfn, target_fnptr)
             } else {
                 llfn
             };
-            
+
             llvm::LLVMRustBuildCall(
                 self.llbuilder,
                 llfn,
@@ -1794,16 +1805,10 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
     fn atomic_op(
         &mut self,
         dst: &'ll Value,
-        ty:&'ll Type,
-        atomic_supported: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value,&'ll Type) -> &'ll Value,
-        emulate_local: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value,&'ll Type) -> &'ll Value,
+        ty: &'ll Type,
+        atomic_supported: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value, &'ll Type) -> &'ll Value,
+        emulate_local: impl FnOnce(&mut Builder<'a, 'll, 'tcx>, &'ll Value, &'ll Type) -> &'ll Value,
     ) -> &'ll Value {
-      
-        let emulate_local = |builder:&mut Self,_,_|{
-            // ATOMICS don't work with untyped pointers *YET*.
-            builder.abort();
-            builder.const_undef(ty)
-        };
         // (FractalFir) Atomics in CUDA have some limitations, and we have to work around them.
         // For example, they are restricted in what address space they operate on.
         // CUDA has 4 address spaces(and a generic one, which is an union of all of those).
@@ -1873,7 +1878,7 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
         self.cond_br(isspacep_local, local_bb, atomic_ub_bb);
         // The pointer is in the thread(local) space.
         self.switch_to_block(local_bb);
-        let local_res = emulate_local(self, dst,ty);
+        let local_res = emulate_local(self, dst, ty);
         self.br(merge_bb);
         // The pointer is neither in the supported address space, nor the local space.
         // This is very likely UB. So, we trap here.
