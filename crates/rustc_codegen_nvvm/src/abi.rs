@@ -4,7 +4,7 @@ use libc::c_uint;
 use rustc_abi::BackendRepr::Scalar;
 use rustc_abi::CanonAbi;
 use rustc_abi::Size;
-use rustc_abi::{HasDataLayout, Primitive, Reg, RegKind};
+use rustc_abi::{Primitive, Reg, RegKind};
 use rustc_codegen_ssa::mir::operand::OperandRef;
 use rustc_codegen_ssa::mir::operand::OperandValue;
 use rustc_codegen_ssa::mir::place::{PlaceRef, PlaceValue};
@@ -305,7 +305,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
             PassMode::Cast { cast, .. } => cast.llvm_type(cx),
             PassMode::Indirect { .. } => {
                 idx += 1;
-                llargument_tys.push(cx.type_ptr_to(self.ret.memory_ty(cx)));
+                llargument_tys.push(cx.type_i8p());
                 cx.type_void()
             }
         };
@@ -353,7 +353,7 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
                     attrs: _,
                     meta_attrs: None,
                     on_stack: _,
-                } => cx.type_ptr_to(arg.memory_ty(cx)),
+                } => cx.type_i8p(),
             };
             let (new, changed) = get_transformed_type(cx, llarg_ty);
             if changed {
@@ -564,7 +564,6 @@ impl<'tcx> AbiBuilderMethods for Builder<'_, '_, 'tcx> {
 }
 
 pub(crate) trait ArgAbiExt<'ll, 'tcx> {
-    fn memory_ty(&self, cx: &CodegenCx<'ll, 'tcx>) -> &'ll Type;
     fn store(
         &self,
         bx: &mut Builder<'_, 'll, 'tcx>,
@@ -580,12 +579,6 @@ pub(crate) trait ArgAbiExt<'ll, 'tcx> {
 }
 
 impl<'ll, 'tcx> ArgAbiExt<'ll, 'tcx> for ArgAbi<'tcx, Ty<'tcx>> {
-    /// Gets the LLVM type for a place of the original Rust type of
-    /// this argument/return, i.e., the result of `type_of::type_of`.
-    fn memory_ty(&self, cx: &CodegenCx<'ll, 'tcx>) -> &'ll Type {
-        self.layout.llvm_type(cx)
-    }
-
     /// Stores a direct/indirect value described by this ArgAbi into a
     /// place for the original Rust type of this argument/return.
     /// Can be used for both storing formal arguments into Rust variables

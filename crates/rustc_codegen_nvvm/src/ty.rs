@@ -55,9 +55,7 @@ impl Type {
 
 impl<'ll> CodegenCx<'ll, '_> {
     pub(crate) fn voidp(&self) -> &'ll Type {
-        // llvm uses i8* for void ptrs, void* is invalid
-        let i8_ty = self.type_i8();
-        self.type_ptr_to_ext(i8_ty, AddressSpace::ZERO)
+        self.type_i8p()
     }
 
     pub(crate) fn type_named_struct(&self, name: &str) -> &'ll Type {
@@ -116,11 +114,15 @@ impl<'ll> CodegenCx<'ll, '_> {
             "don't call ptr_to on function types, use ptr_to_llvm_type on FnAbi instead or explicitly specify an address space if it makes sense"
         );
 
-        unsafe { self.type_ptr_to_ext(ty, AddressSpace::ZERO) }
+        self.type_ptr_to_ext(ty, AddressSpace::ZERO)
     }
     #[track_caller]
     pub(crate) fn type_ptr_to_ext(&self, ty: &'ll Type, address_space: AddressSpace) -> &'ll Type {
-        //assert_eq!(ty,self.type_ix(8),"rustc_codegen_nvvm uses opaque pointers - specifying pointer type other than `i8` is not valid!");
+        assert_eq!(
+            ty,
+            self.type_ix(8),
+            "rustc_codegen_nvvm uses opaque pointers - specifying pointer type other than `i8` is not valid!"
+        );
         unsafe { llvm::LLVMPointerType(self.type_ix(8), address_space.0) }
     }
 
@@ -132,11 +134,6 @@ impl<'ll> CodegenCx<'ll, '_> {
             args.set_len(n_args);
             args
         }
-    }
-
-    pub(crate) fn type_pointee_for_align(&self, align: Align) -> &'ll Type {
-        let ity = Integer::approximate_align(self, align);
-        self.type_from_integer(ity)
     }
 
     /// Return a LLVM type that has at most the required alignment,
@@ -220,7 +217,11 @@ impl<'ll, 'tcx> BaseTypeCodegenMethods for CodegenCx<'ll, 'tcx> {
     }
 
     fn element_type(&self, ty: &'ll Type) -> &'ll Type {
-        unsafe { llvm::LLVMGetElementType(ty) }
+        let res = unsafe { llvm::LLVMGetElementType(ty) };
+        if self.type_kind(ty) == TypeKind::Pointer {
+            //assert_eq!(self.type_kind(res),TypeKind::Function, "{ty:?} is a pointer, and getting its pointee is a nonsense operation.");
+        }
+        res
     }
 
     fn vector_length(&self, ty: &'ll Type) -> usize {
@@ -341,12 +342,8 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
             }
 
             let llty = match *self.ty.kind() {
-                ty::Ref(_, ty, _) | ty::RawPtr(ty, _) => {
-                    cx.type_ptr_to(cx.layout_of(ty).llvm_type(cx))
-                }
-                ty::Adt(def, _) if def.is_box() => {
-                    cx.type_ptr_to(cx.layout_of(self.ty.expect_boxed_ty()).llvm_type(cx))
-                }
+                ty::Ref(_, _, _) | ty::RawPtr(_, _) => cx.type_i8p(),
+                ty::Adt(def, _) if def.is_box() => cx.type_i8p(),
                 ty::FnPtr(sig, hdr) => {
                     cx.fn_ptr_backend_type(cx.fn_abi_of_fn_ptr(sig.with(hdr), ty::List::empty()))
                 }
@@ -427,17 +424,14 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
             Float(f) => cx.type_from_float(f),
             Pointer(address_space) => {
                 // If we know the alignment, pick something better than i8.
-                let (pointee, address_space) = if let Some(PointeeInfo {
-                    safe: Some(_),
-                    align,
-                    ..
-                }) = self.pointee_info_at(cx, Size::ZERO)
+                let address_space = if let Some(PointeeInfo { safe: Some(_), .. }) =
+                    self.pointee_info_at(cx, Size::ZERO)
                 {
-                    (cx.type_pointee_for_align(align), address_space)
+                    address_space
                 } else {
-                    (cx.type_i8(), AddressSpace::ZERO)
+                    AddressSpace::ZERO
                 };
-                cx.type_ptr_to_ext(pointee, address_space)
+                cx.type_i8p_ext(address_space)
             }
         }
     }

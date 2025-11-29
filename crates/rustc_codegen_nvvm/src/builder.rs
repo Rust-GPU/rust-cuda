@@ -4,7 +4,7 @@ use std::ptr;
 
 use libc::{c_char, c_uint};
 use rustc_abi as abi;
-use rustc_abi::{AddressSpace, Align, HasDataLayout, Size, TargetDataLayout, WrappingRange};
+use rustc_abi::{Align, HasDataLayout, Size, TargetDataLayout, WrappingRange};
 use rustc_codegen_ssa::MemFlags;
 use rustc_codegen_ssa::common::{AtomicRmwBinOp, IntPredicate, RealPredicate, TypeKind};
 use rustc_codegen_ssa::mir::operand::{OperandRef, OperandValue};
@@ -720,7 +720,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         flags: MemFlags,
     ) -> &'ll Value {
         assert_eq!(self.cx.type_kind(self.cx.val_ty(ptr)), TypeKind::Pointer);
-        let ptr = self.check_store(val, ptr);
+
         let address_space = unsafe { llvm::LLVMGetPointerAddressSpace(self.val_ty(ptr)) };
         let store_pointer_ty = unsafe { llvm::LLVMPointerType(self.val_ty(val), address_space) };
 
@@ -784,7 +784,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 UNNAMED,
             );
             self.pointercast(
-                ptr,
+                res,
                 self.type_i8p_ext(rustc_abi::AddressSpace(address_space)),
             )
         }
@@ -809,7 +809,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 UNNAMED,
             );
             self.pointercast(
-                ptr,
+                res,
                 self.type_i8p_ext(rustc_abi::AddressSpace(address_space)),
             )
         }
@@ -917,20 +917,20 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn bitcast(&mut self, mut val: &'ll Value, dest_ty: &'ll Type) -> &'ll Value {
         trace!("Bitcast `{:?}` to ty `{:?}`", val, dest_ty);
-        unsafe {
-            let ty = self.val_ty(val);
-            let kind = llvm::LLVMRustGetTypeKind(ty);
-            if kind == llvm::TypeKind::Pointer {
-                let element = self.element_type(ty);
-                let addrspace = llvm::LLVMGetPointerAddressSpace(ty);
-                let new_ty = self.type_ptr_to_ext(element, AddressSpace::ZERO);
-                if addrspace != 0 {
-                    trace!("injecting addrspace cast for `{:?}` to `{:?}`", ty, new_ty);
-                    val = llvm::LLVMBuildAddrSpaceCast(self.llbuilder, val, new_ty, UNNAMED);
-                }
+
+        let ty = self.val_ty(val);
+        let kind = unsafe { llvm::LLVMRustGetTypeKind(ty) };
+
+        if kind == llvm::TypeKind::Pointer {
+            let element = self.element_type(ty);
+            let addrspace = unsafe { llvm::LLVMGetPointerAddressSpace(ty) };
+            let new_ty = unsafe { llvm::LLVMPointerType(element, 0) };
+            if addrspace != 0 {
+                trace!("injecting addrspace cast for `{:?}` to `{:?}`", ty, new_ty);
+                val = unsafe { llvm::LLVMBuildAddrSpaceCast(self.llbuilder, val, new_ty, UNNAMED) };
             }
-            llvm::LLVMBuildBitCast(self.llbuilder, val, dest_ty, UNNAMED)
         }
+        unsafe { llvm::LLVMBuildBitCast(self.llbuilder, val, dest_ty, UNNAMED) }
     }
 
     fn intcast(&mut self, val: &'ll Value, dest_ty: &'ll Type, is_signed: bool) -> &'ll Value {
@@ -1198,7 +1198,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         let res = self.atomic_op(
             dst,
             tuple,
-            |builder, dst, ty| {
+            |builder, dst, _| {
                 let address_space =
                     unsafe { llvm::LLVMGetPointerAddressSpace(builder.val_ty(dst)) };
                 let dst_ty = unsafe { llvm::LLVMPointerType(builder.val_ty(cmp), address_space) };
@@ -1216,7 +1216,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                     )
                 }
             },
-            |builder, dst, ty| {
+            |builder, dst, _| {
                 let dst = builder.pointercast(dst, unsafe {
                     llvm::LLVMPointerType(
                         builder.val_ty(cmp),
@@ -1697,20 +1697,6 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
     fn align_metadata(&mut self, _load: &'ll Value, _align: Align) {}
 
     fn noundef_metadata(&mut self, _load: &'ll Value) {}
-
-    fn check_store(&mut self, val: &'ll Value, ptr: &'ll Value) -> &'ll Value {
-        let dest_ptr_ty = self.cx.val_ty(ptr);
-        let stored_ty = self.cx.val_ty(val);
-        let stored_ptr_ty = self.cx.type_ptr_to(stored_ty);
-
-        assert_eq!(self.cx.type_kind(dest_ptr_ty), TypeKind::Pointer);
-
-        if dest_ptr_ty == stored_ptr_ty {
-            ptr
-        } else {
-            self.bitcast(ptr, stored_ptr_ty)
-        }
-    }
 
     fn check_call<'b>(
         &mut self,
