@@ -70,7 +70,7 @@ fn main() {
     create_cuda_driver_bindings(&sdk, &outdir, &manifest_dir);
     create_cuda_runtime_bindings(&sdk, &outdir, &manifest_dir);
     create_cublas_bindings(&sdk, &outdir, &manifest_dir);
-    create_nptx_compiler_bindings(&sdk, &outdir, &manifest_dir);
+    create_nvptx_compiler_bindings(&sdk, &outdir, &manifest_dir);
     create_nvvm_bindings(&sdk, &outdir, &manifest_dir);
 
     if cfg!(any(
@@ -154,6 +154,20 @@ fn create_cuda_driver_bindings(
         .size_t_is_usize(true)
         .layout_tests(true)
         .must_use_type("CUresult")
+        // The CUDA docs have lots of malformed Doxygen directives, e.g.
+        //
+        //   \sa
+        //      Foo,
+        //      Bar
+        //
+        // instead of
+        //
+        //   \sa Foo
+        //   \sa Bar
+        //
+        // (And others.) If we try to convert these to rustdoc, even using the doxygen-bindgen
+        // crate, we end up with rustdocs that trigger lots of warnings. So don't even try.
+        .generate_comments(false)
         .generate()
         .expect("Unable to generate CUDA driver bindings.");
     bindings
@@ -203,6 +217,8 @@ fn create_cuda_runtime_bindings(
         .size_t_is_usize(true)
         .layout_tests(true)
         .must_use_type("cudaError_t")
+        // See the comment on `generate_comments` in `create_cuda_runtime_bindings`.
+        .generate_comments(false)
         .generate()
         .expect("Unable to generate CUDA runtime bindings.");
     bindings
@@ -254,6 +270,8 @@ fn create_cublas_bindings(sdk: &cuda_sdk::CudaSdk, outdir: &path::Path, manifest
             .size_t_is_usize(true)
             .layout_tests(true)
             .must_use_type("cublasStatus_t")
+            // See the comment on `generate_comments` in `create_cuda_runtime_bindings`.
+            .generate_comments(false)
             .generate()
             .unwrap_or_else(|_| panic!("Unable to generate {pkg} bindings."));
         bindings
@@ -262,7 +280,7 @@ fn create_cublas_bindings(sdk: &cuda_sdk::CudaSdk, outdir: &path::Path, manifest
     }
 }
 
-fn create_nptx_compiler_bindings(
+fn create_nvptx_compiler_bindings(
     sdk: &cuda_sdk::CudaSdk,
     outdir: &path::Path,
     manifest_dir: &path::Path,
@@ -294,6 +312,8 @@ fn create_nptx_compiler_bindings(
         .size_t_is_usize(true)
         .layout_tests(true)
         .must_use_type("nvPTXCompileResult")
+        // See the comment on `generate_comments` in `create_cuda_runtime_bindings`.
+        .generate_comments(false)
         .generate()
         .expect("Unable to generate nvptx-compiler bindings.");
     bindings
@@ -327,6 +347,8 @@ fn create_nvvm_bindings(sdk: &cuda_sdk::CudaSdk, outdir: &path::Path, manifest_d
         .size_t_is_usize(true)
         .layout_tests(true)
         .must_use_type("nvvmResult")
+        // See the comment on `generate_comments` in `create_cuda_runtime_bindings`.
+        .generate_comments(false)
         .generate()
         .expect("Unable to generate libNVVM bindings.");
     bindings
