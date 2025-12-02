@@ -110,7 +110,7 @@ jobs:
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude cudnn --exclude cudnn-sys --exclude cust_raw
+        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude cudnn --exclude cudnn-sys
 
       # Disabled due to dll issues, someone with Windows knowledge needed
       # - name: Compiletest

@@ -168,8 +168,7 @@ jobs:
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
             export RUSTDOCFLAGS=-Dwarnings
-            cargo doc --workspace --all-features --document-private-items --no-deps \
-              --exclude cust_raw
+            cargo doc --workspace --all-features --document-private-items --no-deps
           '
 
       - name: Normalize build artifacts ownership
