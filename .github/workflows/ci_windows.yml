@@ -57,7 +57,6 @@ jobs:
           log-file-suffix: "${{matrix.os}}-${{matrix.cuda}}"
 
       - name: List CUDA_PATH files
-        shell: pwsh
         run: Get-ChildItem -Path $env:CUDA_PATH -Recurse | ForEach-Object { $_.FullName }
 
       # random command that forces rustup to install stuff in rust-toolchain
@@ -68,7 +67,6 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Update PATH to expose CUDA codegen backend
-        shell: pwsh
         run: |
           echo "$env:CUDA_PATH\nvvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
@@ -103,14 +101,20 @@ jobs:
       # Exclude crates with tests that require an NVIDIA GPU: blastoff, cudnn, cust.
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
       - name: Test
-        run: cargo test --workspace --exclude blastoff --exclude cudnn --exclude cudnn-sys --exclude cust
+        run: |
+          cargo test --workspace `
+            --exclude blastoff --exclude cudnn --exclude cudnn-sys --exclude cust
 
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude cudnn --exclude cudnn-sys
+        run: |
+          cargo doc --workspace --all-features --document-private-items --no-deps `
+            --exclude cudnn --exclude cudnn-sys
 
       # Disabled due to dll issues, someone with Windows knowledge needed
       # - name: Compiletest
-      #  run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90
+      #  run: |
+      #    cargo run -p compiletests --release --no-default-features `
+      #      -- --target-arch compute_61,compute_75,compute_90
