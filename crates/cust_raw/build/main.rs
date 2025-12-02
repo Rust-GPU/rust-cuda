@@ -192,6 +192,7 @@ fn create_cuda_runtime_bindings(
         .allowlist_type("^libraryPropertyType.*")
         .allowlist_var("^CU.*")
         .allowlist_function("^cu.*")
+        .no_partialeq("cudaHostNodeParams.*")
         .default_enum_style(bindgen::EnumVariation::Rust {
             non_exhaustive: false,
         })
