@@ -81,7 +81,7 @@ impl CameraController {
 
                     self.yaw += delta.x * self.sensitivity;
                     self.pitch += delta.y * self.sensitivity;
-                    self.pitch = self.pitch.min(89.0).max(-89.0);
+                    self.pitch = self.pitch.clamp(-89.0, 89.0);
 
                     let yaw_rad = self.yaw.to_radians();
                     let pitch_rad = self.pitch.to_radians();

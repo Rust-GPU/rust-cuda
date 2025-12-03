@@ -191,7 +191,7 @@ impl ViewerRenderer {
         let out = ui
             .window("crab")
             .size([300.0, 300.0], Condition::FirstUseEver)
-            .build(|| renderer.render(&ui))
+            .build(|| renderer.render(ui))
             .unwrap();
 
         let raw =
@@ -217,7 +217,7 @@ impl ViewerRenderer {
         target
             .draw(
                 &*vertex_buffer,
-                &NoIndices(PrimitiveType::TrianglesList),
+                NoIndices(PrimitiveType::TrianglesList),
                 image_program,
                 &uniforms,
                 &Default::default(),
@@ -225,7 +225,7 @@ impl ViewerRenderer {
             .unwrap();
 
         let gl_window = display.gl_window();
-        platform.prepare_render(&ui, gl_window.window());
+        platform.prepare_render(ui, gl_window.window());
 
         let draw_data = self.imgui_ctx.render();
         imgui_renderer.render(&mut target, draw_data).unwrap();
