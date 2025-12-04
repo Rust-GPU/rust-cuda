@@ -296,9 +296,9 @@ unsafe fn match_any_32(mask: u32, value: u32) -> u32 {
 unsafe fn match_any_64(mask: u32, value: u64) -> u32 {
     extern "C" {
         #[link_name = "llvm.nvvm.match.any.sync.i64"]
-        fn __nvvm_warp_match_any_64(mask: u32, value: u64) -> u32;
+        fn __nvvm_warp_match_any_64(mask: u32, value: u64) -> u64;
     }
-    __nvvm_warp_match_any_64(mask, value)
+    __nvvm_warp_match_any_64(mask, value) as u32
 }
 
 #[gpu_only]

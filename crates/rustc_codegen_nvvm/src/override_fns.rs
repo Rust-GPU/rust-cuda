@@ -8,6 +8,7 @@ use crate::context::CodegenCx;
 use crate::llvm;
 use rustc_codegen_ssa::mono_item::MonoItemExt;
 use rustc_codegen_ssa::traits::{BaseTypeCodegenMethods, BuilderMethods};
+use rustc_hir::def::DefKind;
 use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::mir::mono::{Linkage, MonoItem, MonoItemData, Visibility};
 use rustc_middle::ty::layout::FnAbiOf;
@@ -41,6 +42,12 @@ fn should_override<'tcx>(func: Instance<'tcx>, cx: &CodegenCx<'_, 'tcx>) -> bool
     let is_libm = cx.tcx.crate_name(LOCAL_CRATE).as_str() == "libm";
     if !is_libm {
         return false;
+    }
+
+    // Only try to override top-level/assoc functions; closures/anon fns cause ICE via item_name.
+    match cx.tcx.def_kind(func.def_id()) {
+        DefKind::Fn | DefKind::AssocFn => {}
+        _ => return false,
     }
 
     let sym = cx.tcx.item_name(func.def_id());
