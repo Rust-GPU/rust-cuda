@@ -9,7 +9,8 @@ glam = { version = "0.30", default-features = false, features = ["libm", "cuda"]
 enum_dispatch = "0.3.13"
 gpu_rand = { version = "0.1", path = "../../../../gpu_rand" }
 cust_core = { path = "../../../../cust_core", features = ["glam"] }
-optix_device = { path = "../../../../optix_device" }
+# See the OPTIX_DISABLED comment.
+# optix_device = { path = "../../../../optix_device", optional = true }
 approx = { version = "0.5" }
 
 [lib]

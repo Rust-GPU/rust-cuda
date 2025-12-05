@@ -1,7 +1,8 @@
 pub mod common;
 pub mod cpu;
 pub mod cuda;
-pub mod optix;
+// See the OPTIX_DISABLED comment.
+// pub mod optix;
 pub mod renderer;
 pub mod viewer;
 
