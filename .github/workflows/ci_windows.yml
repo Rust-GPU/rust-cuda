@@ -15,7 +15,7 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  rust:
+  build:
     name: Build / ${{ matrix.os }} / CUDA-${{ matrix.cuda }}
     runs-on: ${{ matrix.os }}
     env:

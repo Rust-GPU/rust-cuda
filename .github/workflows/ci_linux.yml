@@ -1,20 +1,14 @@
 name: CI on Linux
 
 on:
-  # Trigger builds on pull requests
   pull_request:
     paths-ignore:
       - "**.md"
-
-  # Trigger builds AND tests on push to main
   push:
     branches:
       - main
     paths-ignore:
       - "**.md"
-
-  # Add manual trigger via Actions UI for running BOTH build and test
-  workflow_dispatch:
 
 env:
   RUST_LOG: info
@@ -37,12 +31,6 @@ jobs:
           - name: RockyLinux-9 / CUDA-12.8.1 / x86_64
             image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda12:latest"
             runner: ubuntu-latest
-    outputs:
-      # Output the result of the permission check
-      actor_has_write_permission: ${{ steps.check_access.outputs.require-result }}
-      # Output the build artifact details so the test job can use them
-      artifact_name: ${{ steps.artifact_details.outputs.name }}
-      artifact_path: ${{ steps.artifact_details.outputs.path }}
 
     steps:
       - name: Free up space
@@ -86,17 +74,9 @@ jobs:
           docker system prune -af || true
           docker builder prune -af || true
           df -h
+
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Check access permissions
-        id: check_access
-        uses: actions-cool/check-user-permission@v2
-        with:
-          require: write
-          username: ${{ github.triggering_actor }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pull build image
         run: docker pull ${{ matrix.variance.image }}
@@ -170,88 +150,10 @@ jobs:
             cargo doc --workspace --all-features --document-private-items --no-deps
           '
 
-      - name: Normalize build artifacts ownership
-        run: |
-          docker exec "$CONTAINER_NAME" bash -lc "rm -rf /workspace/target/debug/incremental || true"
-          docker exec "$CONTAINER_NAME" bash -lc "chown -R ${HOST_UID}:${HOST_GID} /workspace/target || true"
-
       - name: Stop build container
         run: |
           docker rm -f "$CONTAINER_NAME" || true
-      - name: Prepare artifact details
-        id: artifact_details
-        run: |
-          SANITIZED_NAME=$(echo '${{ matrix.variance.name }}' | sed 's/[^a-zA-Z0-9.-]/-/g')
-          ARTIFACT_NAME="target_debug-${SANITIZED_NAME}-${{ github.run_id }}"
-          ARTIFACT_PATH="target/debug"
-          echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
-          echo "path=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.artifact_details.outputs.name }}
-          path: ${{ steps.artifact_details.outputs.path }}
-          retention-days: 1
-
-  test:
-    name: Test / ${{ matrix.variance.name }}
-    # Depends on the build job
-    needs: build
-    # Run ONLY IF:
-    # - The corresponding 'build' job succeeded AND
-    # - EITHER:
-    #   - Event is 'push' to 'main'
-    #   - OR Event is 'workflow_dispatch'
-    #   - OR Event is 'pull_request' AND the 'actor_has_write_permission' output from build is 'true'
-    if: >
-      needs.build.result == 'success' &&
-      (
-        (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-        github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'pull_request' && needs.build.outputs.actor_has_write_permission == 'true')
-      )
-    runs-on: ${{ matrix.variance.runner }}
-    # Use the exact same container image as the build job
-    container:
-      image: ${{ matrix.variance.image }}
-    strategy:
-      # Save some credits
-      fail-fast: true
-      matrix:
-        variance:
-          # Must match the build job's matrix definition
-          - name: Ubuntu-24.04 / CUDA-12.8.1 / x86_64
-            image: "ghcr.io/rust-gpu/rust-cuda-ubuntu24-cuda12:latest"
-            runner: ubuntu-latest
-          - name: Ubuntu-24.04 / CUDA-12.8.1 / ARM64
-            image: "ghcr.io/rust-gpu/rust-cuda-ubuntu24-cuda12:latest"
-            runner: ubuntu-24.04-arm
-    steps:
-      - name: Compute artifact name
-        id: test_artifact
-        run: |
-          SANITIZED_NAME=$(echo '${{ matrix.variance.name }}' | sed 's/[^a-zA-Z0-9.-]/-/g')
-          ARTIFACT_NAME="target_debug-${SANITIZED_NAME}-${{ github.run_id }}"
-          ARTIFACT_PATH="target/debug"
-          echo "name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
-          echo "path=${ARTIFACT_PATH}" >> $GITHUB_OUTPUT
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ steps.test_artifact.outputs.name }}
-          path: ${{ steps.test_artifact.outputs.path }}
-
-      - name: List downloaded files
-        run: ls -lR ${{ steps.test_artifact.outputs.path }}
-
-      - name: Run remote tests
-        env:
-          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-        run: |
-          echo "Stubbed out"
   compiletest:
     name: Compile tests
     runs-on: ubuntu-latest
