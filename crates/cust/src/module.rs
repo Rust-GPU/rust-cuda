@@ -338,7 +338,7 @@ impl Module {
 
     /// Get a reference to a global symbol, which can then be copied to/from.
     ///
-    /// # Panics:
+    /// # Panics
     ///
     /// This function panics if the size of the symbol is not the same as the `mem::sizeof<T>()`.
     ///

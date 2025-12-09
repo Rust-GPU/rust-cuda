@@ -1,6 +1,6 @@
 //! Types for error handling
 //!
-//! # Error handling in CUDA:
+//! # Error handling in CUDA
 //!
 //! cust uses the [`CudaError`](enum.CudaError.html) enum to represent the errors returned by
 //! the CUDA API. It is important to note that nearly every function in CUDA (and therefore
