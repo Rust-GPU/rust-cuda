@@ -429,7 +429,7 @@ impl<T: DeviceCopy> UnifiedPointer<T> {
 
     /// Returns a null unified pointer.
     ///
-    /// # Examples:
+    /// # Examples
     ///
     /// ```
     /// # let _context = cust::quick_init().unwrap();

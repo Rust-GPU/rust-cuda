@@ -474,7 +474,7 @@ impl Function<'_> {
 
 /// Launch a kernel function asynchronously.
 ///
-/// # Syntax:
+/// # Syntax
 ///
 /// The format of this macro is designed to resemble the triple-chevron syntax used to launch
 /// kernels in CUDA C. There are two forms available:
