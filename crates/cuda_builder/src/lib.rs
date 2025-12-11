@@ -148,6 +148,10 @@ pub struct CudaBuilder {
     /// Enable FMA (fused multiply-add) contraction.
     /// `true` by default.
     pub fma_contraction: bool,
+    /// Enable fast math approximations globally (equivalent to NVCC's --use_fast_math).
+    /// This implies ftz=true, prec-div=false, prec-sqrt=false, and fmad=true.
+    /// `false` by default.
+    pub fast_math: bool,
     /// Whether to emit a certain IR. Emitting LLVM IR is useful to debug any codegen
     /// issues. If you are submitting a bug report try to include the LLVM IR file of
     /// the program that contains the offending function.
@@ -206,6 +210,7 @@ impl CudaBuilder {
             nvvm_opts: true,
             arch: NvvmArch::default(),
             ftz: false,
+            fast_math: false,
             fast_sqrt: false,
             fast_div: false,
             fma_contraction: true,
@@ -263,6 +268,19 @@ impl CudaBuilder {
     /// Flush denormal values to zero when performing single-precision floating point operations.
     pub fn ftz(mut self, ftz: bool) -> Self {
         self.ftz = ftz;
+        self
+    }
+
+    /// Enable fast math approximations globally (equivalent to NVCC's --use_fast_math).
+    /// This implies ftz=true, prec-div=false, prec-sqrt=false, and fmad=true.
+    pub fn fast_math(mut self, fast_math: bool) -> Self {
+        self.fast_math = fast_math;
+        if fast_math {
+            self.ftz = true;
+            self.fast_sqrt = true;
+            self.fast_div = true;
+            self.fma_contraction = true;
+        }
         self
     }
 
@@ -721,6 +739,10 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
 
     if builder.ftz {
         llvm_args.push("-ftz=1".to_string());
+    }
+
+    if builder.fast_math {
+        llvm_args.push("--use_fast_math".to_string());
     }
 
     if builder.fast_sqrt {
