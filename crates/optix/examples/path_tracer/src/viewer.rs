@@ -1,16 +1,17 @@
 use glam::USizeVec2;
 use glium::{
+    Display, Program, Rect, Surface, VertexBuffer,
     glutin::{
+        ContextBuilder,
         dpi::PhysicalSize,
         event::{Event, WindowEvent},
         event_loop::{ControlFlow, EventLoop},
         window::WindowBuilder,
-        ContextBuilder,
     },
     implement_vertex,
     index::{NoIndices, PrimitiveType},
     texture::{RawImage2d, SrgbTexture2d},
-    uniform, Display, Program, Rect, Surface, VertexBuffer,
+    uniform,
 };
 
 use imgui::Condition;
@@ -18,7 +19,7 @@ use imgui_winit_support::{HiDpiMode, WinitPlatform};
 use path_tracer_kernels::scene::Scene;
 use std::time::Instant;
 
-use crate::{common::Camera, renderer::Renderer, HEIGHT, WIDTH};
+use crate::{HEIGHT, WIDTH, common::Camera, renderer::Renderer};
 
 static IMAGE_VERT: &str = include_str!("../shaders/image.vert");
 static IMAGE_FRAG: &str = include_str!("../shaders/image.frag");

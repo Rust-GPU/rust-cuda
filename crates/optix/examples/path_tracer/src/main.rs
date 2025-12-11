@@ -9,10 +9,10 @@ pub mod viewer;
 use common::Camera;
 use glam::Vec3;
 use path_tracer_kernels::{
+    Object,
     material::{DielectricMaterial, DiffuseMaterial, MaterialKind, MetallicMaterial},
     scene::Scene,
     sphere::Sphere,
-    Object,
 };
 use std::error::Error;
 

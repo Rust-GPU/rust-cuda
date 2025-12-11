@@ -7,7 +7,7 @@ use cust::{
 };
 use glam::{U8Vec3, USizeVec2, Vec3};
 use gpu_rand::DefaultRand;
-use path_tracer_kernels::{material::MaterialKind, scene::Scene, Object, Viewport};
+use path_tracer_kernels::{Object, Viewport, material::MaterialKind, scene::Scene};
 
 use super::SEED;
 
