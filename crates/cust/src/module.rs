@@ -340,7 +340,8 @@ impl Module {
     ///
     /// # Panics:
     ///
-    /// This function panics if the size of the symbol is not the same as the `mem::sizeof<T>()`.
+    /// This function panics if the size of the symbol is greater than
+    /// `mem::sizeof<T>()`.
     ///
     /// # Examples
     ///
@@ -375,7 +376,7 @@ impl Module {
                 name.as_ptr(),
             )
             .to_result()?;
-            assert_eq!(size, mem::size_of::<T>());
+            assert!(size <= mem::size_of::<T>());
             Ok(Symbol {
                 ptr,
                 module: PhantomData,
