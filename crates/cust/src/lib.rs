@@ -6,9 +6,9 @@
 //! provides unsafe functions for retrieving and setting handles to raw CUDA objects.
 //! This allows advanced users to embed libraries that rely on CUDA, such as OptiX.
 //!
-//! # CUDA Terminology:
+//! # CUDA Terminology
 //!
-//! ## Devices and Hosts:
+//! ## Devices and Hosts
 //!
 //! This crate and its documentation uses the terms "device" and "host" frequently, so it's worth
 //! explaining them in more detail. A device refers to a CUDA-capable GPU or similar device and its
@@ -16,7 +16,7 @@
 //! must be transferred from host memory to device memory before the device can use it for
 //! computations, and the results must then be transferred back to host memory.
 //!
-//! ## Contexts, Modules, Streams and Functions:
+//! ## Contexts, Modules, Streams and Functions
 //!
 //! A CUDA context is akin to a process on the host - it contains all of the state for working with
 //! a device, all memory allocations, etc. Each context is associated with a single device.
@@ -30,7 +30,7 @@
 //! stream. Work within a single stream will execute sequentially in the order that it was
 //! submitted, and may interleave with work from other streams.
 //!
-//! ## Grids, Blocks and Threads:
+//! ## Grids, Blocks and Threads
 //!
 //! CUDA devices typically execute kernel functions on many threads in parallel. These threads can
 //! be grouped into thread blocks, which share an area of fast hardware memory known as shared
@@ -44,7 +44,7 @@
 //! hand, if the thread blocks are too small each processor will be under-utilized and the
 //! code will be unable to make effective use of shared memory.
 //!
-//! # Usage:
+//! # Usage
 //!
 //! Before using cust, you must install the CUDA development libraries for your system. Version
 //! 9.0 or newer is required. You must also have a CUDA-capable GPU installed with the appropriate

@@ -1,3 +1,5 @@
+//! Custom derive macro crate for cust.
+
 #[macro_use]
 extern crate quote;
 extern crate proc_macro;
