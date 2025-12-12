@@ -37,7 +37,7 @@ fn main() -> Result<(), cust::error::CudaError> {
     let value = 26;
 
     let blocks = BlockSize::xy(512, 1);
-    let grids = GridSize::xy((N / (blocks.x as usize)).try_into().unwrap(), 1);
+    let grids = GridSize::xy(N / blocks.x, 1);
 
     let start_event = Event::new(EventFlags::DEFAULT)?;
     let stop_event = Event::new(EventFlags::DEFAULT)?;

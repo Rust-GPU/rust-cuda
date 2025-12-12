@@ -1,5 +1,5 @@
 use crate::*;
-use cuda_std::glam::UVec2;
+use cuda_std::glam::USizeVec2;
 
 const BACKGROUND_BLUE_MULTIPLIER: f32 = 0.7;
 
@@ -9,7 +9,7 @@ pub fn color(ray: Ray) -> Vec3 {
     (1.0 - t) * Vec3::ONE + t * Vec3::new(0.5, 0.7, 1.0)
 }
 
-pub fn generate_ray(idx: UVec2, view: &Viewport, offset: Vec2) -> Ray {
+pub fn generate_ray(idx: USizeVec2, view: &Viewport, offset: Vec2) -> Ray {
     let uv = (idx.as_vec2() + offset) / view.bounds.as_vec2();
     Ray {
         origin: view.origin,

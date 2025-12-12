@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use glam::{U8Vec3, USizeVec2, UVec2, Vec2, Vec3};
+use glam::{U8Vec3, USizeVec2, Vec2, Vec3};
 use gpu_rand::{DefaultRand, GpuRand};
 use imgui::Ui;
 use path_tracer_kernels::{
@@ -131,7 +131,7 @@ impl CpuRenderer {
             .for_each(|(idx, (px, rng))| {
                 let x = idx % viewport.bounds.x;
                 let y = idx / viewport.bounds.x;
-                let idx = UVec2::new(x as u32, y as u32);
+                let idx = USizeVec2::new(x, y);
 
                 let offset = Vec2::from(rng.normal_f32_2());
 
