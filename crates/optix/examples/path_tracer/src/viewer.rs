@@ -60,11 +60,7 @@ pub fn run(camera: &Camera, scene: &Scene) -> ! {
         .with_inner_size(PhysicalSize::new(WIDTH as f64, HEIGHT as f64));
     let cb = ContextBuilder::new().with_vsync(true);
     let display = Display::new(wb, cb, &event_loop).unwrap();
-    let renderer = Renderer::new(
-        USizeVec2::new(WIDTH as usize, HEIGHT as usize),
-        camera,
-        scene,
-    );
+    let renderer = Renderer::new(USizeVec2::new(WIDTH, HEIGHT), camera, scene);
     let mut viewer = ViewerRenderer::new(display, renderer);
 
     let mut last_frame = Instant::now();
@@ -93,8 +89,7 @@ impl ViewerRenderer {
 
         let size = display.gl_window().window().inner_size();
         let image_size = USizeVec2::new(size.width as usize, size.height as usize);
-        let texture =
-            SrgbTexture2d::empty(&display, image_size.x as u32, image_size.y as u32).unwrap();
+        let texture = SrgbTexture2d::empty(&display, size.width, size.height).unwrap();
 
         let mut imgui_ctx = imgui::Context::create();
         imgui_ctx.set_ini_filename(None);

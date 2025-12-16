@@ -365,16 +365,12 @@ pub fn gemm_naive(
     // This will try to maximize how much of the GPU is used by finding the best launch configuration for the
     // current CUDA device/architecture.
     let (_, block_size) = kernel.suggested_launch_configuration(0, 0.into())?;
-    let block_size = block_size as usize;
     let (block_size_x, block_size_y) = if block_size > m * n {
-        (block_size.div_ceil(m) as u32, m as u32)
+        (block_size.div_ceil(m), m)
     } else {
-        (1, block_size as u32)
+        (1, block_size)
     };
-    let (grid_size_x, grid_size_y) = (
-        (m as u32).div_ceil(block_size_x),
-        (n as u32).div_ceil(block_size_y),
-    );
+    let (grid_size_x, grid_size_y) = (m.div_ceil(block_size_x), n.div_ceil(block_size_y));
     unsafe {
         launch!(
             kernel<<<
@@ -438,12 +434,12 @@ pub fn gemm_tiled(
     });
     let kernel = &*kernel_cell;
 
-    let (grid_size_x, grid_size_y) = (n.div_ceil(TILE_SIZE) as u32, m.div_ceil(TILE_SIZE) as u32);
+    let (grid_size_x, grid_size_y) = (n.div_ceil(TILE_SIZE), m.div_ceil(TILE_SIZE));
     unsafe {
         launch!(
             kernel<<<
                 (grid_size_x, grid_size_y),
-                (TILE_SIZE as u32, TILE_SIZE as u32),
+                (TILE_SIZE, TILE_SIZE),
                 0,
                 stream
             >>>(
