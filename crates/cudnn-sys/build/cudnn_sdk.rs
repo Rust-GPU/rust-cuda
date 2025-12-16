@@ -62,7 +62,15 @@ impl CudnnSdk {
         let cudnn_include_dir = env::var_os("CUDNN_INCLUDE_DIR");
 
         #[cfg(not(target_os = "windows"))]
-        const CUDNN_DEFAULT_PATHS: &[&str] = &["/usr/include", "/usr/local/include"];
+        const CUDNN_DEFAULT_PATHS: &[&str] = &[
+            "/usr/include",
+            "/usr/local/include",
+            // CUDA 13 seems to have moved the headers into arch-specific directories.
+            "/usr/include/x86_64-linux-gnu",
+            "/usr/include/aarch64-linux-gnu",
+            "/usr/local/include/x86_64-linux-gnu",
+            "/usr/local/include/aarch64-linux-gnu",
+        ];
         #[cfg(target_os = "windows")]
         const CUDNN_DEFAULT_PATHS: &[&str] = &[
             "C:/Program Files/NVIDIA/CUDNN/v9.x/include",
