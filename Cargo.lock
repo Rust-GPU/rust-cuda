@@ -2980,6 +2980,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sdot"
+version = "0.1.0"
+dependencies = [
+ "blastoff",
+ "cuda_builder",
+ "cust",
+ "rand 0.9.2",
+]
+
+[[package]]
+name = "sdot_kernels"
+version = "0.1.0"
+dependencies = [
+ "cuda_std",
+]
+
+[[package]]
 name = "semver"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

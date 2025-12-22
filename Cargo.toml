@@ -47,6 +47,8 @@ members = [
   "examples/gemm/kernels",
   "examples/i128_demo",
   "examples/i128_demo/kernels",
+  "examples/sdot",
+  "examples/sdot/kernels",
   "examples/sha2_crates_io",
   "examples/sha2_crates_io/kernels",
   "examples/vecadd",

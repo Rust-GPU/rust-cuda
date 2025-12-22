@@ -21,3 +21,6 @@ which runs on CPU or GPU, with the additional option of running OptiX denoising.
 
 The Path Tracer uses cuda_builder to compile the core path tracer for the GPU and GPU (hardware raytracing), and uses the core path tracer as a normal crate
 for CPU rendering and sharing structures.
+
+### [sdot](sdot)
+Example of computes the dot product of two single-precision (f32) vectors
