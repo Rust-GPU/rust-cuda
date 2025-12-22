@@ -1,0 +1,13 @@
+[package]
+name = "sdot"
+version = "0.1.0"
+edition = "2024"
+description = "Example of computes the dot product of two f32 vectors"
+
+[dependencies]
+cust = { path = "../../crates/cust" }
+blastoff = { path = "../../crates/blastoff" }
+rand = "0.9.*"
+
+[build-dependencies]
+cuda_builder = { workspace = true, default-features = false }
