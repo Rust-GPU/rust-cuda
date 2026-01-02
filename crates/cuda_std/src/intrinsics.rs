@@ -1,1467 +1,4274 @@
-//! Raw CUDA-specific atomic functions that map to PTX instructions.
-
-use crate::gpu_only;
-use core::arch::asm;
-use core::concat;
-use paste::paste;
-
-#[gpu_only]
-pub unsafe fn membar_device() {
-    asm!("membar.gl;");
-}
-
-#[gpu_only]
-pub unsafe fn membar_block() {
-    asm!("membar.cta;");
-}
-
-#[gpu_only]
-pub unsafe fn membar_system() {
-    asm!("membar.sys;");
-}
-
-#[gpu_only]
-pub unsafe fn fence_sc_device() {
-    asm!("fence.sc.gl;");
-}
-
-#[gpu_only]
-pub unsafe fn fence_sc_block() {
-    asm!("fence.sc.cta;");
-}
-
-#[gpu_only]
-pub unsafe fn fence_sc_system() {
-    asm!("fence.sc.sys;");
-}
-
-#[gpu_only]
-pub unsafe fn fence_acqrel_device() {
-    asm!("fence.acq_rel.gl;");
-}
-
-#[gpu_only]
-pub unsafe fn fence_acqrel_block() {
-    asm!("fence.acq_rel.sys;");
-}
-
-#[gpu_only]
-pub unsafe fn fence_acqrel_system() {
-    asm!("fence.acq_rel.sys;");
-}
-
-#[allow(unused_macros)]
-macro_rules! load_scope {
-    (volatile, $scope:ident) => {
-        ""
-    };
-    ($ordering:ident, $scope:ident) => {
-        concat!(".", stringify!($scope))
-    };
-}
-
-macro_rules! load {
-    ($($ordering:ident, $width:literal, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                #[doc = concat!("Performs a ", stringify!($ordering), " atomic load at the ", stringify!($scope), " level with a width of ", stringify!($width), " bits")]
-                pub unsafe fn [<atomic_load_ $ordering _ $width _ $scope>](ptr: *const [<u $width>]) -> [<u $width>] {
-                    let mut out;
-                    asm!(
-                        concat!("ld.", stringify!($ordering), load_scope!($ordering, $scope), ".", stringify!([<u $width>]), " {}, [{}];"),
-                        out([<reg $width>]) out,
-                        in(reg64) ptr
-                    );
-                    out
-                }
-            }
-        )*
-    };
-}
-
-load! {
-    relaxed, 32, device, gpu,
-    acquire, 32, device, gpu,
-    volatile, 32, device, gpu,
-
-    relaxed, 64, device, gpu,
-    acquire, 64, device, gpu,
-    volatile, 64, device, gpu,
-
-    relaxed, 32, block, cta,
-    acquire, 32, block, cta,
-    volatile, 32, block, cta,
-
-    relaxed, 64, block, cta,
-    acquire, 64, block, cta,
-    volatile, 64, block, cta,
-
-    relaxed, 32, system, sys,
-    acquire, 32, system, sys,
-    volatile, 32, system, sys,
-
-    relaxed, 64, system, sys,
-    acquire, 64, system, sys,
-    volatile, 64, system, sys,
-}
-
-macro_rules! store {
-    ($($ordering:ident, $width:literal, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                #[doc = concat!("Performs a ", stringify!($ordering), " atomic store at the ", stringify!($scope), " level with a width of ", stringify!($width), " bits")]
-                pub unsafe fn [<atomic_store_ $ordering _ $width _ $scope>](ptr: *mut [<u $width>], val: [<u $width>]) {
-                    asm!(
-                        concat!("st.", stringify!($ordering), load_scope!($ordering, $scope), ".", stringify!([<u $width>]), " [{}], {};"),
-                        in(reg64) ptr,
-                        in([<reg $width>]) val,
-                    );
-                }
-            }
-        )*
-    };
-}
-
-store! {
-    relaxed, 32, device, gpu,
-    release, 32, device, gpu,
-    volatile, 32, device, gpu,
-
-    relaxed, 64, device, gpu,
-    release, 64, device, gpu,
-    volatile, 64, device, gpu,
-
-    relaxed, 32, block, cta,
-    release, 32, block, cta,
-    volatile, 32, block, cta,
-
-    relaxed, 64, block, cta,
-    release, 64, block, cta,
-    volatile, 64, block, cta,
-
-    relaxed, 32, system, sys,
-    release, 32, system, sys,
-    volatile, 32, system, sys,
-
-    relaxed, 64, system, sys,
-    release, 64, system, sys,
-    volatile, 64, system, sys,
-}
-
-#[allow(unused_macros)]
-macro_rules! ptx_type {
-    (i32) => {
-        "s32"
-    };
-    (i64) => {
-        "s64"
-    };
-    ($ty:ident) => {
-        stringify!($ty)
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! ptx_type_for_logic_op {
-    (u32) => {
-        "b32"
-    };
-    (u64) => {
-        "b64"
-    };
-    (i32) => {
-        "b32"
-    };
-    (i64) => {
-        "b64"
-    };
-    ($ty:ident) => {
-        stringify!($ty)
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! ordering {
-    (volatile) => {
-        ""
-    };
-    ($ordering:ident) => {
-        concat!(stringify!($ordering), ".")
-    };
-}
-
-macro_rules! atomic_fetch_op_2_reg {
-    ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                #[doc = concat!(
-                    "Fetches the value in ptr, performs a ",
-                    stringify!($op),
-                    ", and returns the original value"
-                )]
-                pub unsafe fn [<atomic_fetch_ $op _ $ordering _ $type _ $scope>](ptr: *mut $type) -> $type {
-                    let mut out;
-                    asm!(
-                        concat!(
-                            "atom.",
-                            ordering!($ordering),
-                            stringify!($scope_asm),
-                            ".",
-                            stringify!($op),
-                            ".",
-                            ptx_type!($type),
-                            " {}, [{}];"
-                        ),
-                        out([<reg $width>]) out,
-                        in(reg64) ptr,
-                    );
-                    out
-                }
-            }
-        )*
-    };
-}
-
-atomic_fetch_op_2_reg! {
-    // inc (unsigned)
-
-    relaxed, inc, 32, u32, device, gpu,
-    acquire, inc, 32, u32, device, gpu,
-    release, inc, 32, u32, device, gpu,
-    acqrel,  inc, 32, u32, device, gpu,
-    volatile, inc, 32, u32, device, gpu,
-
-    relaxed, inc, 64, u64, device, gpu,
-    acquire, inc, 64, u64, device, gpu,
-    release, inc, 64, u64, device, gpu,
-    acqrel,  inc, 64, u64, device, gpu,
-    volatile, inc, 64, u64, device, gpu,
-
-    relaxed, inc, 32, u32, block, cta,
-    acquire, inc, 32, u32, block, cta,
-    release, inc, 32, u32, block, cta,
-    acqrel,  inc, 32, u32, block, cta,
-    volatile, inc, 32, u32, block, cta,
-
-    relaxed, inc, 64, u64, block, cta,
-    acquire, inc, 64, u64, block, cta,
-    release, inc, 64, u64, block, cta,
-    acqrel,  inc, 64, u64, block, cta,
-    volatile, inc, 64, u64, block, cta,
-
-    relaxed, inc, 32, u32, system, sys,
-    acquire, inc, 32, u32, system, sys,
-    release, inc, 32, u32, system, sys,
-    acqrel,  inc, 32, u32, system, sys,
-    volatile, inc, 32, u32, system, sys,
-
-    relaxed, inc, 64, u64, system, sys,
-    acquire, inc, 64, u64, system, sys,
-    release, inc, 64, u64, system, sys,
-    acqrel,  inc, 64, u64, system, sys,
-    volatile, inc, 64, u64, system, sys,
-
-    // inc (signed)
-
-    relaxed, inc, 32, i32, device, gpu,
-    acquire, inc, 32, i32, device, gpu,
-    release, inc, 32, i32, device, gpu,
-    acqrel,  inc, 32, i32, device, gpu,
-    volatile, inc, 32, i32, device, gpu,
-
-    relaxed, inc, 64, i64, device, gpu,
-    acquire, inc, 64, i64, device, gpu,
-    release, inc, 64, i64, device, gpu,
-    acqrel,  inc, 64, i64, device, gpu,
-    volatile, inc, 64, i64, device, gpu,
-
-    relaxed, inc, 32, i32, block, cta,
-    acquire, inc, 32, i32, block, cta,
-    release, inc, 32, i32, block, cta,
-    acqrel,  inc, 32, i32, block, cta,
-    volatile, inc, 32, i32, block, cta,
-
-    relaxed, inc, 64, i64, block, cta,
-    acquire, inc, 64, i64, block, cta,
-    release, inc, 64, i64, block, cta,
-    acqrel,  inc, 64, i64, block, cta,
-    volatile, inc, 64, i64, block, cta,
-
-    relaxed, inc, 32, i32, system, sys,
-    acquire, inc, 32, i32, system, sys,
-    release, inc, 32, i32, system, sys,
-    acqrel,  inc, 32, i32, system, sys,
-    volatile, inc, 32, i32, system, sys,
-
-    relaxed, inc, 64, i64, system, sys,
-    acquire, inc, 64, i64, system, sys,
-    release, inc, 64, i64, system, sys,
-    acqrel,  inc, 64, i64, system, sys,
-    volatile, inc, 64, i64, system, sys,
-
-    // dec (unsigned)
-
-    relaxed, dec, 32, u32, device, gpu,
-    acquire, dec, 32, u32, device, gpu,
-    release, dec, 32, u32, device, gpu,
-    acqrel,  dec, 32, u32, device, gpu,
-    volatile, dec, 32, u32, device, gpu,
-
-    relaxed, dec, 64, u64, device, gpu,
-    acquire, dec, 64, u64, device, gpu,
-    release, dec, 64, u64, device, gpu,
-    acqrel,  dec, 64, u64, device, gpu,
-    volatile, dec, 64, u64, device, gpu,
-
-    relaxed, dec, 32, u32, block, cta,
-    acquire, dec, 32, u32, block, cta,
-    release, dec, 32, u32, block, cta,
-    acqrel,  dec, 32, u32, block, cta,
-    volatile, dec, 32, u32, block, cta,
-
-    relaxed, dec, 64, u64, block, cta,
-    acquire, dec, 64, u64, block, cta,
-    release, dec, 64, u64, block, cta,
-    acqrel,  dec, 64, u64, block, cta,
-    volatile, dec, 64, u64, block, cta,
-
-    relaxed, dec, 32, u32, system, sys,
-    acquire, dec, 32, u32, system, sys,
-    release, dec, 32, u32, system, sys,
-    acqrel,  dec, 32, u32, system, sys,
-    volatile, dec, 32, u32, system, sys,
-
-    relaxed, dec, 64, u64, system, sys,
-    acquire, dec, 64, u64, system, sys,
-    release, dec, 64, u64, system, sys,
-    acqrel,  dec, 64, u64, system, sys,
-    volatile, dec, 64, u64, system, sys,
-
-    // dec (signed)
-
-    relaxed, dec, 32, i32, device, gpu,
-    acquire, dec, 32, i32, device, gpu,
-    release, dec, 32, i32, device, gpu,
-    acqrel,  dec, 32, i32, device, gpu,
-    volatile, dec, 32, i32, device, gpu,
-
-    relaxed, dec, 64, i64, device, gpu,
-    acquire, dec, 64, i64, device, gpu,
-    release, dec, 64, i64, device, gpu,
-    acqrel,  dec, 64, i64, device, gpu,
-    volatile, dec, 64, i64, device, gpu,
-
-    relaxed, dec, 32, i32, block, cta,
-    acquire, dec, 32, i32, block, cta,
-    release, dec, 32, i32, block, cta,
-    acqrel,  dec, 32, i32, block, cta,
-    volatile, dec, 32, i32, block, cta,
-
-    relaxed, dec, 64, i64, block, cta,
-    acquire, dec, 64, i64, block, cta,
-    release, dec, 64, i64, block, cta,
-    acqrel,  dec, 64, i64, block, cta,
-    volatile, dec, 64, i64, block, cta,
-
-    relaxed, dec, 32, i32, system, sys,
-    acquire, dec, 32, i32, system, sys,
-    release, dec, 32, i32, system, sys,
-    acqrel,  dec, 32, i32, system, sys,
-    volatile, dec, 32, i32, system, sys,
-
-    relaxed, dec, 64, i64, system, sys,
-    acquire, dec, 64, i64, system, sys,
-    release, dec, 64, i64, system, sys,
-    acqrel,  dec, 64, i64, system, sys,
-    volatile, dec, 64, i64, system, sys,
-}
-
-macro_rules! atomic_fetch_logic_op_3_reg {
-    ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                #[doc = concat!(
-                    "Fetches the value in ptr, performs a ",
-                    stringify!($op),
-                    ", and returns the original value"
-                )]
-                pub unsafe fn [<atomic_fetch_ $op _ $ordering _ $type _ $scope>](ptr: *mut $type, val: $type) -> $type {
-                    let mut out;
-                    asm!(
-                        concat!(
-                            "atom.",
-                            ordering!($ordering),
-                            stringify!($scope_asm),
-                            ".",
-                            stringify!($op),
-                            ".",
-                            ptx_type_for_logic_op!($type),
-                            " {}, [{}], {};"
-                        ),
-                        out([<reg $width>]) out,
-                        in(reg64) ptr,
-                        in([<reg $width>]) val,
-                    );
-                    out
-                }
-            }
-        )*
-    };
-}
-
-atomic_fetch_logic_op_3_reg! {
-    // and
-
-    relaxed, and, 32, u32, device, gpu,
-    acquire, and, 32, u32, device, gpu,
-    release, and, 32, u32, device, gpu,
-    acqrel,  and, 32, u32, device, gpu,
-    volatile, and, 32, u32, device, gpu,
-
-    relaxed, and, 64, u64, device, gpu,
-    acquire, and, 64, u64, device, gpu,
-    release, and, 64, u64, device, gpu,
-    acqrel,  and, 64, u64, device, gpu,
-    volatile, and, 64, u64, device, gpu,
-
-    relaxed, and, 32, u32, block, cta,
-    acquire, and, 32, u32, block, cta,
-    release, and, 32, u32, block, cta,
-    acqrel,  and, 32, u32, block, cta,
-    volatile, and, 32, u32, block, cta,
-
-    relaxed, and, 64, u64, block, cta,
-    acquire, and, 64, u64, block, cta,
-    release, and, 64, u64, block, cta,
-    acqrel,  and, 64, u64, block, cta,
-    volatile, and, 64, u64, block, cta,
-
-    relaxed, and, 32, u32, system, sys,
-    acquire, and, 32, u32, system, sys,
-    release, and, 32, u32, system, sys,
-    acqrel,  and, 32, u32, system, sys,
-    volatile, and, 32, u32, system, sys,
-
-    relaxed, and, 64, u64, system, sys,
-    acquire, and, 64, u64, system, sys,
-    release, and, 64, u64, system, sys,
-    acqrel,  and, 64, u64, system, sys,
-    volatile, and, 64, u64, system, sys,
-
-    relaxed, and, 32, i32, device, gpu,
-    acquire, and, 32, i32, device, gpu,
-    release, and, 32, i32, device, gpu,
-    acqrel,  and, 32, i32, device, gpu,
-    volatile, and, 32, i32, device, gpu,
-
-    relaxed, and, 64, i64, device, gpu,
-    acquire, and, 64, i64, device, gpu,
-    release, and, 64, i64, device, gpu,
-    acqrel,  and, 64, i64, device, gpu,
-    volatile, and, 64, i64, device, gpu,
-
-    relaxed, and, 32, i32, block, cta,
-    acquire, and, 32, i32, block, cta,
-    release, and, 32, i32, block, cta,
-    acqrel,  and, 32, i32, block, cta,
-    volatile, and, 32, i32, block, cta,
-
-    relaxed, and, 64, i64, block, cta,
-    acquire, and, 64, i64, block, cta,
-    release, and, 64, i64, block, cta,
-    acqrel,  and, 64, i64, block, cta,
-    volatile, and, 64, i64, block, cta,
-
-    relaxed, and, 32, i32, system, sys,
-    acquire, and, 32, i32, system, sys,
-    release, and, 32, i32, system, sys,
-    acqrel,  and, 32, i32, system, sys,
-    volatile, and, 32, i32, system, sys,
-
-    relaxed, and, 64, i64, system, sys,
-    acquire, and, 64, i64, system, sys,
-    release, and, 64, i64, system, sys,
-    acqrel,  and, 64, i64, system, sys,
-    volatile, and, 64, i64, system, sys,
-
-    relaxed, and, 32, f32, device, gpu,
-    acquire, and, 32, f32, device, gpu,
-    release, and, 32, f32, device, gpu,
-    acqrel,  and, 32, f32, device, gpu,
-    volatile, and, 32, f32, device, gpu,
-
-    relaxed, and, 64, f64, device, gpu,
-    acquire, and, 64, f64, device, gpu,
-    release, and, 64, f64, device, gpu,
-    acqrel,  and, 64, f64, device, gpu,
-    volatile, and, 64, f64, device, gpu,
-
-    relaxed, and, 32, f32, block, cta,
-    acquire, and, 32, f32, block, cta,
-    release, and, 32, f32, block, cta,
-    acqrel,  and, 32, f32, block, cta,
-    volatile, and, 32, f32, block, cta,
-
-    relaxed, and, 64, f64, block, cta,
-    acquire, and, 64, f64, block, cta,
-    release, and, 64, f64, block, cta,
-    acqrel,  and, 64, f64, block, cta,
-    volatile, and, 64, f64, block, cta,
-
-    relaxed, and, 32, f32, system, sys,
-    acquire, and, 32, f32, system, sys,
-    release, and, 32, f32, system, sys,
-    acqrel,  and, 32, f32, system, sys,
-    volatile, and, 32, f32, system, sys,
-
-    relaxed, and, 64, f64, system, sys,
-    acquire, and, 64, f64, system, sys,
-    release, and, 64, f64, system, sys,
-    acqrel,  and, 64, f64, system, sys,
-    volatile, and, 64, f64, system, sys,
-
-    // or
-
-    relaxed, or, 32, u32, device, gpu,
-    acquire, or, 32, u32, device, gpu,
-    release, or, 32, u32, device, gpu,
-    acqrel,  or, 32, u32, device, gpu,
-    volatile, or, 32, u32, device, gpu,
-
-    relaxed, or, 64, u64, device, gpu,
-    acquire, or, 64, u64, device, gpu,
-    release, or, 64, u64, device, gpu,
-    acqrel,  or, 64, u64, device, gpu,
-    volatile, or, 64, u64, device, gpu,
-
-    relaxed, or, 32, u32, block, cta,
-    acquire, or, 32, u32, block, cta,
-    release, or, 32, u32, block, cta,
-    acqrel,  or, 32, u32, block, cta,
-    volatile, or, 32, u32, block, cta,
-
-    relaxed, or, 64, u64, block, cta,
-    acquire, or, 64, u64, block, cta,
-    release, or, 64, u64, block, cta,
-    acqrel,  or, 64, u64, block, cta,
-    volatile, or, 64, u64, block, cta,
-
-    relaxed, or, 32, u32, system, sys,
-    acquire, or, 32, u32, system, sys,
-    release, or, 32, u32, system, sys,
-    acqrel,  or, 32, u32, system, sys,
-    volatile, or, 32, u32, system, sys,
-
-    relaxed, or, 64, u64, system, sys,
-    acquire, or, 64, u64, system, sys,
-    release, or, 64, u64, system, sys,
-    acqrel,  or, 64, u64, system, sys,
-    volatile, or, 64, u64, system, sys,
-
-    relaxed, or, 32, i32, device, gpu,
-    acquire, or, 32, i32, device, gpu,
-    release, or, 32, i32, device, gpu,
-    acqrel,  or, 32, i32, device, gpu,
-    volatile, or, 32, i32, device, gpu,
-
-    relaxed, or, 64, i64, device, gpu,
-    acquire, or, 64, i64, device, gpu,
-    release, or, 64, i64, device, gpu,
-    acqrel,  or, 64, i64, device, gpu,
-    volatile, or, 64, i64, device, gpu,
-
-    relaxed, or, 32, i32, block, cta,
-    acquire, or, 32, i32, block, cta,
-    release, or, 32, i32, block, cta,
-    acqrel,  or, 32, i32, block, cta,
-    volatile, or, 32, i32, block, cta,
-
-    relaxed, or, 64, i64, block, cta,
-    acquire, or, 64, i64, block, cta,
-    release, or, 64, i64, block, cta,
-    acqrel,  or, 64, i64, block, cta,
-    volatile, or, 64, i64, block, cta,
-
-    relaxed, or, 32, i32, system, sys,
-    acquire, or, 32, i32, system, sys,
-    release, or, 32, i32, system, sys,
-    acqrel,  or, 32, i32, system, sys,
-    volatile, or, 32, i32, system, sys,
-
-    relaxed, or, 64, i64, system, sys,
-    acquire, or, 64, i64, system, sys,
-    release, or, 64, i64, system, sys,
-    acqrel,  or, 64, i64, system, sys,
-    volatile, or, 64, i64, system, sys,
-
-    relaxed, or, 32, f32, device, gpu,
-    acquire, or, 32, f32, device, gpu,
-    release, or, 32, f32, device, gpu,
-    acqrel,  or, 32, f32, device, gpu,
-    volatile, or, 32, f32, device, gpu,
-
-    relaxed, or, 64, f64, device, gpu,
-    acquire, or, 64, f64, device, gpu,
-    release, or, 64, f64, device, gpu,
-    acqrel,  or, 64, f64, device, gpu,
-    volatile, or, 64, f64, device, gpu,
-
-    relaxed, or, 32, f32, block, cta,
-    acquire, or, 32, f32, block, cta,
-    release, or, 32, f32, block, cta,
-    acqrel,  or, 32, f32, block, cta,
-    volatile, or, 32, f32, block, cta,
-
-    relaxed, or, 64, f64, block, cta,
-    acquire, or, 64, f64, block, cta,
-    release, or, 64, f64, block, cta,
-    acqrel,  or, 64, f64, block, cta,
-    volatile, or, 64, f64, block, cta,
-
-    relaxed, or, 32, f32, system, sys,
-    acquire, or, 32, f32, system, sys,
-    release, or, 32, f32, system, sys,
-    acqrel,  or, 32, f32, system, sys,
-    volatile, or, 32, f32, system, sys,
-
-    relaxed, or, 64, f64, system, sys,
-    acquire, or, 64, f64, system, sys,
-    release, or, 64, f64, system, sys,
-    acqrel,  or, 64, f64, system, sys,
-    volatile, or, 64, f64, system, sys,
-
-    // xor
-
-    relaxed, xor, 32, u32, device, gpu,
-    acquire, xor, 32, u32, device, gpu,
-    release, xor, 32, u32, device, gpu,
-    acqrel,  xor, 32, u32, device, gpu,
-    volatile, xor, 32, u32, device, gpu,
-
-    relaxed, xor, 64, u64, device, gpu,
-    acquire, xor, 64, u64, device, gpu,
-    release, xor, 64, u64, device, gpu,
-    acqrel,  xor, 64, u64, device, gpu,
-    volatile, xor, 64, u64, device, gpu,
-
-    relaxed, xor, 32, u32, block, cta,
-    acquire, xor, 32, u32, block, cta,
-    release, xor, 32, u32, block, cta,
-    acqrel,  xor, 32, u32, block, cta,
-    volatile, xor, 32, u32, block, cta,
-
-    relaxed, xor, 64, u64, block, cta,
-    acquire, xor, 64, u64, block, cta,
-    release, xor, 64, u64, block, cta,
-    acqrel,  xor, 64, u64, block, cta,
-    volatile, xor, 64, u64, block, cta,
-
-    relaxed, xor, 32, u32, system, sys,
-    acquire, xor, 32, u32, system, sys,
-    release, xor, 32, u32, system, sys,
-    acqrel,  xor, 32, u32, system, sys,
-    volatile, xor, 32, u32, system, sys,
-
-    relaxed, xor, 64, u64, system, sys,
-    acquire, xor, 64, u64, system, sys,
-    release, xor, 64, u64, system, sys,
-    acqrel,  xor, 64, u64, system, sys,
-    volatile, xor, 64, u64, system, sys,
-
-    relaxed, xor, 32, i32, device, gpu,
-    acquire, xor, 32, i32, device, gpu,
-    release, xor, 32, i32, device, gpu,
-    acqrel,  xor, 32, i32, device, gpu,
-    volatile, xor, 32, i32, device, gpu,
-
-    relaxed, xor, 64, i64, device, gpu,
-    acquire, xor, 64, i64, device, gpu,
-    release, xor, 64, i64, device, gpu,
-    acqrel,  xor, 64, i64, device, gpu,
-    volatile, xor, 64, i64, device, gpu,
-
-    relaxed, xor, 32, i32, block, cta,
-    acquire, xor, 32, i32, block, cta,
-    release, xor, 32, i32, block, cta,
-    acqrel,  xor, 32, i32, block, cta,
-    volatile, xor, 32, i32, block, cta,
-
-    relaxed, xor, 64, i64, block, cta,
-    acquire, xor, 64, i64, block, cta,
-    release, xor, 64, i64, block, cta,
-    acqrel,  xor, 64, i64, block, cta,
-    volatile, xor, 64, i64, block, cta,
-
-    relaxed, xor, 32, i32, system, sys,
-    acquire, xor, 32, i32, system, sys,
-    release, xor, 32, i32, system, sys,
-    acqrel,  xor, 32, i32, system, sys,
-    volatile, xor, 32, i32, system, sys,
-
-    relaxed, xor, 64, i64, system, sys,
-    acquire, xor, 64, i64, system, sys,
-    release, xor, 64, i64, system, sys,
-    acqrel,  xor, 64, i64, system, sys,
-    volatile, xor, 64, i64, system, sys,
-
-    relaxed, xor, 32, f32, device, gpu,
-    acquire, xor, 32, f32, device, gpu,
-    release, xor, 32, f32, device, gpu,
-    acqrel,  xor, 32, f32, device, gpu,
-    volatile, xor, 32, f32, device, gpu,
-
-    relaxed, xor, 64, f64, device, gpu,
-    acquire, xor, 64, f64, device, gpu,
-    release, xor, 64, f64, device, gpu,
-    acqrel,  xor, 64, f64, device, gpu,
-    volatile, xor, 64, f64, device, gpu,
-
-    relaxed, xor, 32, f32, block, cta,
-    acquire, xor, 32, f32, block, cta,
-    release, xor, 32, f32, block, cta,
-    acqrel,  xor, 32, f32, block, cta,
-    volatile, xor, 32, f32, block, cta,
-
-    relaxed, xor, 64, f64, block, cta,
-    acquire, xor, 64, f64, block, cta,
-    release, xor, 64, f64, block, cta,
-    acqrel,  xor, 64, f64, block, cta,
-    volatile, xor, 64, f64, block, cta,
-
-    relaxed, xor, 32, f32, system, sys,
-    acquire, xor, 32, f32, system, sys,
-    release, xor, 32, f32, system, sys,
-    acqrel,  xor, 32, f32, system, sys,
-    volatile, xor, 32, f32, system, sys,
-
-    relaxed, xor, 64, f64, system, sys,
-    acquire, xor, 64, f64, system, sys,
-    release, xor, 64, f64, system, sys,
-    acqrel,  xor, 64, f64, system, sys,
-    volatile, xor, 64, f64, system, sys,
-
-    // exchange
-
-    relaxed, exch, 32, u32, device, gpu,
-    acquire, exch, 32, u32, device, gpu,
-    release, exch, 32, u32, device, gpu,
-    acqrel,  exch, 32, u32, device, gpu,
-    volatile, exch, 32, u32, device, gpu,
-
-    relaxed, exch, 64, u64, device, gpu,
-    acquire, exch, 64, u64, device, gpu,
-    release, exch, 64, u64, device, gpu,
-    acqrel,  exch, 64, u64, device, gpu,
-    volatile, exch, 64, u64, device, gpu,
-
-    relaxed, exch, 32, u32, block, cta,
-    acquire, exch, 32, u32, block, cta,
-    release, exch, 32, u32, block, cta,
-    acqrel,  exch, 32, u32, block, cta,
-    volatile, exch, 32, u32, block, cta,
-
-    relaxed, exch, 64, u64, block, cta,
-    acquire, exch, 64, u64, block, cta,
-    release, exch, 64, u64, block, cta,
-    acqrel,  exch, 64, u64, block, cta,
-    volatile, exch, 64, u64, block, cta,
-
-    relaxed, exch, 32, u32, system, sys,
-    acquire, exch, 32, u32, system, sys,
-    release, exch, 32, u32, system, sys,
-    acqrel,  exch, 32, u32, system, sys,
-    volatile, exch, 32, u32, system, sys,
-
-    relaxed, exch, 64, u64, system, sys,
-    acquire, exch, 64, u64, system, sys,
-    release, exch, 64, u64, system, sys,
-    acqrel,  exch, 64, u64, system, sys,
-    volatile, exch, 64, u64, system, sys,
-
-    relaxed, exch, 32, i32, device, gpu,
-    acquire, exch, 32, i32, device, gpu,
-    release, exch, 32, i32, device, gpu,
-    acqrel,  exch, 32, i32, device, gpu,
-    volatile, exch, 32, i32, device, gpu,
-
-    relaxed, exch, 64, i64, device, gpu,
-    acquire, exch, 64, i64, device, gpu,
-    release, exch, 64, i64, device, gpu,
-    acqrel,  exch, 64, i64, device, gpu,
-    volatile, exch, 64, i64, device, gpu,
-
-    relaxed, exch, 32, i32, block, cta,
-    acquire, exch, 32, i32, block, cta,
-    release, exch, 32, i32, block, cta,
-    acqrel,  exch, 32, i32, block, cta,
-    volatile, exch, 32, i32, block, cta,
-
-    relaxed, exch, 64, i64, block, cta,
-    acquire, exch, 64, i64, block, cta,
-    release, exch, 64, i64, block, cta,
-    acqrel,  exch, 64, i64, block, cta,
-    volatile, exch, 64, i64, block, cta,
-
-    relaxed, exch, 32, i32, system, sys,
-    acquire, exch, 32, i32, system, sys,
-    release, exch, 32, i32, system, sys,
-    acqrel,  exch, 32, i32, system, sys,
-    volatile, exch, 32, i32, system, sys,
-
-    relaxed, exch, 64, i64, system, sys,
-    acquire, exch, 64, i64, system, sys,
-    release, exch, 64, i64, system, sys,
-    acqrel,  exch, 64, i64, system, sys,
-    volatile, exch, 64, i64, system, sys,
-
-    relaxed, exch, 32, f32, device, gpu,
-    acquire, exch, 32, f32, device, gpu,
-    release, exch, 32, f32, device, gpu,
-    acqrel,  exch, 32, f32, device, gpu,
-    volatile, exch, 32, f32, device, gpu,
-
-    relaxed, exch, 64, f64, device, gpu,
-    acquire, exch, 64, f64, device, gpu,
-    release, exch, 64, f64, device, gpu,
-    acqrel,  exch, 64, f64, device, gpu,
-    volatile, exch, 64, f64, device, gpu,
-
-    relaxed, exch, 32, f32, block, cta,
-    acquire, exch, 32, f32, block, cta,
-    release, exch, 32, f32, block, cta,
-    acqrel,  exch, 32, f32, block, cta,
-    volatile, exch, 32, f32, block, cta,
-
-    relaxed, exch, 64, f64, block, cta,
-    acquire, exch, 64, f64, block, cta,
-    release, exch, 64, f64, block, cta,
-    acqrel,  exch, 64, f64, block, cta,
-    volatile, exch, 64, f64, block, cta,
-
-    relaxed, exch, 32, f32, system, sys,
-    acquire, exch, 32, f32, system, sys,
-    release, exch, 32, f32, system, sys,
-    acqrel,  exch, 32, f32, system, sys,
-    volatile, exch, 32, f32, system, sys,
-
-    relaxed, exch, 64, f64, system, sys,
-    acquire, exch, 64, f64, system, sys,
-    release, exch, 64, f64, system, sys,
-    acqrel,  exch, 64, f64, system, sys,
-    volatile, exch, 64, f64, system, sys,
-}
-
-macro_rules! atomic_fetch_op_3_reg {
-    ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                #[doc = concat!(
-                    "Fetches the value in ptr, performs a ",
-                    stringify!($op),
-                    ", and returns the original value"
-                )]
-                pub unsafe fn [<atomic_fetch_ $op _ $ordering _ $type _ $scope>](ptr: *mut $type, val: $type) -> $type {
-                    let mut out;
-                    asm!(
-                        concat!(
-                            "atom.",
-                            ordering!($ordering),
-                            stringify!($scope_asm),
-                            ".",
-                            stringify!($op),
-                            ".",
-                            ptx_type!($type),
-                            " {}, [{}], {};"
-                        ),
-                        out([<reg $width>]) out,
-                        in(reg64) ptr,
-                        in([<reg $width>]) val,
-                    );
-                    out
-                }
-            }
-        )*
-    };
-}
-
-atomic_fetch_op_3_reg! {
-    // add (unsigned)
-
-    relaxed, add, 32, u32, device, gpu,
-    acquire, add, 32, u32, device, gpu,
-    release, add, 32, u32, device, gpu,
-    acqrel,  add, 32, u32, device, gpu,
-    volatile, add, 32, u32, device, gpu,
-
-    relaxed, add, 64, u64, device, gpu,
-    acquire, add, 64, u64, device, gpu,
-    release, add, 64, u64, device, gpu,
-    acqrel,  add, 64, u64, device, gpu,
-    volatile, add, 64, u64, device, gpu,
-
-    relaxed, add, 32, u32, block, cta,
-    acquire, add, 32, u32, block, cta,
-    release, add, 32, u32, block, cta,
-    acqrel,  add, 32, u32, block, cta,
-    volatile, add, 32, u32, block, cta,
-
-    relaxed, add, 64, u64, block, cta,
-    acquire, add, 64, u64, block, cta,
-    release, add, 64, u64, block, cta,
-    acqrel,  add, 64, u64, block, cta,
-    volatile, add, 64, u64, block, cta,
-
-    relaxed, add, 32, u32, system, sys,
-    acquire, add, 32, u32, system, sys,
-    release, add, 32, u32, system, sys,
-    acqrel,  add, 32, u32, system, sys,
-    volatile, add, 32, u32, system, sys,
-
-    relaxed, add, 64, u64, system, sys,
-    acquire, add, 64, u64, system, sys,
-    release, add, 64, u64, system, sys,
-    acqrel,  add, 64, u64, system, sys,
-    volatile, add, 64, u64, system, sys,
-
-    // add (signed)
-
-    relaxed, add, 32, i32, device, gpu,
-    acquire, add, 32, i32, device, gpu,
-    release, add, 32, i32, device, gpu,
-    acqrel,  add, 32, i32, device, gpu,
-    volatile, add, 32, i32, device, gpu,
-
-    relaxed, add, 64, i64, device, gpu,
-    acquire, add, 64, i64, device, gpu,
-    release, add, 64, i64, device, gpu,
-    acqrel,  add, 64, i64, device, gpu,
-    volatile, add, 64, i64, device, gpu,
-
-    relaxed, add, 32, i32, block, cta,
-    acquire, add, 32, i32, block, cta,
-    release, add, 32, i32, block, cta,
-    acqrel,  add, 32, i32, block, cta,
-    volatile, add, 32, i32, block, cta,
-
-    relaxed, add, 64, i64, block, cta,
-    acquire, add, 64, i64, block, cta,
-    release, add, 64, i64, block, cta,
-    acqrel,  add, 64, i64, block, cta,
-    volatile, add, 64, i64, block, cta,
-
-    relaxed, add, 32, i32, system, sys,
-    acquire, add, 32, i32, system, sys,
-    release, add, 32, i32, system, sys,
-    acqrel,  add, 32, i32, system, sys,
-    volatile, add, 32, i32, system, sys,
-
-    relaxed, add, 64, i64, system, sys,
-    acquire, add, 64, i64, system, sys,
-    release, add, 64, i64, system, sys,
-    acqrel,  add, 64, i64, system, sys,
-    volatile, add, 64, i64, system, sys,
-
-    // add (float)
-
-    relaxed, add, 32, f32, device, gpu,
-    acquire, add, 32, f32, device, gpu,
-    release, add, 32, f32, device, gpu,
-    acqrel,  add, 32, f32, device, gpu,
-    volatile, add, 32, f32, device, gpu,
-
-    relaxed, add, 64, f64, device, gpu,
-    acquire, add, 64, f64, device, gpu,
-    release, add, 64, f64, device, gpu,
-    acqrel,  add, 64, f64, device, gpu,
-    volatile, add, 64, f64, device, gpu,
-
-    relaxed, add, 32, f32, block, cta,
-    acquire, add, 32, f32, block, cta,
-    release, add, 32, f32, block, cta,
-    acqrel,  add, 32, f32, block, cta,
-    volatile, add, 32, f32, block, cta,
-
-    relaxed, add, 64, f64, block, cta,
-    acquire, add, 64, f64, block, cta,
-    release, add, 64, f64, block, cta,
-    acqrel,  add, 64, f64, block, cta,
-    volatile, add, 64, f64, block, cta,
-
-    relaxed, add, 32, f32, system, sys,
-    acquire, add, 32, f32, system, sys,
-    release, add, 32, f32, system, sys,
-    acqrel,  add, 32, f32, system, sys,
-    volatile, add, 32, f32, system, sys,
-
-    relaxed, add, 64, f64, system, sys,
-    acquire, add, 64, f64, system, sys,
-    release, add, 64, f64, system, sys,
-    acqrel,  add, 64, f64, system, sys,
-    volatile, add, 64, f64, system, sys,
-
-    // min (unsigned)
-
-    relaxed, min, 32, u32, device, gpu,
-    acquire, min, 32, u32, device, gpu,
-    release, min, 32, u32, device, gpu,
-    acqrel,  min, 32, u32, device, gpu,
-    volatile, min, 32, u32, device, gpu,
-
-    relaxed, min, 64, u64, device, gpu,
-    acquire, min, 64, u64, device, gpu,
-    release, min, 64, u64, device, gpu,
-    acqrel,  min, 64, u64, device, gpu,
-    volatile, min, 64, u64, device, gpu,
-
-    relaxed, min, 32, u32, block, cta,
-    acquire, min, 32, u32, block, cta,
-    release, min, 32, u32, block, cta,
-    acqrel,  min, 32, u32, block, cta,
-    volatile, min, 32, u32, block, cta,
-
-    relaxed, min, 64, u64, block, cta,
-    acquire, min, 64, u64, block, cta,
-    release, min, 64, u64, block, cta,
-    acqrel,  min, 64, u64, block, cta,
-    volatile, min, 64, u64, block, cta,
-
-    relaxed, min, 32, u32, system, sys,
-    acquire, min, 32, u32, system, sys,
-    release, min, 32, u32, system, sys,
-    acqrel,  min, 32, u32, system, sys,
-    volatile, min, 32, u32, system, sys,
-
-    relaxed, min, 64, u64, system, sys,
-    acquire, min, 64, u64, system, sys,
-    release, min, 64, u64, system, sys,
-    acqrel,  min, 64, u64, system, sys,
-    volatile, min, 64, u64, system, sys,
-
-    // min (signed)
-
-    relaxed, min, 32, i32, device, gpu,
-    acquire, min, 32, i32, device, gpu,
-    release, min, 32, i32, device, gpu,
-    acqrel,  min, 32, i32, device, gpu,
-    volatile, min, 32, i32, device, gpu,
-
-    relaxed, min, 64, i64, device, gpu,
-    acquire, min, 64, i64, device, gpu,
-    release, min, 64, i64, device, gpu,
-    acqrel,  min, 64, i64, device, gpu,
-    volatile, min, 64, i64, device, gpu,
-
-    relaxed, min, 32, i32, block, cta,
-    acquire, min, 32, i32, block, cta,
-    release, min, 32, i32, block, cta,
-    acqrel,  min, 32, i32, block, cta,
-    volatile, min, 32, i32, block, cta,
-
-    relaxed, min, 64, i64, block, cta,
-    acquire, min, 64, i64, block, cta,
-    release, min, 64, i64, block, cta,
-    acqrel,  min, 64, i64, block, cta,
-    volatile, min, 64, i64, block, cta,
-
-    relaxed, min, 32, i32, system, sys,
-    acquire, min, 32, i32, system, sys,
-    release, min, 32, i32, system, sys,
-    acqrel,  min, 32, i32, system, sys,
-    volatile, min, 32, i32, system, sys,
-
-    relaxed, min, 64, i64, system, sys,
-    acquire, min, 64, i64, system, sys,
-    release, min, 64, i64, system, sys,
-    acqrel,  min, 64, i64, system, sys,
-    volatile, min, 64, i64, system, sys,
-
-    // max (unsigned)
-
-    relaxed, max, 32, u32, device, gpu,
-    acquire, max, 32, u32, device, gpu,
-    release, max, 32, u32, device, gpu,
-    acqrel,  max, 32, u32, device, gpu,
-    volatile, max, 32, u32, device, gpu,
-
-    relaxed, max, 64, u64, device, gpu,
-    acquire, max, 64, u64, device, gpu,
-    release, max, 64, u64, device, gpu,
-    acqrel,  max, 64, u64, device, gpu,
-    volatile, max, 64, u64, device, gpu,
-
-    relaxed, max, 32, u32, block, cta,
-    acquire, max, 32, u32, block, cta,
-    release, max, 32, u32, block, cta,
-    acqrel,  max, 32, u32, block, cta,
-    volatile, max, 32, u32, block, cta,
-
-    relaxed, max, 64, u64, block, cta,
-    acquire, max, 64, u64, block, cta,
-    release, max, 64, u64, block, cta,
-    acqrel,  max, 64, u64, block, cta,
-    volatile, max, 64, u64, block, cta,
-
-    relaxed, max, 32, u32, system, sys,
-    acquire, max, 32, u32, system, sys,
-    release, max, 32, u32, system, sys,
-    acqrel,  max, 32, u32, system, sys,
-    volatile, max, 32, u32, system, sys,
-
-    relaxed, max, 64, u64, system, sys,
-    acquire, max, 64, u64, system, sys,
-    release, max, 64, u64, system, sys,
-    acqrel,  max, 64, u64, system, sys,
-    volatile, max, 64, u64, system, sys,
-
-    // max (signed)
-
-    relaxed, max, 32, i32, device, gpu,
-    acquire, max, 32, i32, device, gpu,
-    release, max, 32, i32, device, gpu,
-    acqrel,  max, 32, i32, device, gpu,
-    volatile, max, 32, i32, device, gpu,
-
-    relaxed, max, 64, i64, device, gpu,
-    acquire, max, 64, i64, device, gpu,
-    release, max, 64, i64, device, gpu,
-    acqrel,  max, 64, i64, device, gpu,
-    volatile, max, 64, i64, device, gpu,
-
-    relaxed, max, 32, i32, block, cta,
-    acquire, max, 32, i32, block, cta,
-    release, max, 32, i32, block, cta,
-    acqrel,  max, 32, i32, block, cta,
-    volatile, max, 32, i32, block, cta,
-
-    relaxed, max, 64, i64, block, cta,
-    acquire, max, 64, i64, block, cta,
-    release, max, 64, i64, block, cta,
-    acqrel,  max, 64, i64, block, cta,
-    volatile, max, 64, i64, block, cta,
-
-    relaxed, max, 32, i32, system, sys,
-    acquire, max, 32, i32, system, sys,
-    release, max, 32, i32, system, sys,
-    acqrel,  max, 32, i32, system, sys,
-    volatile, max, 32, i32, system, sys,
-
-    relaxed, max, 64, i64, system, sys,
-    acquire, max, 64, i64, system, sys,
-    release, max, 64, i64, system, sys,
-    acqrel,  max, 64, i64, system, sys,
-    volatile, max, 64, i64, system, sys,
-}
-
-macro_rules! atomic_fetch_op_4_reg {
-    ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                #[doc = concat!(
-                    "Fetches the value in ptr, performs a ",
-                    stringify!($op),
-                    ", and returns the original value"
-                )]
-                pub unsafe fn [<atomic_fetch_ $op _ $ordering _ $type _ $scope>](ptr: *mut $type, first_val: $type, second_val: $type) -> $type {
-                    let mut out;
-                    asm!(
-                        concat!(
-                            "atom.",
-                            ordering!($ordering),
-                            stringify!($scope_asm),
-                            ".",
-                            stringify!($op),
-                            ".",
-                            ptx_type!($type),
-                            " {}, [{}], {}, {};"
-                        ),
-                        out([<reg $width>]) out,
-                        in(reg64) ptr,
-                        in([<reg $width>]) first_val,
-                        in([<reg $width>]) second_val,
-                    );
-                    out
-                }
-            }
-        )*
-    };
-}
-
-atomic_fetch_op_4_reg! {
-    // compare and swap
-
-    relaxed, cas, 32, u32, device, gpu,
-    acquire, cas, 32, u32, device, gpu,
-    release, cas, 32, u32, device, gpu,
-    acqrel,  cas, 32, u32, device, gpu,
-    volatile, cas, 32, u32, device, gpu,
-
-    relaxed, cas, 64, u64, device, gpu,
-    acquire, cas, 64, u64, device, gpu,
-    release, cas, 64, u64, device, gpu,
-    acqrel,  cas, 64, u64, device, gpu,
-    volatile, cas, 64, u64, device, gpu,
-
-    relaxed, cas, 32, u32, block, cta,
-    acquire, cas, 32, u32, block, cta,
-    release, cas, 32, u32, block, cta,
-    acqrel,  cas, 32, u32, block, cta,
-    volatile, cas, 32, u32, block, cta,
-
-    relaxed, cas, 64, u64, block, cta,
-    acquire, cas, 64, u64, block, cta,
-    release, cas, 64, u64, block, cta,
-    acqrel,  cas, 64, u64, block, cta,
-    volatile, cas, 64, u64, block, cta,
-
-    relaxed, cas, 32, u32, system, sys,
-    acquire, cas, 32, u32, system, sys,
-    release, cas, 32, u32, system, sys,
-    acqrel,  cas, 32, u32, system, sys,
-    volatile, cas, 32, u32, system, sys,
-
-    relaxed, cas, 64, u64, system, sys,
-    acquire, cas, 64, u64, system, sys,
-    release, cas, 64, u64, system, sys,
-    acqrel,  cas, 64, u64, system, sys,
-    volatile, cas, 64, u64, system, sys,
-
-    relaxed, cas, 32, i32, device, gpu,
-    acquire, cas, 32, i32, device, gpu,
-    release, cas, 32, i32, device, gpu,
-    acqrel,  cas, 32, i32, device, gpu,
-    volatile, cas, 32, i32, device, gpu,
-
-    relaxed, cas, 64, i64, device, gpu,
-    acquire, cas, 64, i64, device, gpu,
-    release, cas, 64, i64, device, gpu,
-    acqrel,  cas, 64, i64, device, gpu,
-    volatile, cas, 64, i64, device, gpu,
-
-    relaxed, cas, 32, i32, block, cta,
-    acquire, cas, 32, i32, block, cta,
-    release, cas, 32, i32, block, cta,
-    acqrel,  cas, 32, i32, block, cta,
-    volatile, cas, 32, i32, block, cta,
-
-    relaxed, cas, 64, i64, block, cta,
-    acquire, cas, 64, i64, block, cta,
-    release, cas, 64, i64, block, cta,
-    acqrel,  cas, 64, i64, block, cta,
-    volatile, cas, 64, i64, block, cta,
-
-    relaxed, cas, 32, i32, system, sys,
-    acquire, cas, 32, i32, system, sys,
-    release, cas, 32, i32, system, sys,
-    acqrel,  cas, 32, i32, system, sys,
-    volatile, cas, 32, i32, system, sys,
-
-    relaxed, cas, 64, i64, system, sys,
-    acquire, cas, 64, i64, system, sys,
-    release, cas, 64, i64, system, sys,
-    acqrel,  cas, 64, i64, system, sys,
-    volatile, cas, 64, i64, system, sys,
-
-    relaxed, cas, 32, f32, device, gpu,
-    acquire, cas, 32, f32, device, gpu,
-    release, cas, 32, f32, device, gpu,
-    acqrel,  cas, 32, f32, device, gpu,
-    volatile, cas, 32, f32, device, gpu,
-
-    relaxed, cas, 64, f64, device, gpu,
-    acquire, cas, 64, f64, device, gpu,
-    release, cas, 64, f64, device, gpu,
-    acqrel,  cas, 64, f64, device, gpu,
-    volatile, cas, 64, f64, device, gpu,
-
-    relaxed, cas, 32, f32, block, cta,
-    acquire, cas, 32, f32, block, cta,
-    release, cas, 32, f32, block, cta,
-    acqrel,  cas, 32, f32, block, cta,
-    volatile, cas, 32, f32, block, cta,
-
-    relaxed, cas, 64, f64, block, cta,
-    acquire, cas, 64, f64, block, cta,
-    release, cas, 64, f64, block, cta,
-    acqrel,  cas, 64, f64, block, cta,
-    volatile, cas, 64, f64, block, cta,
-
-    relaxed, cas, 32, f32, system, sys,
-    acquire, cas, 32, f32, system, sys,
-    release, cas, 32, f32, system, sys,
-    acqrel,  cas, 32, f32, system, sys,
-    volatile, cas, 32, f32, system, sys,
-
-    relaxed, cas, 64, f64, system, sys,
-    acquire, cas, 64, f64, system, sys,
-    release, cas, 64, f64, system, sys,
-    acqrel,  cas, 64, f64, system, sys,
-    volatile, cas, 64, f64, system, sys,
-}
-
-#[allow(unused_macros)]
-macro_rules! negation {
-    (u32, $val:ident) => {{ -($val as i32) }};
-    (u64, $val:ident) => {{ -($val as i64) }};
-    ($type:ty, $val:ident) => {{ -$val }};
-}
-
-// atomic sub is a little special, nvcc implements it as an atomic add with a negated operand. PTX
-// does not have atom.sub.
-macro_rules! atomic_sub {
-    ($($ordering:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
-        $(
-            paste! {
-                #[$crate::gpu_only]
-                #[allow(clippy::missing_safety_doc)]
-                /// Fetches the value in ptr, performs a sub, and returns the original value
-                pub unsafe fn [<atomic_fetch_sub_ $ordering _ $type _ $scope>](ptr: *mut $type, val: $type) -> $type {
-                    let mut out;
-                    asm!(
-                        concat!(
-                            "atom.",
-                            ordering!($ordering),
-                            stringify!($scope_asm),
-                            ".",
-                            "add",
-                            ".",
-                            ptx_type!($type),
-                            " {}, [{}], {};"
-                        ),
-                        out([<reg $width>]) out,
-                        in(reg64) ptr,
-                        in([<reg $width>]) negation!($type, val),
-                    );
-                    out
-                }
-            }
-        )*
-    };
-}
-
-atomic_sub! {
-    // sub (unsigned)
-
-    relaxed, 32, u32, device, gpu,
-    acquire, 32, u32, device, gpu,
-    release, 32, u32, device, gpu,
-    acqrel,  32, u32, device, gpu,
-    volatile,  32, u32, device, gpu,
-
-    relaxed, 64, u64, device, gpu,
-    acquire, 64, u64, device, gpu,
-    release, 64, u64, device, gpu,
-    acqrel,  64, u64, device, gpu,
-    volatile,  64, u64, device, gpu,
-
-    relaxed, 32, u32, block, cta,
-    acquire, 32, u32, block, cta,
-    release, 32, u32, block, cta,
-    acqrel,  32, u32, block, cta,
-    volatile,  32, u32, block, cta,
-
-    relaxed, 64, u64, block, cta,
-    acquire, 64, u64, block, cta,
-    release, 64, u64, block, cta,
-    acqrel,  64, u64, block, cta,
-    volatile,  64, u64, block, cta,
-
-    relaxed, 32, u32, system, sys,
-    acquire, 32, u32, system, sys,
-    release, 32, u32, system, sys,
-    acqrel,  32, u32, system, sys,
-    volatile,  32, u32, system, sys,
-
-    relaxed, 64, u64, system, sys,
-    acquire, 64, u64, system, sys,
-    release, 64, u64, system, sys,
-    acqrel,  64, u64, system, sys,
-    volatile,  64, u64, system, sys,
-
-    // sub (signed)
-
-    relaxed, 32, i32, device, gpu,
-    acquire, 32, i32, device, gpu,
-    release, 32, i32, device, gpu,
-    acqrel,  32, i32, device, gpu,
-    volatile,  32, i32, device, gpu,
-
-    relaxed, 64, i64, device, gpu,
-    acquire, 64, i64, device, gpu,
-    release, 64, i64, device, gpu,
-    acqrel,  64, i64, device, gpu,
-    volatile,  64, i64, device, gpu,
-
-    relaxed, 32, i32, block, cta,
-    acquire, 32, i32, block, cta,
-    release, 32, i32, block, cta,
-    acqrel,  32, i32, block, cta,
-    volatile,  32, i32, block, cta,
-
-    relaxed, 64, i64, block, cta,
-    acquire, 64, i64, block, cta,
-    release, 64, i64, block, cta,
-    acqrel,  64, i64, block, cta,
-    volatile,  64, i64, block, cta,
-
-    relaxed, 32, i32, system, sys,
-    acquire, 32, i32, system, sys,
-    release, 32, i32, system, sys,
-    acqrel,  32, i32, system, sys,
-    volatile,  32, i32, system, sys,
-
-    relaxed, 64, i64, system, sys,
-    acquire, 64, i64, system, sys,
-    release, 64, i64, system, sys,
-    acqrel,  64, i64, system, sys,
-    volatile,  64, i64, system, sys,
-
-    // sub (float)
-
-    relaxed, 32, f32, device, gpu,
-    acquire, 32, f32, device, gpu,
-    release, 32, f32, device, gpu,
-    acqrel,  32, f32, device, gpu,
-    volatile,  32, f32, device, gpu,
-
-    relaxed, 64, f64, device, gpu,
-    acquire, 64, f64, device, gpu,
-    release, 64, f64, device, gpu,
-    acqrel,  64, f64, device, gpu,
-    volatile,  64, f64, device, gpu,
-
-    relaxed, 32, f32, block, cta,
-    acquire, 32, f32, block, cta,
-    release, 32, f32, block, cta,
-    acqrel,  32, f32, block, cta,
-    volatile,  32, f32, block, cta,
-
-    relaxed, 64, f64, block, cta,
-    acquire, 64, f64, block, cta,
-    release, 64, f64, block, cta,
-    acqrel,  64, f64, block, cta,
-    volatile,  64, f64, block, cta,
-
-    relaxed, 32, f32, system, sys,
-    acquire, 32, f32, system, sys,
-    release, 32, f32, system, sys,
-    acqrel,  32, f32, system, sys,
-    volatile,  32, f32, system, sys,
-
-    relaxed, 64, f64, system, sys,
-    acquire, 64, f64, system, sys,
-    release, 64, f64, system, sys,
-    acqrel,  64, f64, system, sys,
-    volatile,  64, f64, system, sys,
+//! Raw libdevice math intrinsics.
+//!
+//! Note that this file was autogenerated using crude text analysis
+//! from the libdevice PDF file, therefore many of the descriptions have broken
+//! text, especially for math symbols. The link to the libdevice website is provided
+//! for every intrinsic so you can view the non-broken description.
+//!
+//! Most of the intrinsics here have "proper" functions, corresponding f32/f64 functions
+//! are already codegenned to libdevice intrinsics by the codegen automatically. This module
+//! is mostly for exotic intrinsics that have not been added as proper functions yet.
+//!
+//! The underlying intrinsic functions have a prefix of `__nv_`, however this prefix
+//! is stripped from the functions in this module just for convenience.
+
+// Generated file, do not edit by hand, see scripts/gen_intrinsics.py
+
+unsafe extern "C" {
+    #[link_name = "__nv_abs"]
+    #[doc = "Determine the absolute value of the 32-bit signed integer x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_abs.html#__nv_abs)
+
+# Returns
+
+Returns the absolute value of the 32-bit signed integer x."]
+    pub fn abs(x: i32) -> i32;
+
+    #[link_name = "__nv_acos"]
+    #[doc = "Calculate the principal value of the arc cosine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_acos.html#__nv_acos)
+
+# Returns
+
+Result will be in radians, in the interval [0, ] for inside [-1, +1]x.
+- __nv_acos(1) returns +0.
+- __nv_acos(x) returns NaN for x outside [-1, +1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn acos(x: f64) -> f64;
+
+    #[link_name = "__nv_acosf"]
+    #[doc = "Calculate the principal value of the arc cosine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_acosf.html#__nv_acosf)
+
+# Returns
+
+Result will be in radians, in the interval [0, ] for inside [-1, +1]x.
+- __nv_acosf(1) returns +0.
+- __nv_acosf(x) returns NaN for x outside [-1, +1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn acosf(x: f32) -> f32;
+
+    #[link_name = "__nv_acosh"]
+    #[doc = "Calculate the nonnegative arc hyperbolic cosine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_acosh.html#__nv_acosh)
+
+# Returns
+
+Result will be in the interval [0, ].
+- __nv_acosh(1) returns 0.
+- __nv_acosh(x) returns NaN for x in the interval [ , 1).
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn acosh(x: f64) -> f64;
+
+    #[link_name = "__nv_acoshf"]
+    #[doc = "Calculate the nonnegative arc hyperbolic cosine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_acoshf.html#__nv_acoshf)
+
+# Returns
+
+Result will be in the interval [0, ].
+- __nv_acoshf(1) returns 0.
+- __nv_acoshf(x) returns NaN for x in the interval [ , 1).
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn acoshf(x: f32) -> f32;
+
+    #[link_name = "__nv_asin"]
+    #[doc = "Calculate the principal value of the arc sine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_asin.html#__nv_asin)
+
+# Returns
+
+Result will be in radians, in the interval [- /2, + /2] for inside [-1, +1]x.
+- __nv_asin(0) returns +0.
+- __nv_asin(x) returns NaN for x outside [-1, +1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn asin(x: f64) -> f64;
+
+    #[link_name = "__nv_asinf"]
+    #[doc = "Calculate the principal value of the arc sine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_asinf.html#__nv_asinf)
+
+# Returns
+
+Result will be in radians, in the interval [- /2, + /2] for inside [-1, +1]x.
+- __nv_asinf(0) returns +0.
+- __nv_asinf(x) returns NaN for x outside [-1, +1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn asinf(x: f32) -> f32;
+
+    #[link_name = "__nv_asinh"]
+    #[doc = "Calculate the arc hyperbolic sine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_asinh.html#__nv_asinh)
+
+# Returns
+
+- __nv_asinh(0) returns 1.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn asinh(x: f64) -> f64;
+
+    #[link_name = "__nv_asinhf"]
+    #[doc = "Calculate the arc hyperbolic sine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_asinhf.html#__nv_asinhf)
+
+# Returns
+
+- __nv_asinh(0) returns 1.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn asinhf(x: f32) -> f32;
+
+    #[link_name = "__nv_atan"]
+    #[doc = "Calculate the principal value of the arc tangent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_atan.html#__nv_atan)
+
+# Returns
+
+Result will be in radians, in the interval [- /2, + /2].
+- __nv_atan(0) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn atan(x: f64) -> f64;
+
+    #[link_name = "__nv_atan2"]
+    #[doc = "Calculate the principal value of the arc tangent of the ratio of first and second input
+arguments / . The quadrant of the result is determined by the signs of inputs and x. y x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_atan2.html#__nv_atan2)
+
+# Returns
+
+Result will be in radians, in the interval [- /, + ].
+- __nv_atan2(0, 1) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn atan2(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_atan2f"]
+    #[doc = "Calculate the principal value of the arc tangent of the ratio of first and second input
+arguments / . The quadrant of the result is determined by the signs of inputs and x. y x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_atan2f.html#__nv_atan2f)
+
+# Returns
+
+Result will be in radians, in the interval [- /, + ].
+- __nv_atan2f(0, 1) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn atan2f(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_atanf"]
+    #[doc = "Calculate the principal value of the arc tangent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_atanf.html#__nv_atanf)
+
+# Returns
+
+Result will be in radians, in the interval [- /2, + /2].
+- __nv_atan(0) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn atanf(x: f32) -> f32;
+
+    #[link_name = "__nv_atanh"]
+    #[doc = "Calculate the arc hyperbolic tangent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_atanh.html#__nv_atanh)
+
+# Returns
+
+- __nv_atanh( ) returns .
+- __nv_atanh( ) returns .
+- __nv_atanh(x) returns NaN for x outside interval [-1, 1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn atanh(x: f64) -> f64;
+
+    #[link_name = "__nv_atanhf"]
+    #[doc = "Calculate the arc hyperbolic tangent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_atanhf.html#__nv_atanhf)
+
+# Returns
+
+- __nv_atanhf( ) returns .
+- __nv_atanhf( ) returns .
+- __nv_atanhf(x) returns NaN for x outside interval [-1, 1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn atanhf(x: f32) -> f32;
+
+    #[link_name = "__nv_brev"]
+    #[doc = "Reverses the bit order of the 32 bit unsigned integer x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_brev.html#__nv_brev)
+
+# Returns
+
+Returns the bit-reversed value of . i.e. bit N of the return value corresponds to bit 31-Nx
+of x."]
+    pub fn brev(x: i32) -> i32;
+
+    #[link_name = "__nv_brevll"]
+    #[doc = "Reverses the bit order of the 64 bit unsigned integer x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_brevll.html#__nv_brevll)
+
+# Returns
+
+Returns the bit-reversed value of . i.e. bit N of the return value corresponds to bit 63-Nx
+of x."]
+    pub fn brevll(x: i64) -> i64;
+
+    #[link_name = "__nv_byte_perm"]
+    #[doc = "__nv_byte_perm(x,y,s) returns a 32-bit integer consisting of four bytes from eight input
+bytes provided in the two input integers and , as specified by a selector, x. y s
+The input bytes are indexed as follows:
+ input[0] = x<7:0> input[1] = x<15:8>
+ input[2] = x<23:16> input[3] = x<31:24>
+ input[4] = y<7:0> input[5] = y<15:8>
+ input[6] = y<23:16> input[7] = y<31:24>
+ 
+The selector indices are as follows (the upper 16-bits of the selector are not used):
+ selector[0] = s<2:0> selector[1] = s<6:4>
+ selector[2] = s<10:8> selector[3] = s<14:12>
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_byte_perm.html#__nv_byte_perm)
+
+# Returns
+
+The returned value r is computed to be: 
+result[n] := input[selector[n]]
+where is the nth byte of r.
+result[n]"]
+    pub fn byte_perm(x: i32, y: i32, z: i32) -> i32;
+
+    #[link_name = "__nv_cbrt"]
+    #[doc = "Calculate the cube root of , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cbrt.html#__nv_cbrt)
+
+# Returns
+
+Returns .
+- __nv_cbrt( ) returns .
+- __nv_cbrt( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn cbrt(x: f64) -> f64;
+
+    #[link_name = "__nv_cbrtf"]
+    #[doc = "Calculate the cube root of , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cbrtf.html#__nv_cbrtf)
+
+# Returns
+
+Returns .
+- __nv_cbrtf( ) returns .
+- __nv_cbrtf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn cbrtf(x: f32) -> f32;
+
+    #[link_name = "__nv_ceil"]
+    #[doc = "Compute the smallest integer value not less than x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ceil.html#__nv_ceil)
+
+# Returns
+
+Returns expressed as a floating-point number.
+- __nv_ceil( ) returns .
+- __nv_ceil( ) returns ."]
+    pub fn ceil(x: f64) -> f64;
+
+    #[link_name = "__nv_ceilf"]
+    #[doc = "Compute the smallest integer value not less than x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ceilf.html#__nv_ceilf)
+
+# Returns
+
+Returns expressed as a floating-point number.
+- __nv_ceilf( ) returns .
+- __nv_ceilf( ) returns ."]
+    pub fn ceilf(x: f32) -> f32;
+
+    #[link_name = "__nv_clz"]
+    #[doc = "Count the number of consecutive leading zero bits, starting at the most significant bit
+(bit 31) of x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_clz.html#__nv_clz)
+
+# Returns
+
+Returns a value between 0 and 32 inclusive representing the number of zero bits."]
+    pub fn clz(x: i32) -> i32;
+
+    #[link_name = "__nv_clzll"]
+    #[doc = "Count the number of consecutive leading zero bits, starting at the most significant bit
+(bit 63) of x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_clzll.html#__nv_clzll)
+
+# Returns
+
+Returns a value between 0 and 64 inclusive representing the number of zero bits."]
+    pub fn clzll(x: i64) -> i32;
+
+    #[link_name = "__nv_copysign"]
+    #[doc = "Create a floating-point value with the magnitude and the sign of x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_copysign.html#__nv_copysign)
+
+# Returns
+
+Returns a value with the magnitude of and the sign of x. y"]
+    pub fn copysign(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_copysignf"]
+    #[doc = "Create a floating-point value with the magnitude and the sign of x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_copysignf.html#__nv_copysignf)
+
+# Returns
+
+Returns a value with the magnitude of and the sign of x. y"]
+    pub fn copysignf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_cos"]
+    #[doc = "Calculate the cosine of the input argument (measured in radians)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cos.html#__nv_cos)
+
+# Returns
+
+- __nv_cos( ) returns 1.
+- __nv_cos( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn cos(x: f64) -> f64;
+
+    #[link_name = "__nv_cosf"]
+    #[doc = "Calculate the cosine of the input argument (measured in radians)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cosf.html#__nv_cosf)
+
+# Returns
+
+- __nv_cosf( ) returns 1.
+- __nv_cosf( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn cosf(x: f32) -> f32;
+
+    #[link_name = "__nv_cosh"]
+    #[doc = "Calculate the hyperbolic cosine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cosh.html#__nv_cosh)
+
+# Returns
+
+- __nv_cosh(0) returns 1.
+- __nv_cosh( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn cosh(x: f64) -> f64;
+
+    #[link_name = "__nv_coshf"]
+    #[doc = "Calculate the hyperbolic cosine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_coshf.html#__nv_coshf)
+
+# Returns
+
+- __nv_coshf(0) returns 1.
+- __nv_coshf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn coshf(x: f32) -> f32;
+
+    #[link_name = "__nv_cospi"]
+    #[doc = "Calculate the cosine of (measured in radians), where is the input argumentx. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cospi.html#__nv_cospi)
+
+# Returns
+
+- __nv_cospi( ) returns 1.
+- __nv_cospi( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn cospi(x: f64) -> f64;
+
+    #[link_name = "__nv_cospif"]
+    #[doc = "Calculate the cosine of (measured in radians), where is the input argumentx. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_cospif.html#__nv_cospif)
+
+# Returns
+
+- __nv_cospif( ) returns 1.
+- __nv_cospif( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn cospif(x: f32) -> f32;
+
+    #[link_name = "__nv_dadd_rd"]
+    #[doc = "Adds two floating point values and in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dadd_rd.html#__nv_dadd_rd)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dadd_rd(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dadd_rn"]
+    #[doc = "Adds two floating point values and in round-to-nearest-even modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dadd_rn.html#__nv_dadd_rn)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dadd_rn(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dadd_ru"]
+    #[doc = "Adds two floating point values and in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dadd_ru.html#__nv_dadd_ru)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dadd_ru(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dadd_rz"]
+    #[doc = "Adds two floating point values and in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dadd_rz.html#__nv_dadd_rz)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dadd_rz(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_ddiv_rd"]
+    #[doc = "Divides two floating point values by in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ddiv_rd.html#__nv_ddiv_rd)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn ddiv_rd(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_ddiv_rn"]
+    #[doc = "Divides two floating point values by in round-to-nearest-even modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ddiv_rn.html#__nv_ddiv_rn)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn ddiv_rn(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_ddiv_ru"]
+    #[doc = "Divides two floating point values by in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ddiv_ru.html#__nv_ddiv_ru)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn ddiv_ru(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_ddiv_rz"]
+    #[doc = "Divides two floating point values by in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ddiv_rz.html#__nv_ddiv_rz)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn ddiv_rz(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dmul_rd"]
+    #[doc = "Multiplies two floating point values and in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dmul_rd.html#__nv_dmul_rd)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dmul_rd(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dmul_rn"]
+    #[doc = "Multiplies two floating point values and in round-to-nearest-even modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dmul_rn.html#__nv_dmul_rn)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dmul_rn(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dmul_ru"]
+    #[doc = "Multiplies two floating point values and in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dmul_ru.html#__nv_dmul_ru)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dmul_ru(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_dmul_rz"]
+    #[doc = "Multiplies two floating point values and in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dmul_rz.html#__nv_dmul_rz)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn dmul_rz(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_double2float_rd"]
+    #[doc = "Convert the double-precision floating point value to a single-precision floating pointx
+value in round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2float_rd.html#__nv_double2float_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2float_rd(d: f64) -> f32;
+
+    #[link_name = "__nv_double2float_rn"]
+    #[doc = "Convert the double-precision floating point value to a single-precision floating pointx
+value in round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2float_rn.html#__nv_double2float_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2float_rn(d: f64) -> f32;
+
+    #[link_name = "__nv_double2float_ru"]
+    #[doc = "Convert the double-precision floating point value to a single-precision floating pointx
+value in round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2float_ru.html#__nv_double2float_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2float_ru(d: f64) -> f32;
+
+    #[link_name = "__nv_double2float_rz"]
+    #[doc = "Convert the double-precision floating point value to a single-precision floating pointx
+value in round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2float_rz.html#__nv_double2float_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2float_rz(d: f64) -> f32;
+
+    #[link_name = "__nv_double2hiint"]
+    #[doc = "Reinterpret the high 32 bits in the double-precision floating point value as a signedx
+integer.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2hiint.html#__nv_double2hiint)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn double2hiint(d: f64) -> i32;
+
+    #[link_name = "__nv_double2int_rd"]
+    #[doc = "Convert the double-precision floating point value to a signed integer value in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2int_rd.html#__nv_double2int_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2int_rd(d: f64) -> i32;
+
+    #[link_name = "__nv_double2int_rn"]
+    #[doc = "Convert the double-precision floating point value to a signed integer value in round-x
+to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2int_rn.html#__nv_double2int_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2int_rn(d: f64) -> i32;
+
+    #[link_name = "__nv_double2int_ru"]
+    #[doc = "Convert the double-precision floating point value to a signed integer value in round-x
+up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2int_ru.html#__nv_double2int_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2int_ru(d: f64) -> i32;
+
+    #[link_name = "__nv_double2int_rz"]
+    #[doc = "Convert the double-precision floating point value to a signed integer value in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2int_rz.html#__nv_double2int_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2int_rz(d: f64) -> i32;
+
+    #[link_name = "__nv_double2ll_rd"]
+    #[doc = "Convert the double-precision floating point value to a signed 64-bit integer value inx
+round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ll_rd.html#__nv_double2ll_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ll_rd(f: f64) -> i64;
+
+    #[link_name = "__nv_double2ll_rn"]
+    #[doc = "Convert the double-precision floating point value to a signed 64-bit integer value inx
+round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ll_rn.html#__nv_double2ll_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ll_rn(f: f64) -> i64;
+
+    #[link_name = "__nv_double2ll_ru"]
+    #[doc = "Convert the double-precision floating point value to a signed 64-bit integer value inx
+round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ll_ru.html#__nv_double2ll_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ll_ru(f: f64) -> i64;
+
+    #[link_name = "__nv_double2ll_rz"]
+    #[doc = "Convert the double-precision floating point value to a signed 64-bit integer value inx
+round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ll_rz.html#__nv_double2ll_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ll_rz(f: f64) -> i64;
+
+    #[link_name = "__nv_double2loint"]
+    #[doc = "Reinterpret the low 32 bits in the double-precision floating point value as a signedx
+integer.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2loint.html#__nv_double2loint)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn double2loint(d: f64) -> i32;
+
+    #[link_name = "__nv_double2uint_rd"]
+    #[doc = "Convert the double-precision floating point value to an unsigned integer value inx
+round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2uint_rd.html#__nv_double2uint_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2uint_rd(d: f64) -> i32;
+
+    #[link_name = "__nv_double2uint_rn"]
+    #[doc = "Convert the double-precision floating point value to an unsigned integer value inx
+round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2uint_rn.html#__nv_double2uint_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2uint_rn(d: f64) -> i32;
+
+    #[link_name = "__nv_double2uint_ru"]
+    #[doc = "Convert the double-precision floating point value to an unsigned integer value inx
+round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2uint_ru.html#__nv_double2uint_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2uint_ru(d: f64) -> i32;
+
+    #[link_name = "__nv_double2uint_rz"]
+    #[doc = "Convert the double-precision floating point value to an unsigned integer value inx
+round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2uint_rz.html#__nv_double2uint_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2uint_rz(d: f64) -> i32;
+
+    #[link_name = "__nv_double2ull_rd"]
+    #[doc = "Convert the double-precision floating point value to an unsigned 64-bit integer valuex
+in round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ull_rd.html#__nv_double2ull_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ull_rd(f: f64) -> i64;
+
+    #[link_name = "__nv_double2ull_rn"]
+    #[doc = "Convert the double-precision floating point value to an unsigned 64-bit integer valuex
+in round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ull_rn.html#__nv_double2ull_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ull_rn(f: f64) -> i64;
+
+    #[link_name = "__nv_double2ull_ru"]
+    #[doc = "Convert the double-precision floating point value to an unsigned 64-bit integer valuex
+in round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ull_ru.html#__nv_double2ull_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ull_ru(f: f64) -> i64;
+
+    #[link_name = "__nv_double2ull_rz"]
+    #[doc = "Convert the double-precision floating point value to an unsigned 64-bit integer valuex
+in round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double2ull_rz.html#__nv_double2ull_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn double2ull_rz(f: f64) -> i64;
+
+    #[link_name = "__nv_double_as_longlong"]
+    #[doc = "Reinterpret the bits in the double-precision floating point value as a signed 64-bitx
+integer.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_double_as_longlong.html#__nv_double_as_longlong)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn double_as_longlong(x: f64) -> i64;
+
+    #[link_name = "__nv_drcp_rd"]
+    #[doc = "Compute the reciprocal of in round-down (to negative infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_drcp_rd.html#__nv_drcp_rd)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn drcp_rd(x: f64) -> f64;
+
+    #[link_name = "__nv_drcp_rn"]
+    #[doc = "Compute the reciprocal of in round-to-nearest-even modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_drcp_rn.html#__nv_drcp_rn)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn drcp_rn(x: f64) -> f64;
+
+    #[link_name = "__nv_drcp_ru"]
+    #[doc = "Compute the reciprocal of in round-up (to positive infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_drcp_ru.html#__nv_drcp_ru)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn drcp_ru(x: f64) -> f64;
+
+    #[link_name = "__nv_drcp_rz"]
+    #[doc = "Compute the reciprocal of in round-towards-zero modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_drcp_rz.html#__nv_drcp_rz)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn drcp_rz(x: f64) -> f64;
+
+    #[link_name = "__nv_dsqrt_rd"]
+    #[doc = "Compute the square root of in round-down (to negative infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dsqrt_rd.html#__nv_dsqrt_rd)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn dsqrt_rd(x: f64) -> f64;
+
+    #[link_name = "__nv_dsqrt_rn"]
+    #[doc = "Compute the square root of in round-to-nearest-even modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dsqrt_rn.html#__nv_dsqrt_rn)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn dsqrt_rn(x: f64) -> f64;
+
+    #[link_name = "__nv_dsqrt_ru"]
+    #[doc = "Compute the square root of in round-up (to positive infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dsqrt_ru.html#__nv_dsqrt_ru)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn dsqrt_ru(x: f64) -> f64;
+
+    #[link_name = "__nv_dsqrt_rz"]
+    #[doc = "Compute the square root of in round-towards-zero modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_dsqrt_rz.html#__nv_dsqrt_rz)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7.
+Requires compute capability >= 2.0."]
+    pub fn dsqrt_rz(x: f64) -> f64;
+
+    #[link_name = "__nv_erf"]
+    #[doc = "Calculate the value of the error function for the input argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erf.html#__nv_erf)
+
+# Returns
+
+- __nv_erf( ) returns .
+- __nv_erf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn erf(x: f64) -> f64;
+
+    #[link_name = "__nv_erfc"]
+    #[doc = "Calculate the complementary error function of the input argument , 1 - erf( )x. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfc.html#__nv_erfc)
+
+# Returns
+
+- __nv_erfc( ) returns 2.
+- __nv_erfc( ) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn erfc(x: f64) -> f64;
+
+    #[link_name = "__nv_erfcf"]
+    #[doc = "Calculate the complementary error function of the input argument , 1 - erf( )x. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfcf.html#__nv_erfcf)
+
+# Returns
+
+- __nv_erfcf( ) returns 2.
+- __nv_erfcf( ) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn erfcf(x: f32) -> f32;
+
+    #[link_name = "__nv_erfcinv"]
+    #[doc = "Calculate the inverse complementary error function of the input argument , for in they y
+interval [0, 2]. The inverse complementary error function find the value that satisfiesx
+the equation = erfc( ), for , and .y x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfcinv.html#__nv_erfcinv)
+
+# Returns
+
+- __nv_erfcinv(0) returns .
+- __nv_erfcinv(2) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn erfcinv(x: f64) -> f64;
+
+    #[link_name = "__nv_erfcinvf"]
+    #[doc = "Calculate the inverse complementary error function of the input argument , for in they y
+interval [0, 2]. The inverse complementary error function find the value that satisfiesx
+the equation = erfc( ), for , and .y x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfcinvf.html#__nv_erfcinvf)
+
+# Returns
+
+- __nv_erfcinvf(0) returns .
+- __nv_erfcinvf(2) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn erfcinvf(x: f32) -> f32;
+
+    #[link_name = "__nv_erfcx"]
+    #[doc = "Calculate the scaled complementary error function of the input argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfcx.html#__nv_erfcx)
+
+# Returns
+
+- __nv_erfcx( ) returns 
+- __nv_erfcx( ) returns +0
+- __nv_erfcx(x) returns if the correctly calculated value is outside the double
+floating point range.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn erfcx(x: f64) -> f64;
+
+    #[link_name = "__nv_erfcxf"]
+    #[doc = "Calculate the scaled complementary error function of the input argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfcxf.html#__nv_erfcxf)
+
+# Returns
+
+- __nv_erfcxf( ) returns 
+- __nv_erfcxf( ) returns +0
+- __nv_erfcxf(x) returns if the correctly calculated value is outside the double
+floating point range.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn erfcxf(x: f32) -> f32;
+
+    #[link_name = "__nv_erff"]
+    #[doc = "Calculate the value of the error function for the input argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erff.html#__nv_erff)
+
+# Returns
+
+- __nv_erff( ) returns .
+- __nv_erff( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn erff(x: f32) -> f32;
+
+    #[link_name = "__nv_erfinv"]
+    #[doc = "Calculate the inverse error function of the input argument , for in the interval [-1,y y
+1]. The inverse error function finds the value that satisfies the equation = erf( ), forx y x
+ , and .
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfinv.html#__nv_erfinv)
+
+# Returns
+
+- __nv_erfinv(1) returns .
+- __nv_erfinv(-1) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn erfinv(x: f64) -> f64;
+
+    #[link_name = "__nv_erfinvf"]
+    #[doc = "Calculate the inverse error function of the input argument , for in the interval [-1,y y
+1]. The inverse error function finds the value that satisfies the equation = erf( ), forx y x
+ , and .
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_erfinvf.html#__nv_erfinvf)
+
+# Returns
+
+- __nv_erfinvf(1) returns .
+- __nv_erfinvf(-1) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn erfinvf(x: f32) -> f32;
+
+    #[link_name = "__nv_exp"]
+    #[doc = "Calculate the base exponential of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_exp.html#__nv_exp)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn exp(x: f64) -> f64;
+
+    #[link_name = "__nv_exp10"]
+    #[doc = "Calculate the base 10 exponential of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_exp10.html#__nv_exp10)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn exp10(x: f64) -> f64;
+
+    #[link_name = "__nv_exp10f"]
+    #[doc = "Calculate the base 10 exponential of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_exp10f.html#__nv_exp10f)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn exp10f(x: f32) -> f32;
+
+    #[link_name = "__nv_exp2"]
+    #[doc = "Calculate the base 2 exponential of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_exp2.html#__nv_exp2)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn exp2(x: f64) -> f64;
+
+    #[link_name = "__nv_exp2f"]
+    #[doc = "Calculate the base 2 exponential of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_exp2f.html#__nv_exp2f)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn exp2f(x: f32) -> f32;
+
+    #[link_name = "__nv_expf"]
+    #[doc = "Calculate the base exponential of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_expf.html#__nv_expf)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn expf(x: f32) -> f32;
+
+    #[link_name = "__nv_expm1"]
+    #[doc = "Calculate the base exponential of the input argument , minus 1x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_expm1.html#__nv_expm1)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn expm1(x: f64) -> f64;
+
+    #[link_name = "__nv_expm1f"]
+    #[doc = "Calculate the base exponential of the input argument , minus 1x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_expm1f.html#__nv_expm1f)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn expm1f(x: f32) -> f32;
+
+    #[link_name = "__nv_fabs"]
+    #[doc = "Calculate the absolute value of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fabs.html#__nv_fabs)
+
+# Returns
+
+Returns the absolute value of the input argument.
+- __nv_fabs( ) returns .
+- __nv_fabs( ) returns 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fabs(f: f64) -> f64;
+
+    #[link_name = "__nv_fabsf"]
+    #[doc = "Calculate the absolute value of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fabsf.html#__nv_fabsf)
+
+# Returns
+
+Returns the absolute value of the input argument.
+- __nv_fabsf( ) returns .
+- __nv_fabsf( ) returns 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fabsf(f: f32) -> f32;
+
+    #[link_name = "__nv_fadd_rd"]
+    #[doc = "Compute the sum of and in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fadd_rd.html#__nv_fadd_rd)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fadd_rd(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fadd_rn"]
+    #[doc = "Compute the sum of and in round-to-nearest-even rounding modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fadd_rn.html#__nv_fadd_rn)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fadd_rn(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fadd_ru"]
+    #[doc = "Compute the sum of and in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fadd_ru.html#__nv_fadd_ru)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fadd_ru(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fadd_rz"]
+    #[doc = "Compute the sum of and in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fadd_rz.html#__nv_fadd_rz)
+
+# Returns
+
+Returns + x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fadd_rz(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fast_cosf"]
+    #[doc = "Calculate the fast approximate cosine of the input argument , measured in radiansx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_cosf.html#__nv_fast_cosf)
+
+# Returns
+
+Returns the approximate cosine of x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Input and output in the denormal range is flushed to sign preserving 0.0."]
+    pub fn fast_cosf(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_exp10f"]
+    #[doc = "Calculate the fast approximate base 10 exponential of the input argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_exp10f.html#__nv_fast_exp10f)
+
+# Returns
+
+Returns an approximation to .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Most input and output values around denormal range are flushed to sign preserving
+0.0."]
+    pub fn fast_exp10f(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_expf"]
+    #[doc = "Calculate the fast approximate base exponential of the input argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_expf.html#__nv_fast_expf)
+
+# Returns
+
+Returns an approximation to .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Most input and output values around denormal range are flushed to sign preserving
+0.0."]
+    pub fn fast_expf(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_fdividef"]
+    #[doc = "Calculate the fast approximate division of by x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_fdividef.html#__nv_fast_fdividef)
+
+# Returns
+
+Returns / x. y
+- __nv_fast_fdividef( , ) returns NaN for .y
+- __nv_fast_fdividef( , ) returns 0 for and x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9."]
+    pub fn fast_fdividef(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fast_log10f"]
+    #[doc = "Calculate the fast approximate base 10 logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_log10f.html#__nv_fast_log10f)
+
+# Returns
+
+Returns an approximation to .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Most input and output values around denormal range are flushed to sign preserving
+0.0."]
+    pub fn fast_log10f(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_log2f"]
+    #[doc = "Calculate the fast approximate base 2 logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_log2f.html#__nv_fast_log2f)
+
+# Returns
+
+Returns an approximation to .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Input and output in the denormal range is flushed to sign preserving 0.0."]
+    pub fn fast_log2f(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_logf"]
+    #[doc = "Calculate the fast approximate base logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_logf.html#__nv_fast_logf)
+
+# Returns
+
+Returns an approximation to .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Most input and output values around denormal range are flushed to sign preserving
+0.0."]
+    pub fn fast_logf(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_powf"]
+    #[doc = "Calculate the fast approximate of , the first input argument, raised to the power of ,x y
+the second input argument, .
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_powf.html#__nv_fast_powf)
+
+# Returns
+
+Returns an approximation to .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Most input and output values around denormal range are flushed to sign preserving
+0.0."]
+    pub fn fast_powf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fast_sincosf"]
+    #[doc = "Calculate the fast approximate of sine and cosine of the first input argument x
+(measured in radians). The results for sine and cosine are written into the second
+argument, , and, respectively, third argument, .
+sptr zptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_sincosf.html#__nv_fast_sincosf)
+
+# Returns
+
+- none
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Denorm input/output is flushed to sign preserving 0.0."]
+    pub fn fast_sincosf(x: f32, sptr: *mut f32, cptr: *mut f32) -> ();
+
+    #[link_name = "__nv_fast_sinf"]
+    #[doc = "Calculate the fast approximate sine of the input argument , measured in radiansx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_sinf.html#__nv_fast_sinf)
+
+# Returns
+
+Returns the approximate sine of x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+Input and output in the denormal range is flushed to sign preserving 0.0."]
+    pub fn fast_sinf(x: f32) -> f32;
+
+    #[link_name = "__nv_fast_tanf"]
+    #[doc = "Calculate the fast approximate tangent of the input argument , measured in radiansx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fast_tanf.html#__nv_fast_tanf)
+
+# Returns
+
+Returns the approximate tangent of x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.2, Table 9.
+The result is computed as the fast divide of __nv_sinf() by __nv_cosf(). Denormal
+input and output are flushed to sign-preserving 0.0 at each step of the computation."]
+    pub fn fast_tanf(x: f32) -> f32;
+
+    #[link_name = "__nv_fdim"]
+    #[doc = "Compute the positive difference between and . The positive difference is - when x y x y x
+> and +0 otherwise.y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fdim.html#__nv_fdim)
+
+# Returns
+
+Returns the positive difference between and x. y
+- __nv_fdim(x, y) returns x - y if x > y.
+- __nv_fdim(x, y) returns +0 if x y.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fdim(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_fdimf"]
+    #[doc = "Compute the positive difference between and . The positive difference is - when x y x y x
+> and +0 otherwise.y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fdimf.html#__nv_fdimf)
+
+# Returns
+
+Returns the positive difference between and x. y
+- __nv_fdimf(x, y) returns x - y if x > y.
+- __nv_fdimf(x, y) returns +0 if x y.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fdimf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fdiv_rd"]
+    #[doc = "Divide two floating point values by in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fdiv_rd.html#__nv_fdiv_rd)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fdiv_rd(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fdiv_rn"]
+    #[doc = "Divide two floating point values by in round-to-nearest-even modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fdiv_rn.html#__nv_fdiv_rn)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fdiv_rn(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fdiv_ru"]
+    #[doc = "Divide two floating point values by in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fdiv_ru.html#__nv_fdiv_ru)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fdiv_ru(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fdiv_rz"]
+    #[doc = "Divide two floating point values by in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fdiv_rz.html#__nv_fdiv_rz)
+
+# Returns
+
+Returns / x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fdiv_rz(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_ffs"]
+    #[doc = "Find the position of the first (least significant) bit set to 1 in , where the least significantx
+bit position is 1.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ffs.html#__nv_ffs)
+
+# Returns
+
+Returns a value between 0 and 32 inclusive representing the position of the first bit set.
+- __nv_ffs(0) returns 0."]
+    pub fn ffs(x: i32) -> i32;
+
+    #[link_name = "__nv_ffsll"]
+    #[doc = "Find the position of the first (least significant) bit set to 1 in , where the least significantx
+bit position is 1.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ffsll.html#__nv_ffsll)
+
+# Returns
+
+Returns a value between 0 and 64 inclusive representing the position of the first bit set.
+- __nv_ffsll(0) returns 0."]
+    pub fn ffsll(x: i64) -> i32;
+
+    #[link_name = "__nv_finitef"]
+    #[doc = "Determine whether the floating-point value is a finite valuex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_finitef.html#__nv_finitef)
+
+# Returns
+
+Returns a non-zero value if and only if is a finite valuex."]
+    pub fn finitef(x: f32) -> i32;
+
+    #[link_name = "__nv_float2half_rn"]
+    #[doc = "Convert the single-precision float value to a half-precision floating point valuex
+represented in format, in round-to-nearest-even mode.
+unsigned short
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2half_rn.html#__nv_float2half_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2half_rn(f: f32) -> i16;
+
+    #[link_name = "__nv_float2int_rd"]
+    #[doc = "Convert the single-precision floating point value to a signed integer in round-down (tox
+negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2int_rd.html#__nv_float2int_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2int_rd(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2int_rn"]
+    #[doc = "Convert the single-precision floating point value to a signed integer in round-to-x
+nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2int_rn.html#__nv_float2int_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2int_rn(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2int_ru"]
+    #[doc = "Convert the single-precision floating point value to a signed integer in round-up (tox
+positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2int_ru.html#__nv_float2int_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2int_ru(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2int_rz"]
+    #[doc = "Convert the single-precision floating point value to a signed integer in round-towards-x
+zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2int_rz.html#__nv_float2int_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2int_rz(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2ll_rd"]
+    #[doc = "Convert the single-precision floating point value to a signed 64-bit integer in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ll_rd.html#__nv_float2ll_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ll_rd(f: f32) -> i64;
+
+    #[link_name = "__nv_float2ll_rn"]
+    #[doc = "Convert the single-precision floating point value to a signed 64-bit integer in round-to-x
+nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ll_rn.html#__nv_float2ll_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ll_rn(f: f32) -> i64;
+
+    #[link_name = "__nv_float2ll_ru"]
+    #[doc = "Convert the single-precision floating point value to a signed 64-bit integer in round-upx
+(to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ll_ru.html#__nv_float2ll_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ll_ru(f: f32) -> i64;
+
+    #[link_name = "__nv_float2ll_rz"]
+    #[doc = "Convert the single-precision floating point value to a signed 64-bit integer in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ll_rz.html#__nv_float2ll_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ll_rz(f: f32) -> i64;
+
+    #[link_name = "__nv_float2uint_rd"]
+    #[doc = "Convert the single-precision floating point value to an unsigned integer in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2uint_rd.html#__nv_float2uint_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2uint_rd(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2uint_rn"]
+    #[doc = "Convert the single-precision floating point value to an unsigned integer in round-to-x
+nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2uint_rn.html#__nv_float2uint_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2uint_rn(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2uint_ru"]
+    #[doc = "Convert the single-precision floating point value to an unsigned integer in round-upx
+(to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2uint_ru.html#__nv_float2uint_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2uint_ru(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2uint_rz"]
+    #[doc = "Convert the single-precision floating point value to an unsigned integer in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2uint_rz.html#__nv_float2uint_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2uint_rz(in_: f32) -> i32;
+
+    #[link_name = "__nv_float2ull_rd"]
+    #[doc = "Convert the single-precision floating point value to an unsigned 64-bit integer inx
+round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ull_rd.html#__nv_float2ull_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ull_rd(f: f32) -> i64;
+
+    #[link_name = "__nv_float2ull_rn"]
+    #[doc = "Convert the single-precision floating point value to an unsigned 64-bit integer inx
+round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ull_rn.html#__nv_float2ull_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ull_rn(f: f32) -> i64;
+
+    #[link_name = "__nv_float2ull_ru"]
+    #[doc = "Convert the single-precision floating point value to an unsigned 64-bit integer inx
+round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ull_ru.html#__nv_float2ull_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ull_ru(f: f32) -> i64;
+
+    #[link_name = "__nv_float2ull_rz"]
+    #[doc = "Convert the single-precision floating point value to an unsigned 64-bit integer inx
+round-towards_zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float2ull_rz.html#__nv_float2ull_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn float2ull_rz(f: f32) -> i64;
+
+    #[link_name = "__nv_float_as_int"]
+    #[doc = "Reinterpret the bits in the single-precision floating point value as a signed integerx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_float_as_int.html#__nv_float_as_int)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn float_as_int(x: f32) -> i32;
+
+    #[link_name = "__nv_floor"]
+    #[doc = "Calculates the largest integer value which is less than or equal to x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_floor.html#__nv_floor)
+
+# Returns
+
+Returns the largest integer value which is less than or equal to x expressed as a floating-
+point number.
+- __nv_floor( ) returns .
+- __nv_floor( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn floor(f: f64) -> f64;
+
+    #[link_name = "__nv_floorf"]
+    #[doc = "Calculates the largest integer value which is less than or equal to x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_floorf.html#__nv_floorf)
+
+# Returns
+
+Returns the largest integer value which is less than or equal to x expressed as a floating-
+point number.
+- __nv_floorf( ) returns .
+- __nv_floorf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn floorf(f: f32) -> f32;
+
+    #[link_name = "__nv_fma"]
+    #[doc = "Compute the value of as a single ternary operation. After computing the value
+to infinite precision, the value is rounded once.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fma.html#__nv_fma)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fma( , , z) returns NaN.
+- __nv_fma( , , z) returns NaN.
+- __nv_fma(x, y, ) returns NaN if is an exact .
+- __nv_fma(x, y, ) returns NaN if is an exact .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fma(x: f64, y: f64, z: f64) -> f64;
+
+    #[link_name = "__nv_fma_rd"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fma_rd.html#__nv_fma_rd)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fma_rd( , , z) returns NaN.
+- __nv_fma_rd( , , z) returns NaN.
+- __nv_fma_rd(x, y, ) returns NaN if is an exact 
+- __nv_fma_rd(x, y, ) returns NaN if is an exact 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fma_rd(x: f64, y: f64, z: f64) -> f64;
+
+    #[link_name = "__nv_fma_rn"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fma_rn.html#__nv_fma_rn)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fma_rn( , , z) returns NaN.
+- __nv_fma_rn( , , z) returns NaN.
+- __nv_fma_rn(x, y, ) returns NaN if is an exact 
+- __nv_fma_rn(x, y, ) returns NaN if is an exact 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fma_rn(x: f64, y: f64, z: f64) -> f64;
+
+    #[link_name = "__nv_fma_ru"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fma_ru.html#__nv_fma_ru)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fma_ru( , , z) returns NaN.
+- __nv_fma_ru( , , z) returns NaN.
+- __nv_fma_ru(x, y, ) returns NaN if is an exact 
+- __nv_fma_ru(x, y, ) returns NaN if is an exact 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fma_ru(x: f64, y: f64, z: f64) -> f64;
+
+    #[link_name = "__nv_fma_rz"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fma_rz.html#__nv_fma_rz)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fma_rz( , , z) returns NaN.
+- __nv_fma_rz( , , z) returns NaN.
+- __nv_fma_rz(x, y, ) returns NaN if is an exact 
+- __nv_fma_rz(x, y, ) returns NaN if is an exact 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fma_rz(x: f64, y: f64, z: f64) -> f64;
+
+    #[link_name = "__nv_fmaf"]
+    #[doc = "Compute the value of as a single ternary operation. After computing the value
+to infinite precision, the value is rounded once.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmaf.html#__nv_fmaf)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fmaf( , , z) returns NaN.
+- __nv_fmaf( , , z) returns NaN.
+- __nv_fmaf(x, y, ) returns NaN if is an exact .
+- __nv_fmaf(x, y, ) returns NaN if is an exact .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fmaf(x: f32, y: f32, z: f32) -> f32;
+
+    #[link_name = "__nv_fmaf_rd"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmaf_rd.html#__nv_fmaf_rd)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fmaf_rd( , , z) returns NaN.
+- __nv_fmaf_rd( , , z) returns NaN.
+- __nv_fmaf_rd(x, y, ) returns NaN if is an exact .
+- __nv_fmaf_rd(x, y, ) returns NaN if is an exact .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fmaf_rd(x: f32, y: f32, z: f32) -> f32;
+
+    #[link_name = "__nv_fmaf_rn"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmaf_rn.html#__nv_fmaf_rn)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fmaf_rn( , , z) returns NaN.
+- __nv_fmaf_rn( , , z) returns NaN.
+- __nv_fmaf_rn(x, y, ) returns NaN if is an exact .
+- __nv_fmaf_rn(x, y, ) returns NaN if is an exact .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fmaf_rn(x: f32, y: f32, z: f32) -> f32;
+
+    #[link_name = "__nv_fmaf_ru"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmaf_ru.html#__nv_fmaf_ru)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fmaf_ru( , , z) returns NaN.
+- __nv_fmaf_ru( , , z) returns NaN.
+- __nv_fmaf_ru(x, y, ) returns NaN if is an exact .
+- __nv_fmaf_ru(x, y, ) returns NaN if is an exact .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fmaf_ru(x: f32, y: f32, z: f32) -> f32;
+
+    #[link_name = "__nv_fmaf_rz"]
+    #[doc = "Computes the value of as a single ternary operation, rounding the result once
+in round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmaf_rz.html#__nv_fmaf_rz)
+
+# Returns
+
+Returns the rounded value of as a single operation.
+- __nv_fmaf_rz( , , z) returns NaN.
+- __nv_fmaf_rz( , , z) returns NaN.
+- __nv_fmaf_rz(x, y, ) returns NaN if is an exact .
+- __nv_fmaf_rz(x, y, ) returns NaN if is an exact .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fmaf_rz(x: f32, y: f32, z: f32) -> f32;
+
+    #[link_name = "__nv_fmax"]
+    #[doc = "Determines the maximum numeric value of the arguments and . Treats NaNx y
+arguments as missing data. If one argument is a NaN and the other is legitimate numeric
+value, the numeric value is chosen.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmax.html#__nv_fmax)
+
+# Returns
+
+Returns the maximum numeric values of the arguments and x. y
+- If both arguments are NaN, returns NaN.
+- If one argument is NaN, returns the numeric argument.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fmax(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_fmaxf"]
+    #[doc = "Determines the maximum numeric value of the arguments and . Treats NaNx y
+arguments as missing data. If one argument is a NaN and the other is legitimate numeric
+value, the numeric value is chosen.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmaxf.html#__nv_fmaxf)
+
+# Returns
+
+Returns the maximum numeric values of the arguments and x. y
+- If both arguments are NaN, returns NaN.
+- If one argument is NaN, returns the numeric argument.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fmaxf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fmin"]
+    #[doc = "Determines the minimum numeric value of the arguments and . Treats NaNx y
+arguments as missing data. If one argument is a NaN and the other is legitimate numeric
+value, the numeric value is chosen.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmin.html#__nv_fmin)
+
+# Returns
+
+Returns the minimum numeric values of the arguments and x. y
+- If both arguments are NaN, returns NaN.
+- If one argument is NaN, returns the numeric argument.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fmin(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_fminf"]
+    #[doc = "Determines the minimum numeric value of the arguments and . Treats NaNx y
+arguments as missing data. If one argument is a NaN and the other is legitimate numeric
+value, the numeric value is chosen.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fminf.html#__nv_fminf)
+
+# Returns
+
+Returns the minimum numeric values of the arguments and x. y
+- If both arguments are NaN, returns NaN.
+- If one argument is NaN, returns the numeric argument.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fminf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fmod"]
+    #[doc = "Calculate the floating-point remainder of / . The absolute value of the computedx y
+value is always less than absolute value and will have the same sign as .y's x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmod.html#__nv_fmod)
+
+# Returns
+
+- Returns the floating point remainder of x / y.
+- __nv_fmod( , y) returns if y is not zero.
+- __nv_fmod(x, y) returns NaN and raised an invalid floating point exception if x is
+ or is zero.y
+- __nv_fmod(x, y) returns zero if y is zero or the result would overflow.
+- __nv_fmod(x, ) returns x if x is finite.
+- __nv_fmod(x, 0) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn fmod(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_fmodf"]
+    #[doc = "Calculate the floating-point remainder of / . The absolute value of the computedx y
+value is always less than absolute value and will have the same sign as .y's x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmodf.html#__nv_fmodf)
+
+# Returns
+
+- Returns the floating point remainder of x / y.
+- __nv_fmodf( , y) returns if y is not zero.
+- __nv_fmodf(x, y) returns NaN and raised an invalid floating point exception if x is
+ or is zero.y
+- __nv_fmodf(x, y) returns zero if y is zero or the result would overflow.
+- __nv_fmodf(x, ) returns x if x is finite.
+- __nv_fmodf(x, 0) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fmodf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fmul_rd"]
+    #[doc = "Compute the product of and in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmul_rd.html#__nv_fmul_rd)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fmul_rd(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fmul_rn"]
+    #[doc = "Compute the product of and in round-to-nearest-even modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmul_rn.html#__nv_fmul_rn)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fmul_rn(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fmul_ru"]
+    #[doc = "Compute the product of and in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmul_ru.html#__nv_fmul_ru)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fmul_ru(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fmul_rz"]
+    #[doc = "Compute the product of and in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fmul_rz.html#__nv_fmul_rz)
+
+# Returns
+
+Returns * x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fmul_rz(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_frcp_rd"]
+    #[doc = "Compute the reciprocal of in round-down (to negative infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frcp_rd.html#__nv_frcp_rd)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn frcp_rd(x: f32) -> f32;
+
+    #[link_name = "__nv_frcp_rn"]
+    #[doc = "Compute the reciprocal of in round-to-nearest-even modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frcp_rn.html#__nv_frcp_rn)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn frcp_rn(x: f32) -> f32;
+
+    #[link_name = "__nv_frcp_ru"]
+    #[doc = "Compute the reciprocal of in round-up (to positive infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frcp_ru.html#__nv_frcp_ru)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn frcp_ru(x: f32) -> f32;
+
+    #[link_name = "__nv_frcp_rz"]
+    #[doc = "Compute the reciprocal of in round-towards-zero modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frcp_rz.html#__nv_frcp_rz)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn frcp_rz(x: f32) -> f32;
+
+    #[link_name = "__nv_frexp"]
+    #[doc = "Decompose the floating-point value into a component for the normalized fractionx m
+element and another term for the exponent. The absolute value of will be greater
+n m
+than or equal to 0.5 and less than 1.0 or it will be equal to 0; . The integer
+exponent will be stored in the location to which points.
+n nptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frexp.html#__nv_frexp)
+
+# Returns
+
+Returns the fractional component .
+m
+- __nv_frexp(0, nptr) returns 0 for the fractional component and zero for the integer
+component.
+- __nv_frexp( , nptr) returns and stores zero in the location pointed to by
+.
+nptr
+- __nv_frexp( , nptr) returns and stores an unspecified value in the location
+to which points.
+nptr
+- __nv_frexp(NaN, y) returns a NaN and stores an unspecified value in the location to
+which points.
+nptr
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn frexp(x: f64, b: *mut i32) -> f64;
+
+    #[link_name = "__nv_frexpf"]
+    #[doc = "Decompose the floating-point value into a component for the normalized fractionx m
+element and another term for the exponent. The absolute value of will be greater
+n m
+than or equal to 0.5 and less than 1.0 or it will be equal to 0; . The integer
+exponent will be stored in the location to which points.
+n nptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frexpf.html#__nv_frexpf)
+
+# Returns
+
+Returns the fractional component .
+m
+- __nv_frexpf(0, nptr) returns 0 for the fractional component and zero for the integer
+component.
+- __nv_frexpf( , nptr) returns and stores zero in the location pointed to by
+.
+nptr
+- __nv_frexpf( , nptr) returns and stores an unspecified value in the
+location to which points.
+nptr
+- __nv_frexpf(NaN, y) returns a NaN and stores an unspecified value in the location
+to which points.
+nptr
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn frexpf(x: f32, b: *mut i32) -> f32;
+
+    #[link_name = "__nv_frsqrt_rn"]
+    #[doc = "Compute the reciprocal square root of in round-to-nearest-even modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_frsqrt_rn.html#__nv_frsqrt_rn)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn frsqrt_rn(x: f32) -> f32;
+
+    #[link_name = "__nv_fsqrt_rd"]
+    #[doc = "Compute the square root of in round-down (to negative infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsqrt_rd.html#__nv_fsqrt_rd)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fsqrt_rd(x: f32) -> f32;
+
+    #[link_name = "__nv_fsqrt_rn"]
+    #[doc = "Compute the square root of in round-to-nearest-even modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsqrt_rn.html#__nv_fsqrt_rn)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fsqrt_rn(x: f32) -> f32;
+
+    #[link_name = "__nv_fsqrt_ru"]
+    #[doc = "Compute the square root of in round-up (to positive infinity) modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsqrt_ru.html#__nv_fsqrt_ru)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fsqrt_ru(x: f32) -> f32;
+
+    #[link_name = "__nv_fsqrt_rz"]
+    #[doc = "Compute the square root of in round-towards-zero modex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsqrt_rz.html#__nv_fsqrt_rz)
+
+# Returns
+
+Returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn fsqrt_rz(x: f32) -> f32;
+
+    #[link_name = "__nv_fsub_rd"]
+    #[doc = "Compute the difference of and in round-down (to negative infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsub_rd.html#__nv_fsub_rd)
+
+# Returns
+
+Returns - x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fsub_rd(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fsub_rn"]
+    #[doc = "Compute the difference of and in round-to-nearest-even rounding modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsub_rn.html#__nv_fsub_rn)
+
+# Returns
+
+Returns - x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fsub_rn(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fsub_ru"]
+    #[doc = "Compute the difference of and in round-up (to positive infinity) modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsub_ru.html#__nv_fsub_ru)
+
+# Returns
+
+Returns - x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fsub_ru(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_fsub_rz"]
+    #[doc = "Compute the difference of and in round-towards-zero modex. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_fsub_rz.html#__nv_fsub_rz)
+
+# Returns
+
+Returns - x. y
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6.
+This operation will never be merged into a single multiply-add instruction."]
+    pub fn fsub_rz(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_hadd"]
+    #[doc = "Compute average of signed input arguments and as ( + ) >> 1, avoiding overflowx y x y
+in the intermediate sum.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_hadd.html#__nv_hadd)
+
+# Returns
+
+Returns a signed integer value representing the signed average value of the two inputs."]
+    pub fn hadd(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_half2float"]
+    #[doc = "Convert the half-precision floating point value represented in x unsigned short
+format to a single-precision floating point value.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_half2float.html#__nv_half2float)
+
+# Returns
+
+Returns converted value."]
+    pub fn half2float(h: i16) -> f32;
+
+    #[link_name = "__nv_hiloint2double"]
+    #[doc = "Reinterpret the integer value of as the high 32 bits of a double-precision floating
+hi
+point value and the integer value of as the low 32 bits of the same double-precision
+lo
+floating point value.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_hiloint2double.html#__nv_hiloint2double)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn hiloint2double(x: i32, y: i32) -> f64;
+
+    #[link_name = "__nv_hypot"]
+    #[doc = "Calculate the length of the hypotenuse of a right triangle whose two sides have lengths x
+and without undue overflow or underflow.y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_hypot.html#__nv_hypot)
+
+# Returns
+
+Returns the length of the hypotenuse . If the correct value would overflow,
+returns . If the correct value would underflow, returns 0. If one of the input
+arguments is 0, returns the other argument
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn hypot(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_hypotf"]
+    #[doc = "Calculate the length of the hypotenuse of a right triangle whose two sides have lengths x
+and without undue overflow or underflow.y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_hypotf.html#__nv_hypotf)
+
+# Returns
+
+Returns the length of the hypotenuse . If the correct value would overflow,
+returns . If the correct value would underflow, returns 0. If one of the input
+arguments is 0, returns the other argument
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn hypotf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_ilogb"]
+    #[doc = "Calculates the unbiased integer exponent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ilogb.html#__nv_ilogb)
+
+# Returns
+
+- If successful, returns the unbiased exponent of the argument.
+- __nv_ilogb(0) returns INT_MIN.
+- __nv_ilogb(NaN) returns NaN.
+- __nv_ilogb(x) returns INT_MAX if x is or the correct value is greater than
+.
+INT_MAX
+- __nv_ilogb(x) return INT_MIN if the correct value is less than INT_MIN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn ilogb(x: f64) -> i32;
+
+    #[link_name = "__nv_ilogbf"]
+    #[doc = "Calculates the unbiased integer exponent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ilogbf.html#__nv_ilogbf)
+
+# Returns
+
+- If successful, returns the unbiased exponent of the argument.
+- __nv_ilogbf(0) returns INT_MIN.
+- __nv_ilogbf(NaN) returns NaN.
+- __nv_ilogbf(x) returns INT_MAX if x is or the correct value is greater than
+.
+INT_MAX
+- __nv_ilogbf(x) return INT_MIN if the correct value is less than INT_MIN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn ilogbf(x: f32) -> i32;
+
+    #[link_name = "__nv_int2double_rn"]
+    #[doc = "Convert the signed integer value to a double-precision floating point valuex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_int2double_rn.html#__nv_int2double_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn int2double_rn(i: i32) -> f64;
+
+    #[link_name = "__nv_int2float_rd"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_int2float_rd.html#__nv_int2float_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn int2float_rd(in_: i32) -> f32;
+
+    #[link_name = "__nv_int2float_rn"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-to-x
+nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_int2float_rn.html#__nv_int2float_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn int2float_rn(in_: i32) -> f32;
+
+    #[link_name = "__nv_int2float_ru"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-upx
+(to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_int2float_ru.html#__nv_int2float_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn int2float_ru(in_: i32) -> f32;
+
+    #[link_name = "__nv_int2float_rz"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_int2float_rz.html#__nv_int2float_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn int2float_rz(in_: i32) -> f32;
+
+    #[link_name = "__nv_int_as_float"]
+    #[doc = "Reinterpret the bits in the signed integer value as a single-precision floating pointx
+value.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_int_as_float.html#__nv_int_as_float)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn int_as_float(x: i32) -> f32;
+
+    #[link_name = "__nv_isfinited"]
+    #[doc = "Determine whether the floating-point value is a finite value (zero, subnormal, orx
+normal and not infinity or NaN).
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_isfinited.html#__nv_isfinited)
+
+# Returns
+
+Returns a nonzero value if and only if is a finite valuex."]
+    pub fn isfinited(x: f64) -> i32;
+
+    #[link_name = "__nv_isinfd"]
+    #[doc = "Determine whether the floating-point value is an infinite value (positive or negative)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_isinfd.html#__nv_isinfd)
+
+# Returns
+
+Returns a nonzero value if and only if is a infinite valuex."]
+    pub fn isinfd(x: f64) -> i32;
+
+    #[link_name = "__nv_isinff"]
+    #[doc = "Determine whether the floating-point value is an infinite value (positive or negative)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_isinff.html#__nv_isinff)
+
+# Returns
+
+Returns a nonzero value if and only if is a infinite valuex."]
+    pub fn isinff(x: f32) -> i32;
+
+    #[link_name = "__nv_isnand"]
+    #[doc = "Determine whether the floating-point value is a NaNx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_isnand.html#__nv_isnand)
+
+# Returns
+
+Returns a nonzero value if and only if is a NaN valuex."]
+    pub fn isnand(x: f64) -> i32;
+
+    #[link_name = "__nv_isnanf"]
+    #[doc = "Determine whether the floating-point value is a NaNx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_isnanf.html#__nv_isnanf)
+
+# Returns
+
+Returns a nonzero value if and only if is a NaN valuex."]
+    pub fn isnanf(x: f32) -> i32;
+
+    #[link_name = "__nv_j0"]
+    #[doc = "Calculate the value of the Bessel function of the first kind of order 0 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_j0.html#__nv_j0)
+
+# Returns
+
+Returns the value of the Bessel function of the first kind of order 0.
+- __nv_j0( ) returns +0.
+- __nv_j0(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn j0(x: f64) -> f64;
+
+    #[link_name = "__nv_j0f"]
+    #[doc = "Calculate the value of the Bessel function of the first kind of order 0 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_j0f.html#__nv_j0f)
+
+# Returns
+
+Returns the value of the Bessel function of the first kind of order 0.
+- __nv_j0f( ) returns +0.
+- __nv_j0f(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn j0f(x: f32) -> f32;
+
+    #[link_name = "__nv_j1"]
+    #[doc = "Calculate the value of the Bessel function of the first kind of order 1 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_j1.html#__nv_j1)
+
+# Returns
+
+Returns the value of the Bessel function of the first kind of order 1.
+- __nv_j1( ) returns .
+- __nv_j1( ) returns +0.
+- __nv_j1(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn j1(x: f64) -> f64;
+
+    #[link_name = "__nv_j1f"]
+    #[doc = "Calculate the value of the Bessel function of the first kind of order 1 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_j1f.html#__nv_j1f)
+
+# Returns
+
+Returns the value of the Bessel function of the first kind of order 1.
+- __nv_j1f( ) returns .
+- __nv_j1f( ) returns +0.
+- __nv_j1f(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn j1f(x: f32) -> f32;
+
+    #[link_name = "__nv_jn"]
+    #[doc = "Calculate the value of the Bessel function of the first kind of order for the input
+n
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_jn.html#__nv_jn)
+
+# Returns
+
+Returns the value of the Bessel function of the first kind of order .
+n
+- __nv_jn(n, NaN) returns NaN.
+- __nv_jn(n, x) returns NaN for n < 0.
+- __nv_jn(n, ) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn jn(n: i32, x: f64) -> f64;
+
+    #[link_name = "__nv_jnf"]
+    #[doc = "Calculate the value of the Bessel function of the first kind of order for the input
+n
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_jnf.html#__nv_jnf)
+
+# Returns
+
+Returns the value of the Bessel function of the first kind of order .
+n
+- __nv_jnf(n, NaN) returns NaN.
+- __nv_jnf(n, x) returns NaN for n < 0.
+- __nv_jnf(n, ) returns +0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn jnf(n: i32, x: f32) -> f32;
+
+    #[link_name = "__nv_ldexp"]
+    #[doc = "Calculate the value of of the input arguments and x. exp
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ldexp.html#__nv_ldexp)
+
+# Returns
+
+- __nv_ldexp(x) returns if the correctly calculated value is outside the double
+floating point range.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn ldexp(x: f64, y: i32) -> f64;
+
+    #[link_name = "__nv_ldexpf"]
+    #[doc = "Calculate the value of of the input arguments and x. exp
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ldexpf.html#__nv_ldexpf)
+
+# Returns
+
+- __nv_ldexpf(x) returns if the correctly calculated value is outside the double
+floating point range.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn ldexpf(x: f32, y: i32) -> f32;
+
+    #[link_name = "__nv_lgamma"]
+    #[doc = "Calculate the natural logarithm of the absolute value of the gamma function of the input
+argument , namely the value of x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_lgamma.html#__nv_lgamma)
+
+# Returns
+
+- __nv_lgamma(1) returns +0.
+- __nv_lgamma(2) returns +0.
+- __nv_lgamma(x) returns if the correctly calculated value is outside the double
+floating point range.
+- __nv_lgamma(x) returns if x 0.
+- __nv_lgamma( ) returns .
+- __nv_lgamma( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn lgamma(x: f64) -> f64;
+
+    #[link_name = "__nv_lgammaf"]
+    #[doc = "Calculate the natural logarithm of the absolute value of the gamma function of the input
+argument , namely the value of x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_lgammaf.html#__nv_lgammaf)
+
+# Returns
+
+- __nv_lgammaf(1) returns +0.
+- __nv_lgammaf(2) returns +0.
+- __nv_lgammaf(x) returns if the correctly calculated value is outside the double
+floating point range.
+- __nv_lgammaf(x) returns if x 0.
+- __nv_lgammaf( ) returns .
+- __nv_lgammaf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn lgammaf(x: f32) -> f32;
+
+    #[link_name = "__nv_ll2double_rd"]
+    #[doc = "Convert the signed 64-bit integer value to a double-precision floating point value inx
+round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2double_rd.html#__nv_ll2double_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2double_rd(l: i64) -> f64;
+
+    #[link_name = "__nv_ll2double_rn"]
+    #[doc = "Convert the signed 64-bit integer value to a double-precision floating point value inx
+round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2double_rn.html#__nv_ll2double_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2double_rn(l: i64) -> f64;
+
+    #[link_name = "__nv_ll2double_ru"]
+    #[doc = "Convert the signed 64-bit integer value to a double-precision floating point value inx
+round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2double_ru.html#__nv_ll2double_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2double_ru(l: i64) -> f64;
+
+    #[link_name = "__nv_ll2double_rz"]
+    #[doc = "Convert the signed 64-bit integer value to a double-precision floating point value inx
+round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2double_rz.html#__nv_ll2double_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2double_rz(l: i64) -> f64;
+
+    #[link_name = "__nv_ll2float_rd"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2float_rd.html#__nv_ll2float_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2float_rd(l: i64) -> f32;
+
+    #[link_name = "__nv_ll2float_rn"]
+    #[doc = "Convert the signed 64-bit integer value to a single-precision floating point value inx
+round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2float_rn.html#__nv_ll2float_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2float_rn(l: i64) -> f32;
+
+    #[link_name = "__nv_ll2float_ru"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-upx
+(to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2float_ru.html#__nv_ll2float_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2float_ru(l: i64) -> f32;
+
+    #[link_name = "__nv_ll2float_rz"]
+    #[doc = "Convert the signed integer value to a single-precision floating point value in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ll2float_rz.html#__nv_ll2float_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn ll2float_rz(l: i64) -> f32;
+
+    #[link_name = "__nv_llabs"]
+    #[doc = "Determine the absolute value of the 64-bit signed integer x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llabs.html#__nv_llabs)
+
+# Returns
+
+Returns the absolute value of the 64-bit signed integer x."]
+    pub fn llabs(x: i64) -> i64;
+
+    #[link_name = "__nv_llmax"]
+    #[doc = "Determine the maximum value of the two 64-bit signed integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llmax.html#__nv_llmax)
+
+# Returns
+
+Returns the maximum value of the two 64-bit signed integers and x. y"]
+    pub fn llmax(x: i64, y: i64) -> i64;
+
+    #[link_name = "__nv_llmin"]
+    #[doc = "Determine the minimum value of the two 64-bit signed integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llmin.html#__nv_llmin)
+
+# Returns
+
+Returns the minimum value of the two 64-bit signed integers and x. y"]
+    pub fn llmin(x: i64, y: i64) -> i64;
+
+    #[link_name = "__nv_llrint"]
+    #[doc = "Round to the nearest integer value, with halfway cases rounded towards zero. If thex
+result is outside the range of the return type, the result is undefined.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llrint.html#__nv_llrint)
+
+# Returns
+
+Returns rounded integer value."]
+    pub fn llrint(x: f64) -> i64;
+
+    #[link_name = "__nv_llrintf"]
+    #[doc = "Round to the nearest integer value, with halfway cases rounded towards zero. If thex
+result is outside the range of the return type, the result is undefined.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llrintf.html#__nv_llrintf)
+
+# Returns
+
+Returns rounded integer value."]
+    pub fn llrintf(x: f32) -> i64;
+
+    #[link_name = "__nv_llround"]
+    #[doc = "Round to the nearest integer value, with halfway cases rounded away from zero. If thex
+result is outside the range of the return type, the result is undefined.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llround.html#__nv_llround)
+
+# Returns
+
+Returns rounded integer value.
+This function may be slower than alternate rounding methods. See llrint()."]
+    pub fn llround(x: f64) -> i64;
+
+    #[link_name = "__nv_llroundf"]
+    #[doc = "Round to the nearest integer value, with halfway cases rounded away from zero. If thex
+result is outside the range of the return type, the result is undefined.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_llroundf.html#__nv_llroundf)
+
+# Returns
+
+Returns rounded integer value.
+This function may be slower than alternate rounding methods. See llrint()."]
+    pub fn llroundf(x: f32) -> i64;
+
+    #[link_name = "__nv_log"]
+    #[doc = "Calculate the base logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log.html#__nv_log)
+
+# Returns
+
+- __nv_log( ) returns .
+- __nv_log(1) returns +0.
+- __nv_log(x) returns NaN for x < 0.
+- __nv_log( ) returns 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn log(x: f64) -> f64;
+
+    #[link_name = "__nv_log10"]
+    #[doc = "Calculate the base 10 logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log10.html#__nv_log10)
+
+# Returns
+
+- __nv_log10( ) returns .
+- __nv_log10(1) returns +0.
+- __nv_log10(x) returns NaN for x < 0.
+- __nv_log10( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn log10(x: f64) -> f64;
+
+    #[link_name = "__nv_log10f"]
+    #[doc = "Calculate the base 10 logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log10f.html#__nv_log10f)
+
+# Returns
+
+- __nv_log10f( ) returns .
+- __nv_log10f(1) returns +0.
+- __nv_log10f(x) returns NaN for x < 0.
+- __nv_log10f( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn log10f(x: f32) -> f32;
+
+    #[link_name = "__nv_log1p"]
+    #[doc = "Calculate the value of of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log1p.html#__nv_log1p)
+
+# Returns
+
+- __nv_log1p( ) returns .
+- __nv_log1p(-1) returns +0.
+- __nv_log1p(x) returns NaN for x < -1.
+- __nv_log1p( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn log1p(x: f64) -> f64;
+
+    #[link_name = "__nv_log1pf"]
+    #[doc = "Calculate the value of of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log1pf.html#__nv_log1pf)
+
+# Returns
+
+- __nv_log1pf( ) returns .
+- __nv_log1pf(-1) returns +0.
+- __nv_log1pf(x) returns NaN for x < -1.
+- __nv_log1pf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn log1pf(x: f32) -> f32;
+
+    #[link_name = "__nv_log2"]
+    #[doc = "Calculate the base 2 logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log2.html#__nv_log2)
+
+# Returns
+
+- __nv_log2( ) returns .
+- __nv_log2(1) returns +0.
+- __nv_log2(x) returns NaN for x < 0.
+- __nv_log2( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn log2(x: f64) -> f64;
+
+    #[link_name = "__nv_log2f"]
+    #[doc = "Calculate the base 2 logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_log2f.html#__nv_log2f)
+
+# Returns
+
+- __nv_log2f( ) returns .
+- __nv_log2f(1) returns +0.
+- __nv_log2f(x) returns NaN for x < 0.
+- __nv_log2f( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn log2f(x: f32) -> f32;
+
+    #[link_name = "__nv_logb"]
+    #[doc = "Calculate the floating point representation of the exponent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_logb.html#__nv_logb)
+
+# Returns
+
+- __nv_logb returns 
+- __nv_logb returns 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn logb(x: f64) -> f64;
+
+    #[link_name = "__nv_logbf"]
+    #[doc = "Calculate the floating point representation of the exponent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_logbf.html#__nv_logbf)
+
+# Returns
+
+- __nv_logbf returns 
+- __nv_logbf returns 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn logbf(x: f32) -> f32;
+
+    #[link_name = "__nv_logf"]
+    #[doc = "Calculate the base logarithm of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_logf.html#__nv_logf)
+
+# Returns
+
+- __nv_logf( ) returns .
+- __nv_logf(1) returns +0.
+- __nv_logf(x) returns NaN for x < 0.
+- __nv_logf( ) returns 
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn logf(x: f32) -> f32;
+
+    #[link_name = "__nv_longlong_as_double"]
+    #[doc = "Reinterpret the bits in the 64-bit signed integer value as a double-precision floatingx
+point value.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_longlong_as_double.html#__nv_longlong_as_double)
+
+# Returns
+
+Returns reinterpreted value."]
+    pub fn longlong_as_double(x: i64) -> f64;
+
+    #[link_name = "__nv_max"]
+    #[doc = "Determine the maximum value of the two 32-bit signed integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_max.html#__nv_max)
+
+# Returns
+
+Returns the maximum value of the two 32-bit signed integers and x. y"]
+    pub fn max(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_min"]
+    #[doc = "Determine the minimum value of the two 32-bit signed integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_min.html#__nv_min)
+
+# Returns
+
+Returns the minimum value of the two 32-bit signed integers and x. y"]
+    pub fn min(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_modf"]
+    #[doc = "Break down the argument into fractional and integral parts. The integral part is storedx
+in the argument . Fractional and integral parts are given the same sign as the
+iptr
+argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_modf.html#__nv_modf)
+
+# Returns
+
+- __nv_modf( , iptr) returns a result with the same sign as x.
+- __nv_modf( , iptr) returns and stores in the object pointed to by
+.
+iptr
+- __nv_modf(NaN, iptr) stores a NaN in the object pointed to by iptr and returns a
+NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn modf(x: f64, b: *mut f64) -> f64;
+
+    #[link_name = "__nv_modff"]
+    #[doc = "Break down the argument into fractional and integral parts. The integral part is storedx
+in the argument . Fractional and integral parts are given the same sign as the
+iptr
+argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_modff.html#__nv_modff)
+
+# Returns
+
+- __nv_modff( , iptr) returns a result with the same sign as x.
+- __nv_modff( , iptr) returns and stores in the object pointed to by
+.
+iptr
+- __nv_modff(NaN, iptr) stores a NaN in the object pointed to by iptr and returns
+a NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn modff(x: f32, b: *mut f32) -> f32;
+
+    #[link_name = "__nv_mul24"]
+    #[doc = "Calculate the least significant 32 bits of the product of the least significant 24 bits of x
+and . The high order 8 bits of and are ignored.y x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_mul24.html#__nv_mul24)
+
+# Returns
+
+Returns the least significant 32 bits of the product * x. y"]
+    pub fn mul24(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_mul64hi"]
+    #[doc = "Calculate the most significant 64 bits of the 128-bit product * , where and are 64-x y x y
+bit integers.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_mul64hi.html#__nv_mul64hi)
+
+# Returns
+
+Returns the most significant 64 bits of the product * x. y"]
+    pub fn mul64hi(x: i64, y: i64) -> i64;
+
+    #[link_name = "__nv_mulhi"]
+    #[doc = "Calculate the most significant 32 bits of the 64-bit product * , where and are 32-bitx y x y
+integers.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_mulhi.html#__nv_mulhi)
+
+# Returns
+
+Returns the most significant 32 bits of the product * x. y"]
+    pub fn mulhi(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_nan"]
+    #[doc = "Return a representation of a quiet NaN. Argument selects one of the possible
+tagp
+representations.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_nan.html#__nv_nan)
+
+# Returns
+
+- __nv_nan(tagp) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn nan(tagp: *mut i8) -> f64;
+
+    #[link_name = "__nv_nanf"]
+    #[doc = "Return a representation of a quiet NaN. Argument selects one of the possible
+tagp
+representations.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_nanf.html#__nv_nanf)
+
+# Returns
+
+- __nv_nanf(tagp) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn nanf(tagp: *mut i8) -> f32;
+
+    #[link_name = "__nv_nearbyint"]
+    #[doc = "Round argument to an integer value in double precision floating-point formatx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_nearbyint.html#__nv_nearbyint)
+
+# Returns
+
+- __nv_nearbyint( ) returns .
+- __nv_nearbyint( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn nearbyint(x: f64) -> f64;
+
+    #[link_name = "__nv_nearbyintf"]
+    #[doc = "Round argument to an integer value in double precision floating-point formatx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_nearbyintf.html#__nv_nearbyintf)
+
+# Returns
+
+- __nv_nearbyintf( ) returns .
+- __nv_nearbyintf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn nearbyintf(x: f32) -> f32;
+
+    #[link_name = "__nv_nextafter"]
+    #[doc = "Calculate the next representable double-precision floating-point value following inx
+the direction of . For example, if is greater than , nextafter() returns the smallesty y x
+representable number greater than x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_nextafter.html#__nv_nextafter)
+
+# Returns
+
+- __nv_nextafter( , y) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn nextafter(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_nextafterf"]
+    #[doc = "Calculate the next representable double-precision floating-point value following inx
+the direction of . For example, if is greater than , nextafter() returns the smallesty y x
+representable number greater than x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_nextafterf.html#__nv_nextafterf)
+
+# Returns
+
+- __nv_nextafterf( , y) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn nextafterf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_normcdf"]
+    #[doc = "Calculate the cumulative distribution function of the standard normal distribution for
+input argument , .y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_normcdf.html#__nv_normcdf)
+
+# Returns
+
+- __nv_normcdf( ) returns 1
+- __nv_normcdf( ) returns +0
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn normcdf(x: f64) -> f64;
+
+    #[link_name = "__nv_normcdff"]
+    #[doc = "Calculate the cumulative distribution function of the standard normal distribution for
+input argument , .y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_normcdff.html#__nv_normcdff)
+
+# Returns
+
+- __nv_normcdff( ) returns 1
+- __nv_normcdff( ) returns +0
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn normcdff(x: f32) -> f32;
+
+    #[link_name = "__nv_normcdfinv"]
+    #[doc = "Calculate the inverse of the standard normal cumulative distribution function for input
+argument , . The function is defined for input values in the interval .y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_normcdfinv.html#__nv_normcdfinv)
+
+# Returns
+
+- __nv_normcdfinv(0) returns .
+- __nv_normcdfinv(1) returns .
+- __nv_normcdfinv(x) returns NaN if x is not in the interval [0,1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn normcdfinv(x: f64) -> f64;
+
+    #[link_name = "__nv_normcdfinvf"]
+    #[doc = "Calculate the inverse of the standard normal cumulative distribution function for input
+argument , . The function is defined for input values in the interval .y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_normcdfinvf.html#__nv_normcdfinvf)
+
+# Returns
+
+- __nv_normcdfinvf(0) returns .
+- __nv_normcdfinvf(1) returns .
+- __nv_normcdfinvf(x) returns NaN if x is not in the interval [0,1].
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn normcdfinvf(x: f32) -> f32;
+
+    #[link_name = "__nv_popc"]
+    #[doc = "Count the number of bits that are set to 1 in x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_popc.html#__nv_popc)
+
+# Returns
+
+Returns a value between 0 and 32 inclusive representing the number of set bits."]
+    pub fn popc(x: i32) -> i32;
+
+    #[link_name = "__nv_popcll"]
+    #[doc = "Count the number of bits that are set to 1 in x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_popcll.html#__nv_popcll)
+
+# Returns
+
+Returns a value between 0 and 64 inclusive representing the number of set bits."]
+    pub fn popcll(x: i64) -> i32;
+
+    #[link_name = "__nv_pow"]
+    #[doc = "Calculate the value of to the power of x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_pow.html#__nv_pow)
+
+# Returns
+
+- __nv_pow( , y) returns for y an integer less than 0.
+- __nv_pow( , y) returns for y an odd integer greater than 0.
+- __nv_pow( , y) returns +0 for y > 0 and not and odd integer.
+- __nv_pow(-1, ) returns 1.
+- __nv_pow(+1, y) returns 1 for any y, even a NaN.
+- __nv_pow(x, ) returns 1 for any x, even a NaN.
+- __nv_pow(x, y) returns a NaN for finite x < 0 and finite non-integer y.
+- __nv_pow( , ) returns for x.
+- __nv_pow( , ) returns +0 for x.
+- __nv_pow( , ) returns +0 for x.
+- __nv_pow( , ) returns for x.
+- __nv_pow( , y) returns -0 for y an odd integer less than 0.
+- __nv_pow( , y) returns +0 for y < 0 and not an odd integer.
+- __nv_pow( , y) returns for y an odd integer greater than 0.
+- __nv_pow( , y) returns for y > 0 and not an odd integer.
+- __nv_pow( , y) returns +0 for y < 0.
+- __nv_pow( , y) returns for y > 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn pow(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_powf"]
+    #[doc = "Calculate the value of to the power of x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_powf.html#__nv_powf)
+
+# Returns
+
+- __nv_powf( , y) returns for y an integer less than 0.
+- __nv_powf( , y) returns for y an odd integer greater than 0.
+- __nv_powf( , y) returns +0 for y > 0 and not and odd integer.
+- __nv_powf(-1, ) returns 1.
+- __nv_powf(+1, y) returns 1 for any y, even a NaN.
+- __nv_powf(x, ) returns 1 for any x, even a NaN.
+- __nv_powf(x, y) returns a NaN for finite x < 0 and finite non-integer y.
+- __nv_powf( , ) returns for x.
+- __nv_powf( , ) returns +0 for x.
+- __nv_powf( , ) returns +0 for x.
+- __nv_powf( , ) returns for x.
+- __nv_powf( , y) returns -0 for y an odd integer less than 0.
+- __nv_powf( , y) returns +0 for y < 0 and not an odd integer.
+- __nv_powf( , y) returns for y an odd integer greater than 0.
+- __nv_powf( , y) returns for y > 0 and not an odd integer.
+- __nv_powf( , y) returns +0 for y < 0.
+- __nv_powf( , y) returns for y > 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn powf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_powi"]
+    #[doc = "Calculate the value of to the power of x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_powi.html#__nv_powi)
+
+# Returns
+
+- __nv_powi( , y) returns for y an integer less than 0.
+- __nv_powi( , y) returns for y an odd integer greater than 0.
+- __nv_powi( , y) returns +0 for y > 0 and not and odd integer.
+- __nv_powi(-1, ) returns 1.
+- __nv_powi(+1, y) returns 1 for any y, even a NaN.
+- __nv_powi(x, ) returns 1 for any x, even a NaN.
+- __nv_powi(x, y) returns a NaN for finite x < 0 and finite non-integer y.
+- __nv_powi( , ) returns for x.
+- __nv_powi( , ) returns +0 for x.
+- __nv_powi( , ) returns +0 for x.
+- __nv_powi( , ) returns for x.
+- __nv_powi( , y) returns -0 for y an odd integer less than 0.
+- __nv_powi( , y) returns +0 for y < 0 and not an odd integer.
+- __nv_powi( , y) returns for y an odd integer greater than 0.
+- __nv_powi( , y) returns for y > 0 and not an odd integer.
+- __nv_powi( , y) returns +0 for y < 0.
+- __nv_powi( , y) returns for y > 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn powi(x: f64, y: i32) -> f64;
+
+    #[link_name = "__nv_powif"]
+    #[doc = "Calculate the value of to the power of x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_powif.html#__nv_powif)
+
+# Returns
+
+- __nv_powif( , y) returns for y an integer less than 0.
+- __nv_powif( , y) returns for y an odd integer greater than 0.
+- __nv_powif( , y) returns +0 for y > 0 and not and odd integer.
+- __nv_powif(-1, ) returns 1.
+- __nv_powif(+1, y) returns 1 for any y, even a NaN.
+- __nv_powif(x, ) returns 1 for any x, even a NaN.
+- __nv_powif(x, y) returns a NaN for finite x < 0 and finite non-integer y.
+- __nv_powif( , ) returns for x.
+- __nv_powif( , ) returns +0 for x.
+- __nv_powif( , ) returns +0 for x.
+- __nv_powif( , ) returns for x.
+- __nv_powif( , y) returns -0 for y an odd integer less than 0.
+- __nv_powif( , y) returns +0 for y < 0 and not an odd integer.
+- __nv_powif( , y) returns for y an odd integer greater than 0.
+- __nv_powif( , y) returns for y > 0 and not an odd integer.
+- __nv_powif( , y) returns +0 for y < 0.
+- __nv_powif( , y) returns for y > 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn powif(x: f32, y: i32) -> f32;
+
+    #[link_name = "__nv_rcbrt"]
+    #[doc = "Calculate reciprocal cube root function of x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rcbrt.html#__nv_rcbrt)
+
+# Returns
+
+- __nv_rcbrt( ) returns .
+- __nv_rcbrt( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn rcbrt(x: f64) -> f64;
+
+    #[link_name = "__nv_rcbrtf"]
+    #[doc = "Calculate reciprocal cube root function of x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rcbrtf.html#__nv_rcbrtf)
+
+# Returns
+
+- __nv_rcbrtf( ) returns .
+- __nv_rcbrtf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn rcbrtf(x: f32) -> f32;
+
+    #[link_name = "__nv_remainder"]
+    #[doc = "Compute double-precision floating-point remainder of dividing by for nonzero .
+r x y y
+Thus . The value is the integer value nearest . In the case when ,
+n
+the even value is chosen.
+n
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_remainder.html#__nv_remainder)
+
+# Returns
+
+- __nv_remainder(x, 0) returns NaN.
+- __nv_remainder( , y) returns NaN.
+- __nv_remainder(x, ) returns x for finite x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn remainder(x: f64, y: f64) -> f64;
+
+    #[link_name = "__nv_remainderf"]
+    #[doc = "Compute double-precision floating-point remainder of dividing by for nonzero .
+r x y y
+Thus . The value is the integer value nearest . In the case when ,
+n
+the even value is chosen.
+n
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_remainderf.html#__nv_remainderf)
+
+# Returns
+
+- __nv_remainderf(x, 0) returns NaN.
+- __nv_remainderf( , y) returns NaN.
+- __nv_remainderf(x, ) returns x for finite x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn remainderf(x: f32, y: f32) -> f32;
+
+    #[link_name = "__nv_remquo"]
+    #[doc = "Compute a double-precision floating-point remainder in the same way as the
+remainder() function. Argument returns part of quotient upon division of by .
+quo x y
+Value has the same sign as and may not be the exact quotient but agrees with the
+quo
+exact quotient in the low order 3 bits.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_remquo.html#__nv_remquo)
+
+# Returns
+
+Returns the remainder.
+- __nv_remquo(x, 0, quo) returns NaN.
+- __nv_remquo( , y, quo) returns NaN.
+- __nv_remquo(x, , quo) returns x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn remquo(x: f64, y: f64, c: *mut i32) -> f64;
+
+    #[link_name = "__nv_remquof"]
+    #[doc = "Compute a double-precision floating-point remainder in the same way as the
+remainder() function. Argument returns part of quotient upon division of by .
+quo x y
+Value has the same sign as and may not be the exact quotient but agrees with the
+quo
+exact quotient in the low order 3 bits.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_remquof.html#__nv_remquof)
+
+# Returns
+
+Returns the remainder.
+- __nv_remquof(x, 0, quo) returns NaN.
+- __nv_remquof( , y, quo) returns NaN.
+- __nv_remquof(x, , quo) returns x.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn remquof(x: f32, y: f32, quo: *mut i32) -> f32;
+
+    #[link_name = "__nv_rhadd"]
+    #[doc = "Compute average of signed input arguments and as ( + + 1 ) >> 1, avoidingx y x y
+overflow in the intermediate sum.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rhadd.html#__nv_rhadd)
+
+# Returns
+
+Returns a signed integer value representing the signed rounded average value of the two
+inputs."]
+    pub fn rhadd(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_rint"]
+    #[doc = "Round to the nearest integer value in floating-point format, with halfway casesx
+rounded to the nearest even integer value.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rint.html#__nv_rint)
+
+# Returns
+
+Returns rounded integer value."]
+    pub fn rint(x: f64) -> f64;
+
+    #[link_name = "__nv_rintf"]
+    #[doc = "Round to the nearest integer value in floating-point format, with halfway casesx
+rounded to the nearest even integer value.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rintf.html#__nv_rintf)
+
+# Returns
+
+Returns rounded integer value."]
+    pub fn rintf(x: f32) -> f32;
+
+    #[link_name = "__nv_round"]
+    #[doc = "Round to the nearest integer value in floating-point format, with halfway casesx
+rounded away from zero.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_round.html#__nv_round)
+
+# Returns
+
+Returns rounded integer value.
+This function may be slower than alternate rounding methods. See rint()."]
+    pub fn round(x: f64) -> f64;
+
+    #[link_name = "__nv_roundf"]
+    #[doc = "Round to the nearest integer value in floating-point format, with halfway casesx
+rounded away from zero.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_roundf.html#__nv_roundf)
+
+# Returns
+
+Returns rounded integer value.
+This function may be slower than alternate rounding methods. See rint()."]
+    pub fn roundf(x: f32) -> f32;
+
+    #[link_name = "__nv_rsqrt"]
+    #[doc = "Calculate the reciprocal of the nonnegative square root of , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rsqrt.html#__nv_rsqrt)
+
+# Returns
+
+Returns .
+- __nv_rsqrt( ) returns +0.
+- __nv_rsqrt( ) returns .
+- __nv_rsqrt(x) returns NaN if x is less than 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn rsqrt(x: f64) -> f64;
+
+    #[link_name = "__nv_rsqrtf"]
+    #[doc = "Calculate the reciprocal of the nonnegative square root of , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_rsqrtf.html#__nv_rsqrtf)
+
+# Returns
+
+Returns .
+- __nv_rsqrtf( ) returns +0.
+- __nv_rsqrtf( ) returns .
+- __nv_rsqrtf(x) returns NaN if x is less than 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn rsqrtf(x: f32) -> f32;
+
+    #[link_name = "__nv_sad"]
+    #[doc = "Calculate , the 32-bit sum of the third argument plus and the absolute value
+z
+of the difference between the first argument, , and second argument, x. y
+Inputs and are signed 32-bit integers, input is a 32-bit unsigned integerx. y z
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sad.html#__nv_sad)
+
+# Returns
+
+Returns ."]
+    pub fn sad(x: i32, y: i32, z: i32) -> i32;
+
+    #[link_name = "__nv_saturatef"]
+    #[doc = "Clamp the input argument to be within the interval [+0.0, 1.0]x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_saturatef.html#__nv_saturatef)
+
+# Returns
+
+- __nv_saturatef(x) returns 0 if x < 0.
+- __nv_saturatef(x) returns 1 if x > 1.
+- __nv_saturatef(x) returns x if .
+- __nv_saturatef(NaN) returns 0."]
+    pub fn saturatef(x: f32) -> f32;
+
+    #[link_name = "__nv_scalbn"]
+    #[doc = "Scale by by efficient manipulation of the floating-point exponentx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_scalbn.html#__nv_scalbn)
+
+# Returns
+
+Returns * x.
+- __nv_scalbn( , n) returns .
+- __nv_scalbn(x, 0) returns x.
+- __nv_scalbn( , n) returns ."]
+    pub fn scalbn(x: f64, y: i32) -> f64;
+
+    #[link_name = "__nv_scalbnf"]
+    #[doc = "Scale by by efficient manipulation of the floating-point exponentx.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_scalbnf.html#__nv_scalbnf)
+
+# Returns
+
+Returns * x.
+- __nv_scalbnf( , n) returns .
+- __nv_scalbnf(x, 0) returns x.
+- __nv_scalbnf( , n) returns ."]
+    pub fn scalbnf(x: f32, y: i32) -> f32;
+
+    #[link_name = "__nv_signbitd"]
+    #[doc = "Determine whether the floating-point value is negativex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_signbitd.html#__nv_signbitd)
+
+# Returns
+
+Returns a nonzero value if and only if is negative. Reports the sign bit of all valuesx
+including infinities, zeros, and NaNs."]
+    pub fn signbitd(x: f64) -> i32;
+
+    #[link_name = "__nv_signbitf"]
+    #[doc = "Determine whether the floating-point value is negativex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_signbitf.html#__nv_signbitf)
+
+# Returns
+
+Returns a nonzero value if and only if is negative. Reports the sign bit of all valuesx
+including infinities, zeros, and NaNs."]
+    pub fn signbitf(x: f32) -> i32;
+
+    #[link_name = "__nv_sin"]
+    #[doc = "Calculate the sine of the input argument (measured in radians)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sin.html#__nv_sin)
+
+# Returns
+
+- __nv_sin( ) returns .
+- __nv_sin( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sin(x: f64) -> f64;
+
+    #[link_name = "__nv_sincos"]
+    #[doc = "Calculate the sine and cosine of the first input argument (measured in radians). Thex
+results for sine and cosine are written into the second argument, , and, respectively,
+sptr
+third argument, .
+zptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sincos.html#__nv_sincos)
+
+# Returns
+
+- none
+See __nv_sin() and __nv_cos().
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sincos(x: f64, sptr: *mut f64, cptr: *mut f64) -> ();
+
+    #[link_name = "__nv_sincosf"]
+    #[doc = "Calculate the sine and cosine of the first input argument (measured in radians). Thex
+results for sine and cosine are written into the second argument, , and, respectively,
+sptr
+third argument, .
+zptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sincosf.html#__nv_sincosf)
+
+# Returns
+
+- none
+See __nv_sinf() and __nv_cosf().
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn sincosf(x: f32, sptr: *mut f32, cptr: *mut f32) -> ();
+
+    #[link_name = "__nv_sincospi"]
+    #[doc = "Calculate the sine and cosine of the first input argument, (measured in radians),x
+. The results for sine and cosine are written into the second argument, , and,
+sptr
+respectively, third argument, .
+zptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sincospi.html#__nv_sincospi)
+
+# Returns
+
+- none
+See __nv_sinpi() and __nv_cospi().
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sincospi(x: f64, sptr: *mut f64, cptr: *mut f64) -> ();
+
+    #[link_name = "__nv_sincospif"]
+    #[doc = "Calculate the sine and cosine of the first input argument, (measured in radians),x
+. The results for sine and cosine are written into the second argument, , and,
+sptr
+respectively, third argument, .
+zptr
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sincospif.html#__nv_sincospif)
+
+# Returns
+
+- none
+See __nv_sinpif() and __nv_cospif().
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn sincospif(x: f32, sptr: *mut f32, cptr: *mut f32) -> ();
+
+    #[link_name = "__nv_sinf"]
+    #[doc = "Calculate the sine of the input argument (measured in radians)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sinf.html#__nv_sinf)
+
+# Returns
+
+- __nv_sinf( ) returns .
+- __nv_sinf( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn sinf(x: f32) -> f32;
+
+    #[link_name = "__nv_sinh"]
+    #[doc = "Calculate the hyperbolic sine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sinh.html#__nv_sinh)
+
+# Returns
+
+- __nv_sinh( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sinh(x: f64) -> f64;
+
+    #[link_name = "__nv_sinhf"]
+    #[doc = "Calculate the hyperbolic sine of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sinhf.html#__nv_sinhf)
+
+# Returns
+
+- __nv_sinhf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn sinhf(x: f32) -> f32;
+
+    #[link_name = "__nv_sinpi"]
+    #[doc = "Calculate the sine of (measured in radians), where is the input argumentx. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sinpi.html#__nv_sinpi)
+
+# Returns
+
+- __nv_sinpi( ) returns .
+- __nv_sinpi( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sinpi(x: f64) -> f64;
+
+    #[link_name = "__nv_sinpif"]
+    #[doc = "Calculate the sine of (measured in radians), where is the input argumentx. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sinpif.html#__nv_sinpif)
+
+# Returns
+
+- __nv_sinpif( ) returns .
+- __nv_sinpif( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn sinpif(x: f32) -> f32;
+
+    #[link_name = "__nv_sqrt"]
+    #[doc = "Calculate the nonnegative square root of , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sqrt.html#__nv_sqrt)
+
+# Returns
+
+Returns .
+- __nv_sqrt( ) returns .
+- __nv_sqrt( ) returns .
+- __nv_sqrt(x) returns NaN if x is less than 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sqrt(x: f64) -> f64;
+
+    #[link_name = "__nv_sqrtf"]
+    #[doc = "Calculate the nonnegative square root of , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_sqrtf.html#__nv_sqrtf)
+
+# Returns
+
+Returns .
+- __nv_sqrtf( ) returns .
+- __nv_sqrtf( ) returns .
+- __nv_sqrtf(x) returns NaN if x is less than 0.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn sqrtf(x: f32) -> f32;
+
+    #[link_name = "__nv_tan"]
+    #[doc = "Calculate the tangent of the input argument (measured in radians)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_tan.html#__nv_tan)
+
+# Returns
+
+- __nv_tan( ) returns .
+- __nv_tan( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn tan(x: f64) -> f64;
+
+    #[link_name = "__nv_tanf"]
+    #[doc = "Calculate the tangent of the input argument (measured in radians)x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_tanf.html#__nv_tanf)
+
+# Returns
+
+- __nv_tanf( ) returns .
+- __nv_tanf( ) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn tanf(x: f32) -> f32;
+
+    #[link_name = "__nv_tanh"]
+    #[doc = "Calculate the hyperbolic tangent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_tanh.html#__nv_tanh)
+
+# Returns
+
+- __nv_tanh( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn tanh(x: f64) -> f64;
+
+    #[link_name = "__nv_tanhf"]
+    #[doc = "Calculate the hyperbolic tangent of the input argument x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_tanhf.html#__nv_tanhf)
+
+# Returns
+
+- __nv_tanhf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn tanhf(x: f32) -> f32;
+
+    #[link_name = "__nv_tgamma"]
+    #[doc = "Calculate the gamma function of the input argument , namely the value of x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_tgamma.html#__nv_tgamma)
+
+# Returns
+
+- __nv_tgamma( ) returns .
+- __nv_tgamma(2) returns +0.
+- __nv_tgamma(x) returns if the correctly calculated value is outside the double
+floating point range.
+- __nv_tgamma(x) returns NaN if x < 0.
+- __nv_tgamma( ) returns NaN.
+- __nv_tgamma( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn tgamma(x: f64) -> f64;
+
+    #[link_name = "__nv_tgammaf"]
+    #[doc = "Calculate the gamma function of the input argument , namely the value of x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_tgammaf.html#__nv_tgammaf)
+
+# Returns
+
+- __nv_tgammaf( ) returns .
+- __nv_tgammaf(2) returns +0.
+- __nv_tgammaf(x) returns if the correctly calculated value is outside the double
+floating point range.
+- __nv_tgammaf(x) returns NaN if x < 0.
+- __nv_tgammaf( ) returns NaN.
+- __nv_tgammaf( ) returns .
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn tgammaf(x: f32) -> f32;
+
+    #[link_name = "__nv_trunc"]
+    #[doc = "Round to the nearest integer value that does not exceed in magnitudex. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_trunc.html#__nv_trunc)
+
+# Returns
+
+Returns truncated integer value."]
+    pub fn trunc(x: f64) -> f64;
+
+    #[link_name = "__nv_truncf"]
+    #[doc = "Round to the nearest integer value that does not exceed in magnitudex. x
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_truncf.html#__nv_truncf)
+
+# Returns
+
+Returns truncated integer value."]
+    pub fn truncf(x: f32) -> f32;
+
+    #[link_name = "__nv_uhadd"]
+    #[doc = "Compute average of unsigned input arguments and as ( + ) >> 1, avoidingx y x y
+overflow in the intermediate sum.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_uhadd.html#__nv_uhadd)
+
+# Returns
+
+Returns an unsigned integer value representing the unsigned average value of the two
+inputs."]
+    pub fn uhadd(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_uint2double_rn"]
+    #[doc = "Convert the unsigned integer value to a double-precision floating point valuex.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_uint2double_rn.html#__nv_uint2double_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn uint2double_rn(i: i32) -> f64;
+
+    #[link_name = "__nv_uint2float_rd"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_uint2float_rd.html#__nv_uint2float_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn uint2float_rd(in_: i32) -> f32;
+
+    #[link_name = "__nv_uint2float_rn"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_uint2float_rn.html#__nv_uint2float_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn uint2float_rn(in_: i32) -> f32;
+
+    #[link_name = "__nv_uint2float_ru"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_uint2float_ru.html#__nv_uint2float_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn uint2float_ru(in_: i32) -> f32;
+
+    #[link_name = "__nv_uint2float_rz"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_uint2float_rz.html#__nv_uint2float_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn uint2float_rz(in_: i32) -> f32;
+
+    #[link_name = "__nv_ull2double_rd"]
+    #[doc = "Convert the unsigned 64-bit integer value to a double-precision floating point value inx
+round-down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2double_rd.html#__nv_ull2double_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2double_rd(l: i64) -> f64;
+
+    #[link_name = "__nv_ull2double_rn"]
+    #[doc = "Convert the unsigned 64-bit integer value to a double-precision floating point value inx
+round-to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2double_rn.html#__nv_ull2double_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2double_rn(l: i64) -> f64;
+
+    #[link_name = "__nv_ull2double_ru"]
+    #[doc = "Convert the unsigned 64-bit integer value to a double-precision floating point value inx
+round-up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2double_ru.html#__nv_ull2double_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2double_ru(l: i64) -> f64;
+
+    #[link_name = "__nv_ull2double_rz"]
+    #[doc = "Convert the unsigned 64-bit integer value to a double-precision floating point value inx
+round-towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2double_rz.html#__nv_ull2double_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2double_rz(l: i64) -> f64;
+
+    #[link_name = "__nv_ull2float_rd"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+down (to negative infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2float_rd.html#__nv_ull2float_rd)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2float_rd(l: i64) -> f32;
+
+    #[link_name = "__nv_ull2float_rn"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+to-nearest-even mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2float_rn.html#__nv_ull2float_rn)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2float_rn(l: i64) -> f32;
+
+    #[link_name = "__nv_ull2float_ru"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+up (to positive infinity) mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2float_ru.html#__nv_ull2float_ru)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2float_ru(l: i64) -> f32;
+
+    #[link_name = "__nv_ull2float_rz"]
+    #[doc = "Convert the unsigned integer value to a single-precision floating point value in round-x
+towards-zero mode.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ull2float_rz.html#__nv_ull2float_rz)
+
+# Returns
+
+Returns converted value."]
+    pub fn ull2float_rz(l: i64) -> f32;
+
+    #[link_name = "__nv_ullmax"]
+    #[doc = "Determine the maximum value of the two 64-bit unsigned integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ullmax.html#__nv_ullmax)
+
+# Returns
+
+Returns the maximum value of the two 64-bit unsigned integers and x. y"]
+    pub fn ullmax(x: i64, y: i64) -> i64;
+
+    #[link_name = "__nv_ullmin"]
+    #[doc = "Determine the minimum value of the two 64-bit unsigned integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ullmin.html#__nv_ullmin)
+
+# Returns
+
+Returns the minimum value of the two 64-bit unsigned integers and x. y"]
+    pub fn ullmin(x: i64, y: i64) -> i64;
+
+    #[link_name = "__nv_umax"]
+    #[doc = "Determine the maximum value of the two 32-bit unsigned integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_umax.html#__nv_umax)
+
+# Returns
+
+Returns the maximum value of the two 32-bit unsigned integers and x. y"]
+    pub fn umax(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_umin"]
+    #[doc = "Determine the minimum value of the two 32-bit unsigned integers and x. y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_umin.html#__nv_umin)
+
+# Returns
+
+Returns the minimum value of the two 32-bit unsigned integers and x. y"]
+    pub fn umin(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_umul24"]
+    #[doc = "Calculate the least significant 32 bits of the product of the least significant 24 bits of x
+and . The high order 8 bits of and are ignored.y x y
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_umul24.html#__nv_umul24)
+
+# Returns
+
+Returns the least significant 32 bits of the product * x. y"]
+    pub fn umul24(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_umul64hi"]
+    #[doc = "Calculate the most significant 64 bits of the 128-bit product * , where and are 64-x y x y
+bit unsigned integers.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_umul64hi.html#__nv_umul64hi)
+
+# Returns
+
+Returns the most significant 64 bits of the product * x. y"]
+    pub fn umul64hi(x: i64, y: i64) -> i64;
+
+    #[link_name = "__nv_umulhi"]
+    #[doc = "Calculate the most significant 32 bits of the 64-bit product * , where and are 32-bitx y x y
+unsigned integers.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_umulhi.html#__nv_umulhi)
+
+# Returns
+
+Returns the most significant 32 bits of the product * x. y"]
+    pub fn umulhi(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_urhadd"]
+    #[doc = "Compute average of unsigned input arguments and as ( + + 1 ) >> 1, avoidingx y x y
+overflow in the intermediate sum.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_urhadd.html#__nv_urhadd)
+
+# Returns
+
+Returns an unsigned integer value representing the unsigned rounded average value of
+the two inputs."]
+    pub fn urhadd(x: i32, y: i32) -> i32;
+
+    #[link_name = "__nv_usad"]
+    #[doc = "Calculate , the 32-bit sum of the third argument plus and the absolute value
+z
+of the difference between the first argument, , and second argument, x. y
+Inputs , , and are unsigned 32-bit integersx. y z
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_usad.html#__nv_usad)
+
+# Returns
+
+Returns ."]
+    pub fn usad(x: i32, y: i32, z: i32) -> i32;
+
+    #[link_name = "__nv_y0"]
+    #[doc = "Calculate the value of the Bessel function of the second kind of order 0 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_y0.html#__nv_y0)
+
+# Returns
+
+Returns the value of the Bessel function of the second kind of order 0.
+- __nv_y0(0) returns .
+- __nv_y0(x) returns NaN for x < 0.
+- __nv_y0( ) returns +0.
+- __nv_y0(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn y0(x: f64) -> f64;
+
+    #[link_name = "__nv_y0f"]
+    #[doc = "Calculate the value of the Bessel function of the second kind of order 0 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_y0f.html#__nv_y0f)
+
+# Returns
+
+Returns the value of the Bessel function of the second kind of order 0.
+- __nv_y0f(0) returns .
+- __nv_y0f(x) returns NaN for x < 0.
+- __nv_y0f( ) returns +0.
+- __nv_y0f(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn y0f(x: f32) -> f32;
+
+    #[link_name = "__nv_y1"]
+    #[doc = "Calculate the value of the Bessel function of the second kind of order 1 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_y1.html#__nv_y1)
+
+# Returns
+
+Returns the value of the Bessel function of the second kind of order 1.
+- __nv_y1(0) returns .
+- __nv_y1(x) returns NaN for x < 0.
+- __nv_y1( ) returns +0.
+- __nv_y1(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn y1(x: f64) -> f64;
+
+    #[link_name = "__nv_y1f"]
+    #[doc = "Calculate the value of the Bessel function of the second kind of order 1 for the input
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_y1f.html#__nv_y1f)
+
+# Returns
+
+Returns the value of the Bessel function of the second kind of order 1.
+- __nv_y1f(0) returns .
+- __nv_y1f(x) returns NaN for x < 0.
+- __nv_y1f( ) returns +0.
+- __nv_y1f(NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn y1f(x: f32) -> f32;
+
+    #[link_name = "__nv_yn"]
+    #[doc = "Calculate the value of the Bessel function of the second kind of order for the input
+n
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_yn.html#__nv_yn)
+
+# Returns
+
+Returns the value of the Bessel function of the second kind of order .
+n
+- __nv_yn(n, x) returns NaN for n < 0.
+- __nv_yn(n, 0) returns .
+- __nv_yn(n, x) returns NaN for x < 0.
+- __nv_yn(n, ) returns +0.
+- __nv_yn(n, NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 7."]
+    pub fn yn(n: i32, x: f64) -> f64;
+
+    #[link_name = "__nv_ynf"]
+    #[doc = "Calculate the value of the Bessel function of the second kind of order for the input
+n
+argument , x.
+
+[Nvidia docs](https://docs.nvidia.com/cuda/libdevice-users-guide/__nv_ynf.html#__nv_ynf)
+
+# Returns
+
+Returns the value of the Bessel function of the second kind of order .
+n
+- __nv_ynf(n, x) returns NaN for n < 0.
+- __nv_ynf(n, 0) returns .
+- __nv_ynf(n, x) returns NaN for x < 0.
+- __nv_ynf(n, ) returns +0.
+- __nv_ynf(n, NaN) returns NaN.
+For accuracy information for this function see the CUDA C Programming Guide,
+Appendix D.1, Table 6."]
+    pub fn ynf(n: i32, x: f32) -> f32;
+
 }
