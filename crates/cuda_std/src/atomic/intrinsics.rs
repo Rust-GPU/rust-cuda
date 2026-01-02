@@ -179,8 +179,11 @@ macro_rules! ptx_type_for_logic_op {
     (i64) => {
         "b64"
     };
-    ($ty:ident) => {
-        stringify!($ty)
+    (f32) => {
+        "b32"
+    };
+    (f64) => {
+        "b64"
     };
 }
 
