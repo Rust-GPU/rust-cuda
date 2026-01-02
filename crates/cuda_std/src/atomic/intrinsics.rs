@@ -166,6 +166,25 @@ macro_rules! ptx_type {
 }
 
 #[allow(unused_macros)]
+macro_rules! ptx_type_for_logic_op {
+    (u32) => {
+        "b32"
+    };
+    (u64) => {
+        "b64"
+    };
+    (i32) => {
+        "b32"
+    };
+    (i64) => {
+        "b64"
+    };
+    ($ty:ident) => {
+        stringify!($ty)
+    };
+}
+
+#[allow(unused_macros)]
 macro_rules! ordering {
     (volatile) => {
         ""
@@ -363,7 +382,7 @@ atomic_fetch_op_2_reg! {
     volatile, dec, 64, i64, system, sys,
 }
 
-macro_rules! atomic_fetch_op_3_reg {
+macro_rules! atomic_fetch_logic_op_3_reg {
     ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
         $(
             paste! {
@@ -384,7 +403,7 @@ macro_rules! atomic_fetch_op_3_reg {
                             ".",
                             stringify!($op),
                             ".",
-                            ptx_type!($type),
+                            ptx_type_for_logic_op!($type),
                             " {}, [{}], {};"
                         ),
                         out([<reg $width>]) out,
@@ -398,7 +417,7 @@ macro_rules! atomic_fetch_op_3_reg {
     };
 }
 
-atomic_fetch_op_3_reg! {
+atomic_fetch_logic_op_3_reg! {
     // and
 
     relaxed, and, 32, u32, device, gpu,
@@ -729,6 +748,153 @@ atomic_fetch_op_3_reg! {
     acqrel,  xor, 64, f64, system, sys,
     volatile, xor, 64, f64, system, sys,
 
+    // exchange
+
+    relaxed, exch, 32, u32, device, gpu,
+    acquire, exch, 32, u32, device, gpu,
+    release, exch, 32, u32, device, gpu,
+    acqrel,  exch, 32, u32, device, gpu,
+    volatile, exch, 32, u32, device, gpu,
+
+    relaxed, exch, 64, u64, device, gpu,
+    acquire, exch, 64, u64, device, gpu,
+    release, exch, 64, u64, device, gpu,
+    acqrel,  exch, 64, u64, device, gpu,
+    volatile, exch, 64, u64, device, gpu,
+
+    relaxed, exch, 32, u32, block, cta,
+    acquire, exch, 32, u32, block, cta,
+    release, exch, 32, u32, block, cta,
+    acqrel,  exch, 32, u32, block, cta,
+    volatile, exch, 32, u32, block, cta,
+
+    relaxed, exch, 64, u64, block, cta,
+    acquire, exch, 64, u64, block, cta,
+    release, exch, 64, u64, block, cta,
+    acqrel,  exch, 64, u64, block, cta,
+    volatile, exch, 64, u64, block, cta,
+
+    relaxed, exch, 32, u32, system, sys,
+    acquire, exch, 32, u32, system, sys,
+    release, exch, 32, u32, system, sys,
+    acqrel,  exch, 32, u32, system, sys,
+    volatile, exch, 32, u32, system, sys,
+
+    relaxed, exch, 64, u64, system, sys,
+    acquire, exch, 64, u64, system, sys,
+    release, exch, 64, u64, system, sys,
+    acqrel,  exch, 64, u64, system, sys,
+    volatile, exch, 64, u64, system, sys,
+
+    relaxed, exch, 32, i32, device, gpu,
+    acquire, exch, 32, i32, device, gpu,
+    release, exch, 32, i32, device, gpu,
+    acqrel,  exch, 32, i32, device, gpu,
+    volatile, exch, 32, i32, device, gpu,
+
+    relaxed, exch, 64, i64, device, gpu,
+    acquire, exch, 64, i64, device, gpu,
+    release, exch, 64, i64, device, gpu,
+    acqrel,  exch, 64, i64, device, gpu,
+    volatile, exch, 64, i64, device, gpu,
+
+    relaxed, exch, 32, i32, block, cta,
+    acquire, exch, 32, i32, block, cta,
+    release, exch, 32, i32, block, cta,
+    acqrel,  exch, 32, i32, block, cta,
+    volatile, exch, 32, i32, block, cta,
+
+    relaxed, exch, 64, i64, block, cta,
+    acquire, exch, 64, i64, block, cta,
+    release, exch, 64, i64, block, cta,
+    acqrel,  exch, 64, i64, block, cta,
+    volatile, exch, 64, i64, block, cta,
+
+    relaxed, exch, 32, i32, system, sys,
+    acquire, exch, 32, i32, system, sys,
+    release, exch, 32, i32, system, sys,
+    acqrel,  exch, 32, i32, system, sys,
+    volatile, exch, 32, i32, system, sys,
+
+    relaxed, exch, 64, i64, system, sys,
+    acquire, exch, 64, i64, system, sys,
+    release, exch, 64, i64, system, sys,
+    acqrel,  exch, 64, i64, system, sys,
+    volatile, exch, 64, i64, system, sys,
+
+    relaxed, exch, 32, f32, device, gpu,
+    acquire, exch, 32, f32, device, gpu,
+    release, exch, 32, f32, device, gpu,
+    acqrel,  exch, 32, f32, device, gpu,
+    volatile, exch, 32, f32, device, gpu,
+
+    relaxed, exch, 64, f64, device, gpu,
+    acquire, exch, 64, f64, device, gpu,
+    release, exch, 64, f64, device, gpu,
+    acqrel,  exch, 64, f64, device, gpu,
+    volatile, exch, 64, f64, device, gpu,
+
+    relaxed, exch, 32, f32, block, cta,
+    acquire, exch, 32, f32, block, cta,
+    release, exch, 32, f32, block, cta,
+    acqrel,  exch, 32, f32, block, cta,
+    volatile, exch, 32, f32, block, cta,
+
+    relaxed, exch, 64, f64, block, cta,
+    acquire, exch, 64, f64, block, cta,
+    release, exch, 64, f64, block, cta,
+    acqrel,  exch, 64, f64, block, cta,
+    volatile, exch, 64, f64, block, cta,
+
+    relaxed, exch, 32, f32, system, sys,
+    acquire, exch, 32, f32, system, sys,
+    release, exch, 32, f32, system, sys,
+    acqrel,  exch, 32, f32, system, sys,
+    volatile, exch, 32, f32, system, sys,
+
+    relaxed, exch, 64, f64, system, sys,
+    acquire, exch, 64, f64, system, sys,
+    release, exch, 64, f64, system, sys,
+    acqrel,  exch, 64, f64, system, sys,
+    volatile, exch, 64, f64, system, sys,
+}
+
+macro_rules! atomic_fetch_op_3_reg {
+    ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
+        $(
+            paste! {
+                #[$crate::gpu_only]
+                #[allow(clippy::missing_safety_doc)]
+                #[doc = concat!(
+                    "Fetches the value in ptr, performs a ",
+                    stringify!($op),
+                    ", and returns the original value"
+                )]
+                pub unsafe fn [<atomic_fetch_ $op _ $ordering _ $type _ $scope>](ptr: *mut $type, val: $type) -> $type {
+                    let mut out;
+                    asm!(
+                        concat!(
+                            "atom.",
+                            ordering!($ordering),
+                            stringify!($scope_asm),
+                            ".",
+                            stringify!($op),
+                            ".",
+                            ptx_type!($type),
+                            " {}, [{}], {};"
+                        ),
+                        out([<reg $width>]) out,
+                        in(reg64) ptr,
+                        in([<reg $width>]) val,
+                    );
+                    out
+                }
+            }
+        )*
+    };
+}
+
+atomic_fetch_op_3_reg! {
     // add (unsigned)
 
     relaxed, add, 32, u32, device, gpu,
@@ -994,116 +1160,6 @@ atomic_fetch_op_3_reg! {
     release, max, 64, i64, system, sys,
     acqrel,  max, 64, i64, system, sys,
     volatile, max, 64, i64, system, sys,
-
-    // exchange
-
-    relaxed, exch, 32, u32, device, gpu,
-    acquire, exch, 32, u32, device, gpu,
-    release, exch, 32, u32, device, gpu,
-    acqrel,  exch, 32, u32, device, gpu,
-    volatile, exch, 32, u32, device, gpu,
-
-    relaxed, exch, 64, u64, device, gpu,
-    acquire, exch, 64, u64, device, gpu,
-    release, exch, 64, u64, device, gpu,
-    acqrel,  exch, 64, u64, device, gpu,
-    volatile, exch, 64, u64, device, gpu,
-
-    relaxed, exch, 32, u32, block, cta,
-    acquire, exch, 32, u32, block, cta,
-    release, exch, 32, u32, block, cta,
-    acqrel,  exch, 32, u32, block, cta,
-    volatile, exch, 32, u32, block, cta,
-
-    relaxed, exch, 64, u64, block, cta,
-    acquire, exch, 64, u64, block, cta,
-    release, exch, 64, u64, block, cta,
-    acqrel,  exch, 64, u64, block, cta,
-    volatile, exch, 64, u64, block, cta,
-
-    relaxed, exch, 32, u32, system, sys,
-    acquire, exch, 32, u32, system, sys,
-    release, exch, 32, u32, system, sys,
-    acqrel,  exch, 32, u32, system, sys,
-    volatile, exch, 32, u32, system, sys,
-
-    relaxed, exch, 64, u64, system, sys,
-    acquire, exch, 64, u64, system, sys,
-    release, exch, 64, u64, system, sys,
-    acqrel,  exch, 64, u64, system, sys,
-    volatile, exch, 64, u64, system, sys,
-
-    relaxed, exch, 32, i32, device, gpu,
-    acquire, exch, 32, i32, device, gpu,
-    release, exch, 32, i32, device, gpu,
-    acqrel,  exch, 32, i32, device, gpu,
-    volatile, exch, 32, i32, device, gpu,
-
-    relaxed, exch, 64, i64, device, gpu,
-    acquire, exch, 64, i64, device, gpu,
-    release, exch, 64, i64, device, gpu,
-    acqrel,  exch, 64, i64, device, gpu,
-    volatile, exch, 64, i64, device, gpu,
-
-    relaxed, exch, 32, i32, block, cta,
-    acquire, exch, 32, i32, block, cta,
-    release, exch, 32, i32, block, cta,
-    acqrel,  exch, 32, i32, block, cta,
-    volatile, exch, 32, i32, block, cta,
-
-    relaxed, exch, 64, i64, block, cta,
-    acquire, exch, 64, i64, block, cta,
-    release, exch, 64, i64, block, cta,
-    acqrel,  exch, 64, i64, block, cta,
-    volatile, exch, 64, i64, block, cta,
-
-    relaxed, exch, 32, i32, system, sys,
-    acquire, exch, 32, i32, system, sys,
-    release, exch, 32, i32, system, sys,
-    acqrel,  exch, 32, i32, system, sys,
-    volatile, exch, 32, i32, system, sys,
-
-    relaxed, exch, 64, i64, system, sys,
-    acquire, exch, 64, i64, system, sys,
-    release, exch, 64, i64, system, sys,
-    acqrel,  exch, 64, i64, system, sys,
-    volatile, exch, 64, i64, system, sys,
-
-    relaxed, exch, 32, f32, device, gpu,
-    acquire, exch, 32, f32, device, gpu,
-    release, exch, 32, f32, device, gpu,
-    acqrel,  exch, 32, f32, device, gpu,
-    volatile, exch, 32, f32, device, gpu,
-
-    relaxed, exch, 64, f64, device, gpu,
-    acquire, exch, 64, f64, device, gpu,
-    release, exch, 64, f64, device, gpu,
-    acqrel,  exch, 64, f64, device, gpu,
-    volatile, exch, 64, f64, device, gpu,
-
-    relaxed, exch, 32, f32, block, cta,
-    acquire, exch, 32, f32, block, cta,
-    release, exch, 32, f32, block, cta,
-    acqrel,  exch, 32, f32, block, cta,
-    volatile, exch, 32, f32, block, cta,
-
-    relaxed, exch, 64, f64, block, cta,
-    acquire, exch, 64, f64, block, cta,
-    release, exch, 64, f64, block, cta,
-    acqrel,  exch, 64, f64, block, cta,
-    volatile, exch, 64, f64, block, cta,
-
-    relaxed, exch, 32, f32, system, sys,
-    acquire, exch, 32, f32, system, sys,
-    release, exch, 32, f32, system, sys,
-    acqrel,  exch, 32, f32, system, sys,
-    volatile, exch, 32, f32, system, sys,
-
-    relaxed, exch, 64, f64, system, sys,
-    acquire, exch, 64, f64, system, sys,
-    release, exch, 64, f64, system, sys,
-    acqrel,  exch, 64, f64, system, sys,
-    volatile, exch, 64, f64, system, sys,
 }
 
 macro_rules! atomic_fetch_op_4_reg {
