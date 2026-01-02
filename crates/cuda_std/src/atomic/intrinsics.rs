@@ -1165,7 +1165,7 @@ atomic_fetch_op_3_reg! {
     volatile, max, 64, i64, system, sys,
 }
 
-macro_rules! atomic_fetch_op_4_reg {
+macro_rules! atomic_fetch_logic_op_4_reg {
     ($($ordering:ident, $op:ident, $width:literal, $type:ty, $scope:ident, $scope_asm:ident),* $(,)*) => {
         $(
             paste! {
@@ -1186,7 +1186,7 @@ macro_rules! atomic_fetch_op_4_reg {
                             ".",
                             stringify!($op),
                             ".",
-                            ptx_type!($type),
+                            ptx_type_for_logic_op!($type),
                             " {}, [{}], {}, {};"
                         ),
                         out([<reg $width>]) out,
@@ -1201,7 +1201,7 @@ macro_rules! atomic_fetch_op_4_reg {
     };
 }
 
-atomic_fetch_op_4_reg! {
+atomic_fetch_logic_op_4_reg! {
     // compare and swap
 
     relaxed, cas, 32, u32, device, gpu,
