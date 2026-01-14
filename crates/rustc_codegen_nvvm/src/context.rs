@@ -654,6 +654,7 @@ pub struct CodegenArgs {
     pub use_constant_memory_space: bool,
     pub final_module_path: Option<PathBuf>,
     pub disassemble: Option<DisassembleMode>,
+    pub unroll_threshold: Option<u32>,
 }
 
 impl CodegenArgs {
@@ -712,6 +713,11 @@ impl CodegenArgs {
                 skip_next = true;
             } else if let Some(entry) = arg.strip_prefix("--disassemble-entry=") {
                 cg_args.disassemble = Some(DisassembleMode::Entry(entry.to_string()));
+            } else if let Some(threshold) = arg.strip_prefix("-unroll-threshold=") {
+                cg_args.unroll_threshold = Some(threshold.parse().unwrap_or_else(|_| {
+                    sess.dcx()
+                        .fatal("-unroll-threshold requires a valid integer value")
+                }));
             } else {
                 // Do this only after all the other flags above have been tried.
                 match NvvmOption::from_str(arg) {
