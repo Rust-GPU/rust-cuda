@@ -9,7 +9,7 @@ links = "optix"
 build = "build/main.rs"
 
 [dependencies]
-cust_raw = { path = "../cust_raw", default-features = false, features = ["driver"] }
+cust_raw = { version = "0.11.3", path = "../cust_raw", default-features = false, features = ["driver"] }
 
 [build-dependencies]
 bindgen = "0.71.1"

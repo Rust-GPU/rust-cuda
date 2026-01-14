@@ -8,7 +8,7 @@ repository = "https://github.com/Rust-GPU/rust-cuda"
 [dependencies]
 bitflags = "2.8"
 cust = { version = "0.3", path = "../cust", features = ["impl_num_complex"] }
-cust_raw = { path = "../cust_raw", features = ["cublas"] }
+cust_raw = { version = "0.11.3", path = "../cust_raw", features = ["cublas"] }
 num-complex = "0.4.6"
 half = { version = "2.4.1", optional = true }
 
