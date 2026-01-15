@@ -6,10 +6,10 @@ use gpu_rand::{DefaultRand, GpuRand};
 #[kernel]
 pub unsafe fn render(fb: *mut Vec3, view: Viewport, scene: &Scene, rand_states: *mut DefaultRand) {
     let idx = thread::index_2d();
-    if idx.x >= view.bounds.x as u32 || idx.y >= view.bounds.y as u32 {
+    if idx.x >= view.bounds.x || idx.y >= view.bounds.y {
         return;
     }
-    let px_idx = idx.y as usize * view.bounds.x + idx.x as usize;
+    let px_idx = idx.y * view.bounds.x + idx.x;
 
     // generate a tiny offset for the ray for antialiasing
     let rng = unsafe { &mut *rand_states.add(px_idx) };
@@ -27,10 +27,10 @@ pub unsafe fn render(fb: *mut Vec3, view: Viewport, scene: &Scene, rand_states: 
 #[kernel]
 pub unsafe fn scale_buffer(fb: *const Vec3, out: *mut Vec3, samples: u32, view: Viewport) {
     let idx_2d = thread::index_2d();
-    if idx_2d.x >= view.bounds.x as u32 || idx_2d.y >= view.bounds.y as u32 {
+    if idx_2d.x >= view.bounds.x || idx_2d.y >= view.bounds.y {
         return;
     }
-    let idx = idx_2d.y as usize * view.bounds.x + idx_2d.x as usize;
+    let idx = idx_2d.y * view.bounds.x + idx_2d.x;
     let original = unsafe { &*fb.add(idx) };
     let out = unsafe { &mut *out.add(idx) };
 
@@ -43,10 +43,10 @@ pub unsafe fn scale_buffer(fb: *const Vec3, out: *mut Vec3, samples: u32, view: 
 #[kernel]
 pub unsafe fn postprocess(fb: *const Vec3, out: *mut U8Vec3, view: Viewport) {
     let idx_2d = thread::index_2d();
-    if idx_2d.x >= view.bounds.x as u32 || idx_2d.y >= view.bounds.y as u32 {
+    if idx_2d.x >= view.bounds.x || idx_2d.y >= view.bounds.y {
         return;
     }
-    let idx = idx_2d.y as usize * view.bounds.x + idx_2d.x as usize;
+    let idx = idx_2d.y * view.bounds.x + idx_2d.x;
     let original = unsafe { &*fb.add(idx) };
     let out = unsafe { &mut *out.add(idx) };
     // gamma=2.0

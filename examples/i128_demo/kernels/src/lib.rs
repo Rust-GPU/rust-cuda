@@ -18,7 +18,7 @@ pub unsafe fn i128_ops(
     urem_out: *mut u128,
     srem_out: *mut u128,
 ) {
-    let idx = thread::index_1d() as usize;
+    let idx = thread::index_1d();
     if idx >= a.len() || idx >= b.len() {
         return;
     }
