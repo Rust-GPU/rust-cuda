@@ -14,7 +14,7 @@ readme = "../../README.md"
 
 [dependencies]
 cust_core = { path = "../cust_core", version = "0.1.0"}
-cust_raw = { path = "../cust_raw", default-features = false, features = ["driver"] }
+cust_raw = { version = "0.11.3", path = "../cust_raw", default-features = false, features = ["driver"] }
 bitflags = "2.8"
 cust_derive = { path = "../cust_derive", version = "0.2" }
 glam = { version = "0.30", features=["cuda"], optional = true }

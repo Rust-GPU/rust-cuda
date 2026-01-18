@@ -8,4 +8,4 @@ repository = "https://github.com/Rust-GPU/rust-cuda"
 readme = "../../README.md"
 
 [dependencies]
-cust_raw = { path = "../cust_raw", default-features = false, features = ["nvptx-compiler"] }
+cust_raw = { version = "0.11.3", path = "../cust_raw", default-features = false, features = ["nvptx-compiler"] }
