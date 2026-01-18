@@ -1,5 +1,5 @@
 use crate::llvm::{self, Bool, False, True, Type, Value};
-use crate::{consts::const_alloc_to_llvm, context::CodegenCx, ty::LayoutLlvmExt};
+use crate::{consts::const_alloc_to_llvm, context::CodegenCx};
 use libc::c_uint;
 use rustc_abi as abi;
 use rustc_abi::Primitive::Pointer;
@@ -11,7 +11,6 @@ use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_hashes::Hash128;
 use rustc_middle::bug;
 use rustc_middle::mir::interpret::{ConstAllocation, GlobalAlloc, Scalar};
-use rustc_middle::ty::layout::LayoutOf;
 use tracing::trace;
 
 impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
@@ -99,7 +98,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                 g
             });
         let len = s.len();
-        let ty = self.type_ptr_to(self.layout_of(self.tcx.types.str_).llvm_type(self));
+        let ty = self.type_i8p();
         let cs = unsafe { llvm::LLVMConstPointerCast(val, ty) };
         (cs, self.const_usize(len as u64))
     }
