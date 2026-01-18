@@ -194,6 +194,10 @@ pub struct CudaBuilder {
     /// An optional path where to dump LLVM IR of the final output the codegen will feed to libnvvm. Usually
     /// used for debugging.
     pub final_module_path: Option<PathBuf>,
+    /// The threshold for LLVM's loop unrolling optimization pass. Higher values allow more
+    /// aggressive unrolling, which can improve performance but increases code size.
+    /// When `None`, LLVM uses its default threshold.
+    pub unroll_threshold: Option<u32>,
 }
 
 impl CudaBuilder {
@@ -216,6 +220,7 @@ impl CudaBuilder {
             debug: DebugInfo::None,
             build_args: vec![],
             final_module_path: None,
+            unroll_threshold: None,
         }
     }
 
@@ -348,6 +353,13 @@ impl CudaBuilder {
     /// used for debugging.
     pub fn final_module_path(mut self, path: impl AsRef<Path>) -> Self {
         self.final_module_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Sets the threshold for LLVM's loop unrolling optimization pass. Higher values allow more
+    /// aggressive unrolling, which can improve performance but increases code size.
+    pub fn unroll_threshold(mut self, threshold: u32) -> Self {
+        self.unroll_threshold = Some(threshold);
         self
     }
 
@@ -746,6 +758,10 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
     if let Some(path) = &builder.final_module_path {
         llvm_args.push("--final-module-path".to_string());
         llvm_args.push(path.to_str().unwrap().to_string());
+    }
+
+    if let Some(threshold) = builder.unroll_threshold {
+        llvm_args.push(format!("-unroll-threshold={threshold}"));
     }
 
     if builder.debug != DebugInfo::None {
