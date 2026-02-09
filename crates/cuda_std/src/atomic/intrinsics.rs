@@ -52,11 +52,11 @@ pub unsafe fn fence_acqrel_system() {
 
 #[allow(unused_macros)]
 macro_rules! load_scope {
-    (volatile, $scope:ident) => {
+    (volatile, $scope_asm:ident) => {
         ""
     };
-    ($ordering:ident, $scope:ident) => {
-        concat!(".", stringify!($scope))
+    ($ordering:ident, $scope_asm:ident) => {
+        concat!(".", stringify!($scope_asm))
     };
 }
 
@@ -70,7 +70,7 @@ macro_rules! load {
                 pub unsafe fn [<atomic_load_ $ordering _ $width _ $scope>](ptr: *const [<u $width>]) -> [<u $width>] {
                     let mut out;
                     asm!(
-                        concat!("ld.", stringify!($ordering), load_scope!($ordering, $scope), ".", stringify!([<u $width>]), " {}, [{}];"),
+                        concat!("ld.", stringify!($ordering), load_scope!($ordering, $scope_asm), ".", stringify!([<u $width>]), " {}, [{}];"),
                         out([<reg $width>]) out,
                         in(reg64) ptr
                     );
@@ -116,7 +116,7 @@ macro_rules! store {
                 #[doc = concat!("Performs a ", stringify!($ordering), " atomic store at the ", stringify!($scope), " level with a width of ", stringify!($width), " bits")]
                 pub unsafe fn [<atomic_store_ $ordering _ $width _ $scope>](ptr: *mut [<u $width>], val: [<u $width>]) {
                     asm!(
-                        concat!("st.", stringify!($ordering), load_scope!($ordering, $scope), ".", stringify!([<u $width>]), " [{}], {};"),
+                        concat!("st.", stringify!($ordering), load_scope!($ordering, $scope_asm), ".", stringify!([<u $width>]), " [{}], {};"),
                         in(reg64) ptr,
                         in([<reg $width>]) val,
                     );
