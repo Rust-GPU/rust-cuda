@@ -735,10 +735,10 @@ impl WarpShuffleValue for bf16 {
 #[repr(u32)]
 #[derive(Clone, Copy)]
 pub enum WarpShuffleMode {
-    Up,
-    Down,
-    Idx,
-    Xor,
+    Idx = 0,
+    Up = 1,
+    Down = 2,
+    Xor = 3,
 }
 
 // C-compatible struct to match LLVM IR's {i32, i8} return type
