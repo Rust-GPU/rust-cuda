@@ -66,7 +66,7 @@
 //! vary by device. Query device properties when you need exact limits.
 //!
 use cuda_std_macros::gpu_only;
-use glam::{UVec2, UVec3};
+use glam::{USizeVec2, USizeVec3};
 
 // different calling conventions dont exist in nvptx, so we just use C as a placeholder.
 unsafe extern "C" {
@@ -99,116 +99,116 @@ macro_rules! in_range {
 
 #[gpu_only]
 #[inline(always)]
-pub fn thread_idx_x() -> u32 {
-    // The range is derived from the `block_idx_x` range.
-    in_range!(core::arch::nvptx::_thread_idx_x, 0..1024)
+pub fn thread_idx_x() -> usize {
+    // The range is derived from the `block_dim_x` range.
+    in_range!(core::arch::nvptx::_thread_idx_x, 0..1024) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn thread_idx_y() -> u32 {
-    // The range is derived from the `block_idx_y` range.
-    in_range!(core::arch::nvptx::_thread_idx_y, 0..1024)
+pub fn thread_idx_y() -> usize {
+    // The range is derived from the `block_dim_y` range.
+    in_range!(core::arch::nvptx::_thread_idx_y, 0..1024) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn thread_idx_z() -> u32 {
-    // The range is derived from the `block_idx_z` range.
-    in_range!(core::arch::nvptx::_thread_idx_z, 0..64)
+pub fn thread_idx_z() -> usize {
+    // The range is derived from the `block_dim_z` range.
+    in_range!(core::arch::nvptx::_thread_idx_z, 0..64) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn block_idx_x() -> u32 {
-    // The range is derived from the `grid_idx_x` range.
-    in_range!(core::arch::nvptx::_block_idx_x, 0..2147483647)
+pub fn block_idx_x() -> usize {
+    // The range is derived from the `grid_dim_x` range.
+    in_range!(core::arch::nvptx::_block_idx_x, 0..2147483647) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn block_idx_y() -> u32 {
-    // The range is derived from the `grid_idx_y` range.
-    in_range!(core::arch::nvptx::_block_idx_y, 0..65535)
+pub fn block_idx_y() -> usize {
+    // The range is derived from the `grid_dim_y` range.
+    in_range!(core::arch::nvptx::_block_idx_y, 0..65535) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn block_idx_z() -> u32 {
-    // The range is derived from the `grid_idx_z` range.
-    in_range!(core::arch::nvptx::_block_idx_z, 0..65535)
+pub fn block_idx_z() -> usize {
+    // The range is derived from the `grid_dim_z` range.
+    in_range!(core::arch::nvptx::_block_idx_z, 0..65535) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn block_dim_x() -> u32 {
+pub fn block_dim_x() -> usize {
     // CUDA Compute Capabilities: "Maximum x- or y-dimensionality of a block" is 1024.
-    in_range!(core::arch::nvptx::_block_dim_x, 1..=1024)
+    in_range!(core::arch::nvptx::_block_dim_x, 1..=1024) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn block_dim_y() -> u32 {
+pub fn block_dim_y() -> usize {
     // CUDA Compute Capabilities: "Maximum x- or y-dimensionality of a block" is 1024.
-    in_range!(core::arch::nvptx::_block_dim_y, 1..=1024)
+    in_range!(core::arch::nvptx::_block_dim_y, 1..=1024) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn block_dim_z() -> u32 {
+pub fn block_dim_z() -> usize {
     // CUDA Compute Capabilities: "Maximum z-dimension of a block" is 64.
-    in_range!(core::arch::nvptx::_block_dim_z, 1..=64)
+    in_range!(core::arch::nvptx::_block_dim_z, 1..=64) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn grid_dim_x() -> u32 {
+pub fn grid_dim_x() -> usize {
     // CUDA Compute Capabilities: "Maximum x-dimension of a grid of thread blocks" is 2^32 - 1.
-    in_range!(core::arch::nvptx::_grid_dim_x, 1..=2147483647)
+    in_range!(core::arch::nvptx::_grid_dim_x, 1..=2147483647) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn grid_dim_y() -> u32 {
+pub fn grid_dim_y() -> usize {
     // CUDA Compute Capabilities: "Maximum y- or z-dimension of a grid of thread blocks" is 65535.
-    in_range!(core::arch::nvptx::_grid_dim_y, 1..=65535)
+    in_range!(core::arch::nvptx::_grid_dim_y, 1..=65535) as usize
 }
 
 #[gpu_only]
 #[inline(always)]
-pub fn grid_dim_z() -> u32 {
+pub fn grid_dim_z() -> usize {
     // CUDA Compute Capabilities: "Maximum y- or z-dimension of a grid of thread blocks" is 65535.
-    in_range!(core::arch::nvptx::_grid_dim_z, 1..=65535)
+    in_range!(core::arch::nvptx::_grid_dim_z, 1..=65535) as usize
 }
 
 /// Gets the 3d index of the thread currently executing the kernel.
 #[gpu_only]
 #[inline(always)]
-pub fn thread_idx() -> UVec3 {
-    UVec3::new(thread_idx_x(), thread_idx_y(), thread_idx_z())
+pub fn thread_idx() -> USizeVec3 {
+    USizeVec3::new(thread_idx_x(), thread_idx_y(), thread_idx_z())
 }
 
 /// Gets the 3d index of the block that the thread currently executing the kernel is located in.
 #[gpu_only]
 #[inline(always)]
-pub fn block_idx() -> UVec3 {
-    UVec3::new(block_idx_x(), block_idx_y(), block_idx_z())
+pub fn block_idx() -> USizeVec3 {
+    USizeVec3::new(block_idx_x(), block_idx_y(), block_idx_z())
 }
 
 /// Gets the 3d layout of the thread blocks executing this kernel. In other words,
 /// how many threads exist in each thread block in every direction.
 #[gpu_only]
 #[inline(always)]
-pub fn block_dim() -> UVec3 {
-    UVec3::new(block_dim_x(), block_dim_y(), block_dim_z())
+pub fn block_dim() -> USizeVec3 {
+    USizeVec3::new(block_dim_x(), block_dim_y(), block_dim_z())
 }
 
 /// Gets the 3d layout of the block grids executing this kernel. In other words,
 /// how many thread blocks exist in each grid in every direction.
 #[gpu_only]
 #[inline(always)]
-pub fn grid_dim() -> UVec3 {
-    UVec3::new(grid_dim_x(), grid_dim_y(), grid_dim_z())
+pub fn grid_dim() -> USizeVec3 {
+    USizeVec3::new(grid_dim_x(), grid_dim_y(), grid_dim_z())
 }
 
 /// Gets the overall thread index, accounting for 1d/2d/3d block/grid dimensions. This
@@ -220,7 +220,7 @@ pub fn grid_dim() -> UVec3 {
 #[gpu_only]
 #[rustfmt::skip]
 #[inline(always)]
-pub fn index() -> u32 {
+pub fn index() -> usize {
     let grid_dim = grid_dim();
     let block_idx = block_idx();
     let block_dim = block_dim();
@@ -235,23 +235,23 @@ pub fn index() -> u32 {
 }
 
 #[inline(always)]
-pub fn index_1d() -> u32 {
-    thread_idx_x() as u32 + block_idx_x() as u32 * block_dim_x() as u32
+pub fn index_1d() -> usize {
+    thread_idx_x() + block_idx_x() * block_dim_x()
 }
 
 #[inline(always)]
-pub fn index_2d() -> UVec2 {
+pub fn index_2d() -> USizeVec2 {
     let i = thread_idx_x() + block_idx_x() * block_dim_x();
     let j = thread_idx_y() + block_idx_y() * block_dim_y();
-    UVec2::new(i, j)
+    USizeVec2::new(i, j)
 }
 
 #[inline(always)]
-pub fn index_3d() -> UVec3 {
+pub fn index_3d() -> USizeVec3 {
     let i = thread_idx_x() + block_idx_x() * block_dim_x();
     let j = thread_idx_y() + block_idx_y() * block_dim_y();
     let k = thread_idx_z() + block_idx_z() * block_dim_z();
-    UVec3::new(i, j, k)
+    USizeVec3::new(i, j, k)
 }
 
 /// Whether this is the first thread (not the first thread to be executing). This function is guaranteed
@@ -259,7 +259,7 @@ pub fn index_3d() -> UVec3 {
 /// once.
 #[inline(always)]
 pub fn first() -> bool {
-    block_idx() == UVec3::ZERO && thread_idx() == UVec3::ZERO
+    block_idx() == USizeVec3::ZERO && thread_idx() == USizeVec3::ZERO
 }
 
 /// Gets the number of threads inside of a warp. Currently 32 threads on every GPU architecture.
