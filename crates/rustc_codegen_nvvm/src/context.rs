@@ -366,37 +366,27 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         }
 
         // Check if adding this static would exceed the cumulative limit
+        // Auto-spill to global memory with a warning instead of failing
         if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
             let def_id = instance.def_id();
             let span = self.tcx.def_span(def_id);
-            let mut diag = self.tcx.sess.dcx().struct_span_err(
+            let remaining = CONSTANT_MEMORY_SIZE_LIMIT_BYTES.saturating_sub(current_usage);
+            let mut diag = self.tcx.sess.dcx().struct_span_warn(
                 span,
                 format!(
-                    "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
-                    cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit",
+                    "constant memory overflow: static `{instance}` ({size_bytes} bytes) does not fit in remaining \
+                    constant memory ({remaining} bytes free of {} bytes total)",
                     CONSTANT_MEMORY_SIZE_LIMIT_BYTES
                 ),
             );
-            diag.span_label(
-                span,
-                format!(
-                    "this static would cause total usage to exceed {} bytes",
-                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
-                ),
-            );
+            diag.span_label(span, "automatically placed in global memory");
             diag.note(format!(
-                "current constant memory usage: {current_usage} bytes"
+                "current constant memory usage: {current_usage} / {} bytes",
+                CONSTANT_MEMORY_SIZE_LIMIT_BYTES
             ));
-            diag.note(format!("static size: {size_bytes} bytes"));
-            diag.note(format!("would result in: {new_usage} bytes total"));
-
-            diag.help("move this or other statics to global memory using `#[cuda_std::address_space(global)]` or `.place_static(\"path\", MemorySpace::Global)` in build.rs");
-            diag.help("reduce the total size of static data");
-            diag.help("disable automatic constant memory placement by setting `.use_constant_memory_space(false)` on `CudaBuilder` in build.rs");
-
+            diag.help("use `.place_static(\"path\", MemorySpace::Constant)` in build.rs to prioritize specific statics for constant memory");
             diag.emit();
-            self.tcx.sess.dcx().abort_if_errors();
-            unreachable!()
+            return AddressSpace(1);
         }
 
                 // If successfully placed in constant memory: update cumulative usage

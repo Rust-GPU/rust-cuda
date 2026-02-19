@@ -201,6 +201,14 @@ pub struct CudaBuilder {
     /// Exceeding the limit may cause `IllegalAddress` runtime
     /// errors (CUDA error code: `700`).
     ///
+    /// Statics are placed on a first-come-first-served basis in the order the
+    /// codegen encounters them. When the cumulative size would exceed the 64KB
+    /// limit, the overflowing static is automatically spilled to global memory
+    /// with a compile-time warning. Subsequent smaller statics may still fit
+    /// and will continue to be placed in constant memory. This means the
+    /// codegen does not optimize for the "best" packing — it simply fills
+    /// constant memory in encounter order.
+    ///
     /// The default is `false`, which places all statics in global memory. This avoids
     /// such errors but may reduce performance and use more general memory. When set to
     /// `false`, you can still annotate `static` variables with
@@ -210,6 +218,8 @@ pub struct CudaBuilder {
     /// Use [`place_static`](Self::place_static) and
     /// [`crate_memory_space`](Self::crate_memory_space) to override placement for
     /// individual statics or entire crates (including third-party crates).
+    /// These overrides let you prioritize performance-critical statics for
+    /// constant memory regardless of encounter order.
     pub use_constant_memory_space: bool,
     /// Per-static memory placement overrides. Keys are Rust path strings
     /// (e.g., `"my_crate::module::MY_STATIC"`). These take priority over per-crate
@@ -370,6 +380,14 @@ impl CudaBuilder {
     /// Exceeding the limit may cause `IllegalAddress` runtime
     /// errors (CUDA error code: `700`).
     ///
+    /// Statics are placed on a first-come-first-served basis in the order the
+    /// codegen encounters them. When the cumulative size would exceed the 64KB
+    /// limit, the overflowing static is automatically spilled to global memory
+    /// with a compile-time warning. Subsequent smaller statics may still fit
+    /// and will continue to be placed in constant memory. This means the
+    /// codegen does not optimize for the "best" packing — it simply fills
+    /// constant memory in encounter order.
+    ///
     /// If `false`, all statics are placed in global memory. This avoids such errors but
     /// may reduce performance and use more general memory. You can still annotate
     /// `static` variables with `#[cuda_std::address_space(constant)]` to place them in
@@ -378,6 +396,8 @@ impl CudaBuilder {
     /// Use [`place_static`](Self::place_static) and
     /// [`crate_memory_space`](Self::crate_memory_space) to override placement for
     /// individual statics or entire crates.
+    /// These overrides let you prioritize performance-critical statics for
+    /// constant memory regardless of encounter order.
     pub fn use_constant_memory_space(mut self, use_constant_memory_space: bool) -> Self {
         self.use_constant_memory_space = use_constant_memory_space;
         self
