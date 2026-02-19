@@ -25,6 +25,7 @@ use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError, LayoutOf,
 };
 use rustc_middle::ty::layout::{FnAbiOfHelpers, LayoutOfHelpers};
+use rustc_middle::ty::print::with_no_trimmed_paths;
 use rustc_middle::ty::{Ty, TypeVisitableExt};
 use rustc_middle::{bug, span_bug, ty};
 use rustc_middle::{
@@ -289,21 +290,33 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     /// Resolves the memory space for a static based on per-static and per-crate overrides.
     /// Returns `None` if no override applies (caller falls through to the global flag).
     fn resolve_memory_space(&self, instance: Instance<'tcx>) -> Option<MemorySpace> {
-        let def_id = instance.def_id();
-        let def_path = self.tcx.def_path_str(def_id);
+        let has_static_overrides = !self.codegen_args.static_memory_overrides.is_empty();
+        let has_crate_overrides = !self.codegen_args.crate_memory_overrides.is_empty();
 
-        // Priority 2: Per-static override
-        for (pattern, space) in &self.codegen_args.static_memory_overrides {
-            if path_matches(&def_path, pattern) {
-                return Some(*space);
+        // Early return if no overrides are configured
+        if !has_static_overrides && !has_crate_overrides {
+            return None;
+        }
+
+        let def_id = instance.def_id();
+
+        // Priority 2: Per-static override (only compute def_path if needed)
+        if has_static_overrides {
+            let def_path = with_no_trimmed_paths!(self.tcx.def_path_str(def_id));
+            for (pattern, space) in &self.codegen_args.static_memory_overrides {
+                if path_matches(&def_path, pattern) {
+                    return Some(*space);
+                }
             }
         }
 
         // Priority 3: Per-crate override
-        let crate_name = self.tcx.crate_name(def_id.krate);
-        for (name, space) in &self.codegen_args.crate_memory_overrides {
-            if crate_name.as_str() == name {
-                return Some(*space);
+        if has_crate_overrides {
+            let crate_name = self.tcx.crate_name(def_id.krate);
+            for (name, space) in &self.codegen_args.crate_memory_overrides {
+                if crate_name.as_str() == name {
+                    return Some(*space);
+                }
             }
         }
 
