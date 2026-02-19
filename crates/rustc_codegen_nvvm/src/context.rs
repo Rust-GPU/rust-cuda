@@ -325,7 +325,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     }
 
     /// Computes the total constant memory bytes reserved for statics with explicit
-    /// placement overrides (`place_static`/`crate_memory_space` requesting constant).
+    /// placement overrides (`place_static`/`place_crate` requesting constant).
     /// This is computed lazily on the first call and cached.
     ///
     /// By pre-reserving this space, automatic placement only fills whatever remains,
@@ -380,7 +380,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     /// Priority system (highest to lowest):
     /// 1. Explicit `#[cuda_std::address_space(...)]` attribute
     /// 2. Per-static path override via CudaBuilder (`place_static`)
-    /// 3. Per-crate override via CudaBuilder (`crate_memory_space`)
+    /// 3. Per-crate override via CudaBuilder (`place_crate`)
     /// 4. Global `use_constant_memory_space` flag
     ///
     /// Statics with explicit overrides (priorities 2-3) requesting constant memory

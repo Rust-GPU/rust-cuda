@@ -58,7 +58,7 @@ pub enum EmitOption {
 
 /// Specifies which CUDA memory space a static should be placed in.
 ///
-/// Used with [`CudaBuilder::place_static`] and [`CudaBuilder::crate_memory_space`]
+/// Used with [`CudaBuilder::place_static`] and [`CudaBuilder::place_crate`]
 /// to control placement of statics in constant or global memory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemorySpace {
@@ -216,7 +216,7 @@ pub struct CudaBuilder {
     /// manually. This option only affects automatic placement.
     ///
     /// Use [`place_static`](Self::place_static) and
-    /// [`crate_memory_space`](Self::crate_memory_space) to override placement for
+    /// [`place_crate`](Self::place_crate) to override placement for
     /// individual statics or entire crates (including third-party crates).
     /// These overrides let you prioritize performance-critical statics for
     /// constant memory regardless of encounter order.
@@ -394,7 +394,7 @@ impl CudaBuilder {
     /// constant memory manually as this option only affects automatic placement.
     ///
     /// Use [`place_static`](Self::place_static) and
-    /// [`crate_memory_space`](Self::crate_memory_space) to override placement for
+    /// [`place_crate`](Self::place_crate) to override placement for
     /// individual statics or entire crates.
     /// These overrides let you prioritize performance-critical statics for
     /// constant memory regardless of encounter order.
@@ -437,10 +437,10 @@ impl CudaBuilder {
     /// # use cuda_builder::{CudaBuilder, MemorySpace};
     /// CudaBuilder::new("my_gpu_crate")
     ///     .use_constant_memory_space(true)
-    ///     .crate_memory_space("ndarray", MemorySpace::Global)
-    ///     .crate_memory_space("my_crate", MemorySpace::Constant);
+    ///     .place_crate("ndarray", MemorySpace::Global)
+    ///     .place_crate("my_crate", MemorySpace::Constant);
     /// ```
-    pub fn crate_memory_space(mut self, crate_name: &str, space: MemorySpace) -> Self {
+    pub fn place_crate(mut self, crate_name: &str, space: MemorySpace) -> Self {
         self.crate_memory_overrides
             .push((crate_name.to_string(), space));
         self
