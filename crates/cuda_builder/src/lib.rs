@@ -441,7 +441,8 @@ impl CudaBuilder {
     ///     .crate_memory_space("my_crate", MemorySpace::Constant);
     /// ```
     pub fn crate_memory_space(mut self, crate_name: &str, space: MemorySpace) -> Self {
-        self.crate_memory_overrides.push((crate_name.to_string(), space));
+        self.crate_memory_overrides
+            .push((crate_name.to_string(), space));
         self
     }
 

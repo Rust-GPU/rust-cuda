@@ -465,10 +465,10 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             return AddressSpace(1);
         }
 
-                // If successfully placed in constant memory: update cumulative usage
+        // If successfully placed in constant memory: update cumulative usage
         self.constant_memory_usage.set(new_usage);
 
-                // If approaching the threshold: warns
+        // If approaching the threshold: warns
         if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
             && current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
         {
@@ -781,7 +781,6 @@ impl MemorySpace {
             _ => None,
         }
     }
-
 }
 
 #[derive(Default, Clone)]
@@ -863,7 +862,9 @@ impl CodegenArgs {
                         "invalid memory space '{space_str}', expected 'global' or 'constant'"
                     ))
                 });
-                cg_args.static_memory_overrides.push((path.to_string(), space));
+                cg_args
+                    .static_memory_overrides
+                    .push((path.to_string(), space));
             } else if let Some(val) = arg.strip_prefix("--crate-memory=") {
                 // Format: "crate_name=global" or "crate_name=constant"
                 let (crate_name, space_str) = val.rsplit_once('=').unwrap_or_else(|| {
@@ -876,7 +877,9 @@ impl CodegenArgs {
                         "invalid memory space '{space_str}', expected 'global' or 'constant'"
                     ))
                 });
-                cg_args.crate_memory_overrides.push((crate_name.to_string(), space));
+                cg_args
+                    .crate_memory_overrides
+                    .push((crate_name.to_string(), space));
             } else {
                 // Do this only after all the other flags above have been tried.
                 match NvvmOption::from_str(arg) {
