@@ -114,6 +114,10 @@ pub(crate) struct CodegenCx<'ll, 'tcx> {
     /// Pre-reserved constant memory bytes for statics with explicit placement overrides.
     /// Computed lazily on first call to `static_addrspace`.
     constant_memory_reserved: Cell<Option<u64>>,
+    /// Cache of address space decisions per static instance, to prevent
+    /// double-counting when `static_addrspace` is called multiple times
+    /// (e.g., during both predefine and RAUW phases).
+    static_addrspace_cache: RefCell<FxHashMap<Instance<'tcx>, AddressSpace>>,
 }
 
 impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
@@ -186,6 +190,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             last_call_llfn: Cell::new(None),
             constant_memory_usage: Cell::new(0),
             constant_memory_reserved: Cell::new(None),
+            static_addrspace_cache: Default::default(),
         };
         cx.build_intrinsics_map();
         cx
@@ -387,6 +392,20 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     /// have their space pre-reserved, so automatic placement (priority 4) only fills
     /// whatever remains. This ensures explicitly placed statics are packed first.
     pub fn static_addrspace(&self, instance: Instance<'tcx>) -> AddressSpace {
+        // Return cached result to prevent double-counting constant memory usage
+        // when called from multiple phases (predefine, define/RAUW).
+        if let Some(&cached) = self.static_addrspace_cache.borrow().get(&instance) {
+            return cached;
+        }
+
+        let result = self.compute_static_addrspace(instance);
+        self.static_addrspace_cache
+            .borrow_mut()
+            .insert(instance, result);
+        result
+    }
+
+    fn compute_static_addrspace(&self, instance: Instance<'tcx>) -> AddressSpace {
         let ty = instance.ty(self.tcx, self.typing_env());
         let is_mutable = self.tcx().is_mutable_static(instance.def_id());
         let attrs = self.tcx.get_all_attrs(instance.def_id()); // TODO: replace with get_attrs

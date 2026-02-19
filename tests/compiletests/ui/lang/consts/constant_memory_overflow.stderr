@@ -1,4 +1,4 @@
-warning: constant memory overflow: static `BIG_ARRAY_2` (35840 bytes) does not fit in remaining constant memory (29696 bytes free of 65536 bytes total)
+warning: constant memory overflow: static `BIG_ARRAY_2` (35840 bytes) does not fit in remaining constant memory (29696 bytes free of 65536 bytes available)
   --> $DIR/constant_memory_overflow.rs:15:1
    |
 LL | static BIG_ARRAY_2: [u32; ARRAY_SIZE] = [222u32; ARRAY_SIZE];
@@ -7,7 +7,7 @@ LL | static BIG_ARRAY_2: [u32; ARRAY_SIZE] = [222u32; ARRAY_SIZE];
    = note: current constant memory usage: 35840 / 65536 bytes
    = help: use `.place_static("path", MemorySpace::Constant)` in build.rs to prioritize specific statics for constant memory
 
-warning: constant memory overflow: static `BIG_ARRAY_3` (35840 bytes) does not fit in remaining constant memory (29696 bytes free of 65536 bytes total)
+warning: constant memory overflow: static `BIG_ARRAY_3` (35840 bytes) does not fit in remaining constant memory (29696 bytes free of 65536 bytes available)
   --> $DIR/constant_memory_overflow.rs:16:1
    |
 LL | static BIG_ARRAY_3: [u32; ARRAY_SIZE] = [333u32; ARRAY_SIZE];
