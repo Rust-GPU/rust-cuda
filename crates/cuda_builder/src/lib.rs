@@ -56,6 +56,27 @@ pub enum EmitOption {
     Bitcode,
 }
 
+/// Specifies which CUDA memory space a static should be placed in.
+///
+/// Used with [`CudaBuilder::place_static`] and [`CudaBuilder::crate_memory_space`]
+/// to control placement of statics in constant or global memory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemorySpace {
+    /// Global memory (address space 1). Slower but virtually unlimited.
+    Global,
+    /// Constant memory (address space 4). Fast, cached, but limited to ~64KB total.
+    Constant,
+}
+
+impl MemorySpace {
+    fn as_str(&self) -> &'static str {
+        match self {
+            MemorySpace::Global => "global",
+            MemorySpace::Constant => "constant",
+        }
+    }
+}
+
 /// A builder for easily compiling Rust GPU crates in build.rs
 pub struct CudaBuilder {
     path_to_crate: PathBuf,
@@ -174,8 +195,10 @@ pub struct CudaBuilder {
     pub override_libm: bool,
     /// If `true`, the codegen will attempt to place `static` variables in CUDA's
     /// constant memory, which is fast but limited in size (~64KB total across all
-    /// statics). The codegen avoids placing any single item too large, but it does not
-    /// track cumulative size. Exceeding the limit may cause `IllegalAddress` runtime
+    /// statics). The codegen avoids placing any single item too large,
+    /// it does track cumulative size and will emit a compile-time
+    /// error if the total exceeds the limit.
+    /// Exceeding the limit may cause `IllegalAddress` runtime
     /// errors (CUDA error code: `700`).
     ///
     /// The default is `false`, which places all statics in global memory. This avoids
@@ -184,9 +207,20 @@ pub struct CudaBuilder {
     /// `#[cuda_std::address_space(constant)]` to place them in constant memory
     /// manually. This option only affects automatic placement.
     ///
-    /// Future versions may support smarter placement and user-controlled
-    /// packing/spilling strategies.
+    /// Use [`place_static`](Self::place_static) and
+    /// [`crate_memory_space`](Self::crate_memory_space) to override placement for
+    /// individual statics or entire crates (including third-party crates).
     pub use_constant_memory_space: bool,
+    /// Per-static memory placement overrides. Keys are Rust path strings
+    /// (e.g., `"my_crate::module::MY_STATIC"`). These take priority over per-crate
+    /// overrides and the global `use_constant_memory_space` flag, but NOT over
+    /// an explicit `#[cuda_std::address_space(...)]` attribute on the static itself.
+    pub static_memory_overrides: Vec<(String, MemorySpace)>,
+    /// Per-crate memory placement overrides. Keys are crate names
+    /// (e.g., `"ndarray"`). These take priority over the global `use_constant_memory_space`
+    /// flag, but NOT over per-static overrides or explicit `#[cuda_std::address_space(...)]`
+    /// attributes.
+    pub crate_memory_overrides: Vec<(String, MemorySpace)>,
     /// Whether to generate any debug info and what level of info to generate.
     pub debug: DebugInfo,
     /// Additional arguments passed to cargo during `cargo build`.
@@ -213,6 +247,8 @@ impl CudaBuilder {
             optix: false,
             override_libm: true,
             use_constant_memory_space: false,
+            static_memory_overrides: vec![],
+            crate_memory_overrides: vec![],
             debug: DebugInfo::None,
             build_args: vec![],
             final_module_path: None,
@@ -328,8 +364,10 @@ impl CudaBuilder {
 
     /// If `true`, the codegen will attempt to place `static` variables in CUDA's
     /// constant memory, which is fast but limited in size (~64KB total across all
-    /// statics). The codegen avoids placing any single item too large, but it does not
-    /// track cumulative size. Exceeding the limit may cause `IllegalAddress` runtime
+    /// statics). The codegen avoids placing any single item too large,
+    /// it does track cumulative size and will emit a compile-time
+    /// error if the total exceeds the limit.
+    /// Exceeding the limit may cause `IllegalAddress` runtime
     /// errors (CUDA error code: `700`).
     ///
     /// If `false`, all statics are placed in global memory. This avoids such errors but
@@ -337,10 +375,53 @@ impl CudaBuilder {
     /// `static` variables with `#[cuda_std::address_space(constant)]` to place them in
     /// constant memory manually as this option only affects automatic placement.
     ///
-    /// Future versions may support smarter placement and user-controlled
-    /// packing/spilling strategies.
+    /// Use [`place_static`](Self::place_static) and
+    /// [`crate_memory_space`](Self::crate_memory_space) to override placement for
+    /// individual statics or entire crates.
     pub fn use_constant_memory_space(mut self, use_constant_memory_space: bool) -> Self {
         self.use_constant_memory_space = use_constant_memory_space;
+        self
+    }
+
+    /// Override the memory placement for a specific static by its full Rust path.
+    ///
+    /// This takes priority over per-crate overrides and the global
+    /// `use_constant_memory_space` flag, but NOT over an explicit
+    /// `#[cuda_std::address_space(...)]` attribute on the static itself.
+    ///
+    /// The path is matched against the compiler's `def_path_str` for each static.
+    /// You can use a full path (e.g., `"my_crate::module::MY_STATIC"`) or a suffix
+    /// that matches at a `::` boundary (e.g., `"module::MY_STATIC"` or `"MY_STATIC"`).
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use cuda_builder::{CudaBuilder, MemorySpace};
+    /// CudaBuilder::new("my_gpu_crate")
+    ///     .use_constant_memory_space(true)
+    ///     .place_static("dep_crate::BIG_TABLE", MemorySpace::Global)
+    ///     .place_static("my_crate::HOT_DATA", MemorySpace::Constant);
+    /// ```
+    pub fn place_static(mut self, path: &str, space: MemorySpace) -> Self {
+        self.static_memory_overrides.push((path.to_string(), space));
+        self
+    }
+
+    /// Override the default memory placement for all statics from a given crate.
+    ///
+    /// This takes priority over the global `use_constant_memory_space` flag,
+    /// but NOT over per-static overrides or explicit `#[cuda_std::address_space(...)]`
+    /// attributes.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use cuda_builder::{CudaBuilder, MemorySpace};
+    /// CudaBuilder::new("my_gpu_crate")
+    ///     .use_constant_memory_space(true)
+    ///     .crate_memory_space("ndarray", MemorySpace::Global)
+    ///     .crate_memory_space("my_crate", MemorySpace::Constant);
+    /// ```
+    pub fn crate_memory_space(mut self, crate_name: &str, space: MemorySpace) -> Self {
+        self.crate_memory_overrides.push((crate_name.to_string(), space));
         self
     }
 
@@ -741,6 +822,14 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
 
     if builder.use_constant_memory_space {
         llvm_args.push("--use-constant-memory-space".to_string());
+    }
+
+    for (path, space) in &builder.static_memory_overrides {
+        llvm_args.push(format!("--static-memory={}={}", path, space.as_str()));
+    }
+
+    for (crate_name, space) in &builder.crate_memory_overrides {
+        llvm_args.push(format!("--crate-memory={}={}", crate_name, space.as_str()));
     }
 
     if let Some(path) = &builder.final_module_path {

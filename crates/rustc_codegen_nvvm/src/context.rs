@@ -262,126 +262,177 @@ impl<'ll, 'tcx> MiscCodegenMethods<'tcx> for CodegenCx<'ll, 'tcx> {
     }
 }
 
+/// Checks if a compiler `def_path` matches a user-provided `pattern`.
+///
+/// Supports exact match or suffix match at a `::` boundary to avoid false
+/// substring matches. For example, `"my_crate::mod::STATIC"` matches patterns
+/// `"my_crate::mod::STATIC"`, `"mod::STATIC"`, and `"STATIC"`, but
+/// `"my_crate::mod::MY_STATIC"` does NOT match pattern `"STATIC"` via substring
+/// (it would only match `"MY_STATIC"`).
+fn path_matches(def_path: &str, pattern: &str) -> bool {
+    if def_path == pattern {
+        return true;
+    }
+    if def_path.ends_with(pattern) {
+        let prefix_len = def_path.len() - pattern.len();
+        def_path[..prefix_len].ends_with("::")
+    } else {
+        false
+    }
+}
+
 impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
+    /// Resolves the memory space for a static based on per-static and per-crate overrides.
+    /// Returns `None` if no override applies (caller falls through to the global flag).
+    fn resolve_memory_space(&self, instance: Instance<'tcx>) -> Option<MemorySpace> {
+        let def_id = instance.def_id();
+        let def_path = self.tcx.def_path_str(def_id);
+
+        // Priority 2: Per-static override
+        for (pattern, space) in &self.codegen_args.static_memory_overrides {
+            if path_matches(&def_path, pattern) {
+                return Some(*space);
+            }
+        }
+
+        // Priority 3: Per-crate override
+        let crate_name = self.tcx.crate_name(def_id.krate);
+        for (name, space) in &self.codegen_args.crate_memory_overrides {
+            if crate_name.as_str() == name {
+                return Some(*space);
+            }
+        }
+
+        // Priority 4: No override
+        None
+    }
+
     /// Computes the address space for a static.
+    ///
+    /// Priority system (highest to lowest):
+    /// 1. Explicit `#[cuda_std::address_space(...)]` attribute
+    /// 2. Per-static path override via CudaBuilder (`place_static`)
+    /// 3. Per-crate override via CudaBuilder (`crate_memory_space`)
+    /// 4. Global `use_constant_memory_space` flag
     pub fn static_addrspace(&self, instance: Instance<'tcx>) -> AddressSpace {
         let ty = instance.ty(self.tcx, self.typing_env());
         let is_mutable = self.tcx().is_mutable_static(instance.def_id());
         let attrs = self.tcx.get_all_attrs(instance.def_id()); // TODO: replace with get_attrs
         let nvvm_attrs = NvvmAttributes::parse(self, attrs);
 
+        // Priority 1: Explicit #[address_space] attribute always wins
         if let Some(addr) = nvvm_attrs.addrspace {
             return AddressSpace(addr as u32);
         }
 
-        if !is_mutable && self.type_is_freeze(ty) {
-            if !self.codegen_args.use_constant_memory_space {
-                // We aren't using constant memory, so put the instance in global memory.
-                AddressSpace(1)
-            } else {
-                // We are using constant memory, see if the instance will fit.
-                //
-                // FIXME(@LegNeato) ideally we keep track of what we have put into
-                // constant memory and when it is filled up spill instead of only
-                // spilling when a static is big. We'll probably want some packing
-                // strategy controlled by the user...for example, if you have one large
-                // static and many small ones, you might want the small ones to all be
-                // in constant memory or just the big one depending on your workload.
-                let layout = self.layout_of(ty);
-                let size_bytes = layout.size.bytes();
-                let current_usage = self.constant_memory_usage.get();
-                let new_usage = current_usage + size_bytes;
+        // Mutable or non-freeze statics cannot go in constant memory
+        if is_mutable || !self.type_is_freeze(ty) {
+            return AddressSpace::ZERO;
+        }
 
-                // Check if this single static is too large for constant memory
-                if size_bytes > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
-                    let def_id = instance.def_id();
-                    let span = self.tcx.def_span(def_id);
-                    let mut diag = self.tcx.sess.dcx().struct_span_warn(
-                        span,
-                        format!(
-                            "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {} bytes",
-                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
-                        ),
-                    );
-                    diag.span_label(span, "static exceeds constant memory limit");
-                    diag.note("placing in global memory (performance may be reduced)");
-                    diag.help("use `#[cuda_std::address_space(global)]` to explicitly place this static in global memory");
-                    diag.emit();
-                    return AddressSpace(1);
-                }
+        // Resolve memory space from overrides (priorities 2-4)
+        let want_constant = match self.resolve_memory_space(instance) {
+            Some(MemorySpace::Constant) => true,
+            Some(MemorySpace::Global) => false,
+            None => self.codegen_args.use_constant_memory_space,
+        };
 
-                // Check if adding this static would exceed the cumulative limit
-                if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
-                    let def_id = instance.def_id();
-                    let span = self.tcx.def_span(def_id);
-                    let mut diag = self.tcx.sess.dcx().struct_span_err(
-                        span,
-                        format!(
-                            "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
-                            cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit",
-                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
-                        ),
-                    );
-                    diag.span_label(
-                        span,
-                        format!(
-                            "this static would cause total usage to exceed {} bytes",
-                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
-                        ),
-                    );
-                    diag.note(format!(
-                        "current constant memory usage: {current_usage} bytes"
-                    ));
-                    diag.note(format!("static size: {size_bytes} bytes"));
-                    diag.note(format!("would result in: {new_usage} bytes total"));
+        if !want_constant {
+            return AddressSpace(1);
+        }
 
-                    diag.help("move this or other statics to global memory using `#[cuda_std::address_space(global)]`");
-                    diag.help("reduce the total size of static data");
-                    diag.help("disable automatic constant memory placement by setting `.use_constant_memory_space(false)` on `CudaBuilder` in build.rs");
+        // Placing in constant memory -- check size constraints
+        let layout = self.layout_of(ty);
+        let size_bytes = layout.size.bytes();
+        let current_usage = self.constant_memory_usage.get();
+        let new_usage = current_usage + size_bytes;
 
-                    diag.emit();
-                    self.tcx.sess.dcx().abort_if_errors();
-                    unreachable!()
-                }
+        // Check if this single static is too large for constant memory
+        if size_bytes > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+            let def_id = instance.def_id();
+            let span = self.tcx.def_span(def_id);
+            let mut diag = self.tcx.sess.dcx().struct_span_warn(
+                span,
+                format!(
+                    "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {} bytes",
+                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                ),
+            );
+            diag.span_label(span, "static exceeds constant memory limit");
+            diag.note("placing in global memory (performance may be reduced)");
+            diag.help("use `#[cuda_std::address_space(global)]` to explicitly place this static in global memory");
+            diag.emit();
+            return AddressSpace(1);
+        }
+
+        // Check if adding this static would exceed the cumulative limit
+        if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+            let def_id = instance.def_id();
+            let span = self.tcx.def_span(def_id);
+            let mut diag = self.tcx.sess.dcx().struct_span_err(
+                span,
+                format!(
+                    "cannot place static `{instance}` ({size_bytes} bytes) in constant memory: \
+                    cumulative constant memory usage would be {new_usage} bytes, exceeding the {} byte limit",
+                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                ),
+            );
+            diag.span_label(
+                span,
+                format!(
+                    "this static would cause total usage to exceed {} bytes",
+                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                ),
+            );
+            diag.note(format!(
+                "current constant memory usage: {current_usage} bytes"
+            ));
+            diag.note(format!("static size: {size_bytes} bytes"));
+            diag.note(format!("would result in: {new_usage} bytes total"));
+
+            diag.help("move this or other statics to global memory using `#[cuda_std::address_space(global)]` or `.place_static(\"path\", MemorySpace::Global)` in build.rs");
+            diag.help("reduce the total size of static data");
+            diag.help("disable automatic constant memory placement by setting `.use_constant_memory_space(false)` on `CudaBuilder` in build.rs");
+
+            diag.emit();
+            self.tcx.sess.dcx().abort_if_errors();
+            unreachable!()
+        }
 
                 // If successfully placed in constant memory: update cumulative usage
-                self.constant_memory_usage.set(new_usage);
+        self.constant_memory_usage.set(new_usage);
 
                 // If approaching the threshold: warns
-                if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
-                    && current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
-                {
-                    let def_id = instance.def_id();
-                    let span = self.tcx.def_span(def_id);
-                    let usage_percent =
-                        (new_usage as f64 / CONSTANT_MEMORY_SIZE_LIMIT_BYTES as f64) * 100.0;
-                    let mut diag = self.tcx.sess.dcx().struct_span_warn(
-                        span,
-                        format!(
-                            "constant memory usage is approaching the limit: {new_usage} / {} bytes ({usage_percent:.1}% used)",
-                            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
-                        ),
-                    );
-                    diag.span_label(
-                        span,
-                        "this placement brought you over 80% of constant memory capacity",
-                    );
-                    diag.note(format!(
-                        "only {} bytes of constant memory remain",
-                        CONSTANT_MEMORY_SIZE_LIMIT_BYTES - new_usage
-                    ));
-                    diag.help("to prevent constant memory overflow, consider moving some statics to global memory using `#[cuda_std::address_space(global)]`");
-                    diag.emit();
-                }
-
-                trace!(
-                    "Placing static `{instance}` ({size_bytes} bytes) in constant memory. Total usage: {new_usage} bytes"
-                );
-                AddressSpace(4)
-            }
-        } else {
-            AddressSpace::ZERO
+        if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
+            && current_usage <= CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES
+        {
+            let def_id = instance.def_id();
+            let span = self.tcx.def_span(def_id);
+            let usage_percent =
+                (new_usage as f64 / CONSTANT_MEMORY_SIZE_LIMIT_BYTES as f64) * 100.0;
+            let mut diag = self.tcx.sess.dcx().struct_span_warn(
+                span,
+                format!(
+                    "constant memory usage is approaching the limit: {new_usage} / {} bytes ({usage_percent:.1}% used)",
+                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                ),
+            );
+            diag.span_label(
+                span,
+                "this placement brought you over 80% of constant memory capacity",
+            );
+            diag.note(format!(
+                "only {} bytes of constant memory remain",
+                CONSTANT_MEMORY_SIZE_LIMIT_BYTES - new_usage
+            ));
+            diag.help("to prevent constant memory overflow, consider moving some statics to global memory using `#[cuda_std::address_space(global)]` or `.place_static(\"path\", MemorySpace::Global)` in build.rs");
+            diag.emit();
         }
+
+        trace!(
+            "Placing static `{instance}` ({size_bytes} bytes) in constant memory. Total usage: {new_usage} bytes"
+        );
+        AddressSpace(4)
     }
 
     /// Declare a global value, returns the existing value if it was already declared.
@@ -647,6 +698,26 @@ pub enum DisassembleMode {
     Globals,
 }
 
+/// Specifies which CUDA memory space a static should be placed in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemorySpace {
+    /// Global memory (address space 1).
+    Global,
+    /// Constant memory (address space 4).
+    Constant,
+}
+
+impl MemorySpace {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "global" => Some(Self::Global),
+            "constant" => Some(Self::Constant),
+            _ => None,
+        }
+    }
+
+}
+
 #[derive(Default, Clone)]
 pub struct CodegenArgs {
     pub nvvm_options: Vec<NvvmOption>,
@@ -654,6 +725,8 @@ pub struct CodegenArgs {
     pub use_constant_memory_space: bool,
     pub final_module_path: Option<PathBuf>,
     pub disassemble: Option<DisassembleMode>,
+    pub static_memory_overrides: Vec<(String, MemorySpace)>,
+    pub crate_memory_overrides: Vec<(String, MemorySpace)>,
 }
 
 impl CodegenArgs {
@@ -712,6 +785,32 @@ impl CodegenArgs {
                 skip_next = true;
             } else if let Some(entry) = arg.strip_prefix("--disassemble-entry=") {
                 cg_args.disassemble = Some(DisassembleMode::Entry(entry.to_string()));
+            } else if let Some(val) = arg.strip_prefix("--static-memory=") {
+                // Format: "path=global" or "path=constant"
+                let (path, space_str) = val.rsplit_once('=').unwrap_or_else(|| {
+                    sess.dcx().fatal(format!(
+                        "--static-memory requires format 'path=global|constant', got: {val}"
+                    ))
+                });
+                let space = MemorySpace::from_str(space_str).unwrap_or_else(|| {
+                    sess.dcx().fatal(format!(
+                        "invalid memory space '{space_str}', expected 'global' or 'constant'"
+                    ))
+                });
+                cg_args.static_memory_overrides.push((path.to_string(), space));
+            } else if let Some(val) = arg.strip_prefix("--crate-memory=") {
+                // Format: "crate_name=global" or "crate_name=constant"
+                let (crate_name, space_str) = val.rsplit_once('=').unwrap_or_else(|| {
+                    sess.dcx().fatal(format!(
+                        "--crate-memory requires format 'crate_name=global|constant', got: {val}"
+                    ))
+                });
+                let space = MemorySpace::from_str(space_str).unwrap_or_else(|| {
+                    sess.dcx().fatal(format!(
+                        "invalid memory space '{space_str}', expected 'global' or 'constant'"
+                    ))
+                });
+                cg_args.crate_memory_overrides.push((crate_name.to_string(), space));
             } else {
                 // Do this only after all the other flags above have been tried.
                 match NvvmOption::from_str(arg) {
