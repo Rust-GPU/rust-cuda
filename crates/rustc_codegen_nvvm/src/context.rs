@@ -28,7 +28,7 @@ use rustc_middle::ty::layout::{FnAbiOfHelpers, LayoutOfHelpers};
 use rustc_middle::ty::{Ty, TypeVisitableExt};
 use rustc_middle::{bug, span_bug, ty};
 use rustc_middle::{
-    mir::mono::CodegenUnit,
+    mir::mono::{CodegenUnit, MonoItem},
     ty::{Instance, TyCtxt},
 };
 use rustc_session::Session;
@@ -110,6 +110,9 @@ pub(crate) struct CodegenCx<'ll, 'tcx> {
 
     /// Tracks cumulative constant memory usage in bytes for compile-time diagnostics
     constant_memory_usage: Cell<u64>,
+    /// Pre-reserved constant memory bytes for statics with explicit placement overrides.
+    /// Computed lazily on first call to `static_addrspace`.
+    constant_memory_reserved: Cell<Option<u64>>,
 }
 
 impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
@@ -181,6 +184,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             codegen_args: CodegenArgs::from_session(tcx.sess()),
             last_call_llfn: Cell::new(None),
             constant_memory_usage: Cell::new(0),
+            constant_memory_reserved: Cell::new(None),
         };
         cx.build_intrinsics_map();
         cx
@@ -307,6 +311,57 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         None
     }
 
+    /// Computes the total constant memory bytes reserved for statics with explicit
+    /// placement overrides (`place_static`/`crate_memory_space` requesting constant).
+    /// This is computed lazily on the first call and cached.
+    ///
+    /// By pre-reserving this space, automatic placement only fills whatever remains,
+    /// ensuring explicitly requested statics always fit (as long as they fit together).
+    fn get_constant_memory_reserved(&self) -> u64 {
+        if let Some(reserved) = self.constant_memory_reserved.get() {
+            return reserved;
+        }
+
+        let mut reserved: u64 = 0;
+        for (&item, _) in self.codegen_unit.items() {
+            if let MonoItem::Static(def_id) = item {
+                let instance = Instance::mono(self.tcx, def_id);
+                let ty = instance.ty(self.tcx, self.typing_env());
+
+                // Skip statics that can't go in constant memory
+                let is_mutable = self.tcx().is_mutable_static(def_id);
+                if is_mutable || !self.type_is_freeze(ty) {
+                    continue;
+                }
+
+                // Skip statics with explicit #[address_space] attributes
+                let attrs = self.tcx.get_all_attrs(def_id);
+                let nvvm_attrs = NvvmAttributes::parse(self, attrs);
+                if nvvm_attrs.addrspace.is_some() {
+                    continue;
+                }
+
+                // Only reserve for explicit overrides requesting constant memory
+                if let Some(MemorySpace::Constant) = self.resolve_memory_space(instance) {
+                    let layout = self.layout_of(ty);
+                    reserved += layout.size.bytes();
+                }
+            }
+        }
+
+        if reserved > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+            self.tcx.sess.dcx().warn(format!(
+                "explicitly placed statics require {reserved} bytes of constant memory, \
+                which exceeds the {} byte limit; this will likely cause runtime errors",
+                CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+            ));
+        }
+
+        self.constant_memory_reserved.set(Some(reserved));
+        trace!("Pre-reserved {reserved} bytes of constant memory for explicitly placed statics");
+        reserved
+    }
+
     /// Computes the address space for a static.
     ///
     /// Priority system (highest to lowest):
@@ -314,6 +369,10 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     /// 2. Per-static path override via CudaBuilder (`place_static`)
     /// 3. Per-crate override via CudaBuilder (`crate_memory_space`)
     /// 4. Global `use_constant_memory_space` flag
+    ///
+    /// Statics with explicit overrides (priorities 2-3) requesting constant memory
+    /// have their space pre-reserved, so automatic placement (priority 4) only fills
+    /// whatever remains. This ensures explicitly placed statics are packed first.
     pub fn static_addrspace(&self, instance: Instance<'tcx>) -> AddressSpace {
         let ty = instance.ty(self.tcx, self.typing_env());
         let is_mutable = self.tcx().is_mutable_static(instance.def_id());
@@ -331,7 +390,9 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         }
 
         // Resolve memory space from overrides (priorities 2-4)
-        let want_constant = match self.resolve_memory_space(instance) {
+        let resolved = self.resolve_memory_space(instance);
+        let explicit_constant = matches!(resolved, Some(MemorySpace::Constant));
+        let want_constant = match resolved {
             Some(MemorySpace::Constant) => true,
             Some(MemorySpace::Global) => false,
             None => self.codegen_args.use_constant_memory_space,
@@ -347,15 +408,24 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         let current_usage = self.constant_memory_usage.get();
         let new_usage = current_usage + size_bytes;
 
+        // For automatic placement, the effective limit is reduced by the space
+        // reserved for explicitly placed statics (so they always fit).
+        // For explicit overrides, use the full limit.
+        let effective_limit = if explicit_constant {
+            CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+        } else {
+            let reserved = self.get_constant_memory_reserved();
+            CONSTANT_MEMORY_SIZE_LIMIT_BYTES.saturating_sub(reserved)
+        };
+
         // Check if this single static is too large for constant memory
-        if size_bytes > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+        if size_bytes > effective_limit {
             let def_id = instance.def_id();
             let span = self.tcx.def_span(def_id);
             let mut diag = self.tcx.sess.dcx().struct_span_warn(
                 span,
                 format!(
-                    "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {} bytes",
-                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                    "static `{instance}` is {size_bytes} bytes, exceeds the constant memory limit of {effective_limit} bytes",
                 ),
             );
             diag.span_label(span, "static exceeds constant memory limit");
@@ -367,23 +437,29 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
         // Check if adding this static would exceed the cumulative limit
         // Auto-spill to global memory with a warning instead of failing
-        if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+        if new_usage > effective_limit {
             let def_id = instance.def_id();
             let span = self.tcx.def_span(def_id);
-            let remaining = CONSTANT_MEMORY_SIZE_LIMIT_BYTES.saturating_sub(current_usage);
+            let remaining = effective_limit.saturating_sub(current_usage);
             let mut diag = self.tcx.sess.dcx().struct_span_warn(
                 span,
                 format!(
                     "constant memory overflow: static `{instance}` ({size_bytes} bytes) does not fit in remaining \
-                    constant memory ({remaining} bytes free of {} bytes total)",
-                    CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                    constant memory ({remaining} bytes free of {effective_limit} bytes available)",
                 ),
             );
             diag.span_label(span, "automatically placed in global memory");
             diag.note(format!(
-                "current constant memory usage: {current_usage} / {} bytes",
-                CONSTANT_MEMORY_SIZE_LIMIT_BYTES
+                "current constant memory usage: {current_usage} / {effective_limit} bytes",
             ));
+            if !explicit_constant {
+                let reserved = self.get_constant_memory_reserved();
+                if reserved > 0 {
+                    diag.note(format!(
+                        "{reserved} bytes reserved for explicitly placed statics",
+                    ));
+                }
+            }
             diag.help("use `.place_static(\"path\", MemorySpace::Constant)` in build.rs to prioritize specific statics for constant memory");
             diag.emit();
             return AddressSpace(1);
