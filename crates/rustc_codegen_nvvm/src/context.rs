@@ -358,10 +358,16 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                     continue;
                 }
 
-                // Skip statics with explicit #[address_space] attributes
+                // Handle statics with explicit #[address_space] attributes:
+                // count #[address_space(constant)] toward the reservation (they
+                // consume constant memory), skip all others.
                 let attrs = self.tcx.get_all_attrs(def_id);
                 let nvvm_attrs = NvvmAttributes::parse(self, attrs);
-                if nvvm_attrs.addrspace.is_some() {
+                if let Some(addr) = nvvm_attrs.addrspace {
+                    if addr == 4 {
+                        let layout = self.layout_of(ty);
+                        reserved += layout.size.bytes();
+                    }
                     continue;
                 }
 
@@ -419,6 +425,34 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
         // Priority 1: Explicit #[address_space] attribute always wins
         if let Some(addr) = nvvm_attrs.addrspace {
+            // Track constant memory usage for #[address_space(constant)] so we
+            // don't silently exceed the 64KB hardware limit.
+            if addr == 4 {
+                let layout = self.layout_of(ty);
+                let size_bytes = layout.size.bytes();
+                let current_usage = self.constant_memory_usage.get();
+                let new_usage = current_usage + size_bytes;
+                self.constant_memory_usage.set(new_usage);
+                self.explicit_constant_memory_placed
+                    .set(self.explicit_constant_memory_placed.get() + size_bytes);
+
+                if new_usage > CONSTANT_MEMORY_SIZE_LIMIT_BYTES {
+                    let def_id = instance.def_id();
+                    let span = self.tcx.def_span(def_id);
+                    let mut diag = self.tcx.sess.dcx().struct_span_warn(
+                        span,
+                        format!(
+                            "constant memory overflow: static `{instance}` ({size_bytes} bytes) \
+                            causes total constant memory usage ({new_usage} bytes) to exceed \
+                            the {CONSTANT_MEMORY_SIZE_LIMIT_BYTES} byte hardware limit",
+                        ),
+                    );
+                    diag.span_label(span, "placed via explicit #[address_space(constant)]");
+                    diag.note("this will likely cause runtime errors");
+                    diag.help("consider moving some statics to global memory");
+                    diag.emit();
+                }
+            }
             return AddressSpace(addr as u32);
         }
 
