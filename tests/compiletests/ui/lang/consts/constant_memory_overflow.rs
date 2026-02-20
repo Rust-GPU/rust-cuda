@@ -1,5 +1,5 @@
-// Test that automatic constant memory placement fails when exceeding the 64KB limit
-// This test creates multiple large static arrays that together exceed the limit
+// Test that automatic constant memory placement spills to global with a warning
+// when exceeding the 64KB limit
 
 // compile-flags: -Cllvm-args=--use-constant-memory-space
 
