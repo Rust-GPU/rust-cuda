@@ -114,6 +114,11 @@ pub(crate) struct CodegenCx<'ll, 'tcx> {
     /// Pre-reserved constant memory bytes for statics with explicit placement overrides.
     /// Computed lazily on first call to `static_addrspace`.
     constant_memory_reserved: Cell<Option<u64>>,
+    /// Tracks how many reserved bytes have already been placed (and thus already
+    /// counted in `constant_memory_usage`). This prevents double-counting: without it,
+    /// the effective limit for automatic statics subtracts the full reservation even
+    /// though some of that reserved space is already reflected in `constant_memory_usage`.
+    explicit_constant_memory_placed: Cell<u64>,
     /// Cache of address space decisions per static instance, to prevent
     /// double-counting when `static_addrspace` is called multiple times
     /// (e.g., during both predefine and RAUW phases).
@@ -190,6 +195,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             last_call_llfn: Cell::new(None),
             constant_memory_usage: Cell::new(0),
             constant_memory_reserved: Cell::new(None),
+            explicit_constant_memory_placed: Cell::new(0),
             static_addrspace_cache: Default::default(),
         };
         cx.build_intrinsics_map();
@@ -418,7 +424,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
         // Mutable or non-freeze statics cannot go in constant memory
         if is_mutable || !self.type_is_freeze(ty) {
-            return AddressSpace::ZERO;
+            return AddressSpace(1);
         }
 
         // Resolve memory space from overrides (priorities 2-4)
@@ -440,14 +446,18 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         let current_usage = self.constant_memory_usage.get();
         let new_usage = current_usage + size_bytes;
 
-        // For automatic placement, the effective limit is reduced by the space
-        // reserved for explicitly placed statics (so they always fit).
+        // For automatic placement, the effective limit is reduced by the reserved
+        // space that has NOT yet been placed. Reserved space that has already been
+        // placed is already reflected in `constant_memory_usage`, so subtracting
+        // the full reservation would double-count it.
         // For explicit overrides, use the full limit.
         let effective_limit = if explicit_constant {
             CONSTANT_MEMORY_SIZE_LIMIT_BYTES
         } else {
             let reserved = self.get_constant_memory_reserved();
-            CONSTANT_MEMORY_SIZE_LIMIT_BYTES.saturating_sub(reserved)
+            let already_placed = self.explicit_constant_memory_placed.get();
+            let remaining_reservation = reserved.saturating_sub(already_placed);
+            CONSTANT_MEMORY_SIZE_LIMIT_BYTES.saturating_sub(remaining_reservation)
         };
 
         // Check if this single static is too large for constant memory
@@ -499,6 +509,10 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
 
         // If successfully placed in constant memory: update cumulative usage
         self.constant_memory_usage.set(new_usage);
+        if explicit_constant {
+            self.explicit_constant_memory_placed
+                .set(self.explicit_constant_memory_placed.get() + size_bytes);
+        }
 
         // If approaching the threshold: warns
         if new_usage > CONSTANT_MEMORY_WARNING_THRESHOLD_BYTES

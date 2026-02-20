@@ -415,8 +415,6 @@ impl<'ll> StaticCodegenMethods for CodegenCx<'ll, '_> {
                 // llvm::LLVMSetGlobalConstant(g, llvm::True);
             }
 
-            debug_info::build_global_var_di_node(self, def_id, g);
-
             if attrs.flags.contains(CodegenFnAttrFlags::THREAD_LOCAL) {
                 self.unsupported("thread locals");
             }
