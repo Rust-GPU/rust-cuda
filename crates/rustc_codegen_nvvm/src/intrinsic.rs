@@ -612,7 +612,8 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                 // This piece of code was adapted from `rustc_codegen_cranelift`.
                 let intrinsic = self.tcx.intrinsic(instance.def_id()).unwrap();
                 if intrinsic.must_be_overridden {
-                    bug!(
+                    span_bug!(
+                        span,
                         "intrinsic {} must be overridden by codegen_nvvm, but isn't",
                         intrinsic.name,
                     );

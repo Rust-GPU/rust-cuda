@@ -809,6 +809,9 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
 
     let cargo_encoded_rustflags = join_checking_for_separators(rustflags, "\x1f");
 
+    // HACK(fee1-dead): didn't seem like there was a better way to disable f16/f128s, the `target_config`` did not work for some reason.
+    cargo.env("CARGO_FEATURE_NO_F16_F128", "1");
+
     let build = cargo
         .stderr(Stdio::inherit())
         .current_dir(&builder.path_to_crate)
