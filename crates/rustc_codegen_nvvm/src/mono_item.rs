@@ -98,6 +98,9 @@ impl<'tcx> PreDefineCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
             // to nvvm.annotations per the nvvm ir docs.
             if nvvm_attrs.kernel {
                 trace!("Marking function `{:?}` as a kernel", symbol_name);
+                llvm::LLVMSetFunctionCallConv(lldecl, llvm::PtxCallConv::Kernel as u32);
+
+                // Add kernel metadata for NVVM
                 let kernel = llvm::LLVMMDStringInContext(self.llcx, "kernel".as_ptr().cast(), 6);
                 let mdvals = &[lldecl, kernel, self.const_i32(1)];
                 let node =

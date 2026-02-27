@@ -206,6 +206,20 @@ pub(crate) enum Visibility {
     Protected = 2,
 }
 
+/// PTX/NVPTX calling conventions from LLVM
+/// See: <https://github.com/llvm/llvm-project/blob/main/llvm/include/llvm/IR/CallingConv.h>
+///
+/// While NVVM doesn't strictly require these calling conventions to be set
+/// (it generates PTX according to its own rules), we set them anyway to
+/// make the generated LLVM IR more accurate and easier to debug.
+#[repr(u32)]
+pub(crate) enum PtxCallConv {
+    /// PTX kernel calling convention
+    Kernel = 71,
+    /// PTX device calling convention
+    Device = 72,
+}
+
 /// LLVMUnnamedAddr
 #[repr(C)]
 pub(crate) enum UnnamedAddr {
