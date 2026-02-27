@@ -181,7 +181,7 @@ pub fn externally_visible(
 /// pub unsafe fn reverse_array(d: *mut u32, n: usize) {
 ///     ##[address_space(shared)]
 ///     static mut S: [MaybeUninit<u32>; 64] = [const { MaybeUninit::uninit() }; 64];
-///     let i = thread::thread_idx_x() as usize;
+///     let i = thread::thread_idx_x();
 ///     let ir = n - i - 1;
 ///     unsafe { S[i].write(*d.add(i)); };
 ///     thread::sync_threads();

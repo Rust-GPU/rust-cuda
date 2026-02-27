@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // current CUDA device/architecture.
     let (_, block_size) = vecadd.suggested_launch_configuration(0, 0.into())?;
 
-    let grid_size = (NUMBERS_LEN as u32).div_ceil(block_size);
+    let grid_size = NUMBERS_LEN.div_ceil(block_size);
 
     println!("using {grid_size} blocks and {block_size} threads per block");
 

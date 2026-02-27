@@ -271,15 +271,16 @@ impl Stream {
         let grid_size: GridSize = grid_size.into();
         let block_size: BlockSize = block_size.into();
 
+        let to_u32 = |i: usize| i.try_into().expect("launch size must fit in a `u32`");
         unsafe {
             driver_sys::cuLaunchKernel(
                 func.to_raw(),
-                grid_size.x,
-                grid_size.y,
-                grid_size.z,
-                block_size.x,
-                block_size.y,
-                block_size.z,
+                to_u32(grid_size.x),
+                to_u32(grid_size.y),
+                to_u32(grid_size.z),
+                to_u32(block_size.x),
+                to_u32(block_size.y),
+                to_u32(block_size.z),
                 shared_mem_bytes,
                 self.inner,
                 args.as_ptr() as *mut _,

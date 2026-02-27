@@ -53,12 +53,12 @@ pub unsafe fn gemm_tiled(
     static mut TILE_B: [MaybeUninit<f32>; TILE_SIZE_2D] = [MaybeUninit::uninit(); TILE_SIZE_2D];
 
     // Thread indices within the block.
-    let tx = thread::thread_idx_x() as usize;
-    let ty = thread::thread_idx_y() as usize;
+    let tx = thread::thread_idx_x();
+    let ty = thread::thread_idx_y();
 
     // Calculate row and column in the mat_c.
-    let row = thread::block_idx_x() as usize * TILE_SIZE + ty;
-    let col = thread::block_idx_y() as usize * TILE_SIZE + tx;
+    let row = thread::block_idx_x() * TILE_SIZE + ty;
+    let col = thread::block_idx_y() * TILE_SIZE + tx;
 
     let mut sum = 0.0f32;
     // Loop over tiles of mat_a and mat_b in the k dimension.

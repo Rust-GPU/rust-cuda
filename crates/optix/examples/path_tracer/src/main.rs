@@ -16,8 +16,8 @@ use path_tracer_kernels::{
 };
 use std::error::Error;
 
-pub const WIDTH: u32 = 1920;
-pub const HEIGHT: u32 = 1080;
+pub const WIDTH: usize = 1920;
+pub const HEIGHT: usize = 1080;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let camera = Camera {

@@ -18,43 +18,43 @@ use crate::module::Module;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GridSize {
     /// Width of grid in blocks
-    pub x: u32,
+    pub x: usize,
     /// Height of grid in blocks
-    pub y: u32,
+    pub y: usize,
     /// Depth of grid in blocks
-    pub z: u32,
+    pub z: usize,
 }
 impl GridSize {
     /// Create a one-dimensional grid of `x` blocks
     #[inline]
-    pub fn x(x: u32) -> GridSize {
+    pub fn x(x: usize) -> GridSize {
         GridSize { x, y: 1, z: 1 }
     }
 
     /// Create a two-dimensional grid of `x * y` blocks
     #[inline]
-    pub fn xy(x: u32, y: u32) -> GridSize {
+    pub fn xy(x: usize, y: usize) -> GridSize {
         GridSize { x, y, z: 1 }
     }
 
     /// Create a three-dimensional grid of `x * y * z` blocks
     #[inline]
-    pub fn xyz(x: u32, y: u32, z: u32) -> GridSize {
+    pub fn xyz(x: usize, y: usize, z: usize) -> GridSize {
         GridSize { x, y, z }
     }
 }
-impl From<u32> for GridSize {
-    fn from(x: u32) -> GridSize {
+impl From<usize> for GridSize {
+    fn from(x: usize) -> GridSize {
         GridSize::x(x)
     }
 }
-impl From<(u32, u32)> for GridSize {
-    fn from((x, y): (u32, u32)) -> GridSize {
+impl From<(usize, usize)> for GridSize {
+    fn from((x, y): (usize, usize)) -> GridSize {
         GridSize::xy(x, y)
     }
 }
-impl From<(u32, u32, u32)> for GridSize {
-    fn from((x, y, z): (u32, u32, u32)) -> GridSize {
+impl From<(usize, usize, usize)> for GridSize {
+    fn from((x, y, z): (usize, usize, usize)) -> GridSize {
         GridSize::xyz(x, y, z)
     }
 }
@@ -64,52 +64,28 @@ impl From<&GridSize> for GridSize {
     }
 }
 #[cfg(feature = "vek")]
-impl From<vek::Vec2<u32>> for GridSize {
-    fn from(vec: vek::Vec2<u32>) -> Self {
-        GridSize::xy(vec.x, vec.y)
-    }
-}
-#[cfg(feature = "vek")]
-impl From<vek::Vec3<u32>> for GridSize {
-    fn from(vec: vek::Vec3<u32>) -> Self {
-        GridSize::xyz(vec.x, vec.y, vec.z)
-    }
-}
-#[cfg(feature = "vek")]
 impl From<vek::Vec2<usize>> for GridSize {
     fn from(vec: vek::Vec2<usize>) -> Self {
-        GridSize::xy(vec.x as u32, vec.y as u32)
+        GridSize::xy(vec.x, vec.y)
     }
 }
 #[cfg(feature = "vek")]
 impl From<vek::Vec3<usize>> for GridSize {
     fn from(vec: vek::Vec3<usize>) -> Self {
-        GridSize::xyz(vec.x as u32, vec.y as u32, vec.z as u32)
+        GridSize::xyz(vec.x, vec.y, vec.z)
     }
 }
 
 #[cfg(feature = "glam")]
-impl From<glam::UVec2> for GridSize {
-    fn from(vec: glam::UVec2) -> Self {
-        GridSize::xy(vec.x, vec.y)
-    }
-}
-#[cfg(feature = "glam")]
-impl From<glam::UVec3> for GridSize {
-    fn from(vec: glam::UVec3) -> Self {
-        GridSize::xyz(vec.x, vec.y, vec.z)
-    }
-}
-#[cfg(feature = "glam")]
 impl From<glam::USizeVec2> for GridSize {
     fn from(vec: glam::USizeVec2) -> Self {
-        GridSize::xy(vec.x as u32, vec.y as u32)
+        GridSize::xy(vec.x, vec.y)
     }
 }
 #[cfg(feature = "glam")]
 impl From<glam::USizeVec3> for GridSize {
     fn from(vec: glam::USizeVec3) -> Self {
-        GridSize::xyz(vec.x as u32, vec.y as u32, vec.z as u32)
+        GridSize::xyz(vec.x, vec.y, vec.z)
     }
 }
 
@@ -123,43 +99,43 @@ impl From<glam::USizeVec3> for GridSize {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockSize {
     /// X dimension of each thread block
-    pub x: u32,
+    pub x: usize,
     /// Y dimension of each thread block
-    pub y: u32,
+    pub y: usize,
     /// Z dimension of each thread block
-    pub z: u32,
+    pub z: usize,
 }
 impl BlockSize {
     /// Create a one-dimensional block of `x` threads
     #[inline]
-    pub fn x(x: u32) -> BlockSize {
+    pub fn x(x: usize) -> BlockSize {
         BlockSize { x, y: 1, z: 1 }
     }
 
     /// Create a two-dimensional block of `x * y` threads
     #[inline]
-    pub fn xy(x: u32, y: u32) -> BlockSize {
+    pub fn xy(x: usize, y: usize) -> BlockSize {
         BlockSize { x, y, z: 1 }
     }
 
     /// Create a three-dimensional block of `x * y * z` threads
     #[inline]
-    pub fn xyz(x: u32, y: u32, z: u32) -> BlockSize {
+    pub fn xyz(x: usize, y: usize, z: usize) -> BlockSize {
         BlockSize { x, y, z }
     }
 }
-impl From<u32> for BlockSize {
-    fn from(x: u32) -> BlockSize {
+impl From<usize> for BlockSize {
+    fn from(x: usize) -> BlockSize {
         BlockSize::x(x)
     }
 }
-impl From<(u32, u32)> for BlockSize {
-    fn from((x, y): (u32, u32)) -> BlockSize {
+impl From<(usize, usize)> for BlockSize {
+    fn from((x, y): (usize, usize)) -> BlockSize {
         BlockSize::xy(x, y)
     }
 }
-impl From<(u32, u32, u32)> for BlockSize {
-    fn from((x, y, z): (u32, u32, u32)) -> BlockSize {
+impl From<(usize, usize, usize)> for BlockSize {
+    fn from((x, y, z): (usize, usize, usize)) -> BlockSize {
         BlockSize::xyz(x, y, z)
     }
 }
@@ -169,52 +145,28 @@ impl From<&BlockSize> for BlockSize {
     }
 }
 #[cfg(feature = "vek")]
-impl From<vek::Vec2<u32>> for BlockSize {
-    fn from(vec: vek::Vec2<u32>) -> Self {
-        BlockSize::xy(vec.x, vec.y)
-    }
-}
-#[cfg(feature = "vek")]
-impl From<vek::Vec3<u32>> for BlockSize {
-    fn from(vec: vek::Vec3<u32>) -> Self {
-        BlockSize::xyz(vec.x, vec.y, vec.z)
-    }
-}
-#[cfg(feature = "vek")]
 impl From<vek::Vec2<usize>> for BlockSize {
     fn from(vec: vek::Vec2<usize>) -> Self {
-        BlockSize::xy(vec.x as u32, vec.y as u32)
+        BlockSize::xy(vec.x, vec.y)
     }
 }
 #[cfg(feature = "vek")]
 impl From<vek::Vec3<usize>> for BlockSize {
     fn from(vec: vek::Vec3<usize>) -> Self {
-        BlockSize::xyz(vec.x as u32, vec.y as u32, vec.z as u32)
+        BlockSize::xyz(vec.x, vec.y, vec.z)
     }
 }
 
 #[cfg(feature = "glam")]
-impl From<glam::UVec2> for BlockSize {
-    fn from(vec: glam::UVec2) -> Self {
-        BlockSize::xy(vec.x, vec.y)
-    }
-}
-#[cfg(feature = "glam")]
-impl From<glam::UVec3> for BlockSize {
-    fn from(vec: glam::UVec3) -> Self {
-        BlockSize::xyz(vec.x, vec.y, vec.z)
-    }
-}
-#[cfg(feature = "glam")]
 impl From<glam::USizeVec2> for BlockSize {
     fn from(vec: glam::USizeVec2) -> Self {
-        BlockSize::xy(vec.x as u32, vec.y as u32)
+        BlockSize::xy(vec.x, vec.y)
     }
 }
 #[cfg(feature = "glam")]
 impl From<glam::USizeVec3> for BlockSize {
     fn from(vec: glam::USizeVec3) -> Self {
-        BlockSize::xyz(vec.x as u32, vec.y as u32, vec.z as u32)
+        BlockSize::xyz(vec.x, vec.y, vec.z)
     }
 }
 
@@ -448,7 +400,7 @@ impl Function<'_> {
         &self,
         dynamic_smem_size: usize,
         block_size_limit: BlockSize,
-    ) -> CudaResult<(u32, u32)> {
+    ) -> CudaResult<(usize, usize)> {
         let mut min_grid_size = MaybeUninit::uninit();
         let mut block_size = MaybeUninit::uninit();
 
@@ -465,8 +417,8 @@ impl Function<'_> {
             )
             .to_result()?;
             Ok((
-                min_grid_size.assume_init() as u32,
-                block_size.assume_init() as u32,
+                min_grid_size.assume_init() as usize,
+                block_size.assume_init() as usize,
             ))
         }
     }

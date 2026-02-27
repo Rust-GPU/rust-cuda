@@ -83,14 +83,18 @@ impl KernelInvocation {
     }
 
     pub fn to_raw(self) -> driver_sys::CUDA_KERNEL_NODE_PARAMS {
+        let to_u32 = |i: usize| {
+            i.try_into()
+                .expect("invocation dimension must fit in a `u32`")
+        };
         driver_sys::CUDA_KERNEL_NODE_PARAMS {
             func: self.func,
-            gridDimX: self.grid_dim.x,
-            gridDimY: self.grid_dim.y,
-            gridDimZ: self.grid_dim.z,
-            blockDimX: self.block_dim.x,
-            blockDimY: self.block_dim.y,
-            blockDimZ: self.block_dim.z,
+            gridDimX: to_u32(self.grid_dim.x),
+            gridDimY: to_u32(self.grid_dim.y),
+            gridDimZ: to_u32(self.grid_dim.z),
+            blockDimX: to_u32(self.block_dim.x),
+            blockDimY: to_u32(self.block_dim.y),
+            blockDimZ: to_u32(self.block_dim.z),
             kernelParams: Box::into_raw(self.params),
             sharedMemBytes: self.shared_mem_bytes,
             extra: ptr::null_mut(),
@@ -109,8 +113,16 @@ impl KernelInvocation {
     pub unsafe fn from_raw(raw: driver_sys::CUDA_KERNEL_NODE_PARAMS) -> Self {
         Self {
             func: raw.func,
-            grid_dim: GridSize::xyz(raw.gridDimX, raw.gridDimY, raw.gridDimZ),
-            block_dim: BlockSize::xyz(raw.blockDimX, raw.gridDimY, raw.gridDimZ),
+            grid_dim: GridSize::xyz(
+                raw.gridDimX as usize,
+                raw.gridDimY as usize,
+                raw.gridDimZ as usize,
+            ),
+            block_dim: BlockSize::xyz(
+                raw.blockDimX as usize,
+                raw.gridDimY as usize,
+                raw.gridDimZ as usize,
+            ),
             params: Box::from_raw(raw.kernelParams),
             shared_mem_bytes: raw.sharedMemBytes,
             params_len: None,

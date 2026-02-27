@@ -13,7 +13,7 @@ pub unsafe fn test_static_shared_memory() {
     #[address_space(shared)]
     static mut SHARED_DATA: [MaybeUninit<i32>; 256] = [MaybeUninit::uninit(); 256];
 
-    let tid = thread::thread_idx_x() as usize;
+    let tid = thread::thread_idx_x();
 
     // Write to shared memory
     unsafe { SHARED_DATA[tid] }.write(tid as i32);
