@@ -140,14 +140,12 @@ pub(crate) unsafe fn codegen(
     unsafe { llvm::LLVMBuildRetVoid(llbuilder) };
     unsafe { llvm::LLVMDisposeBuilder(llbuilder) };
 
-    let ptr_ty = unsafe { llvm::LLVMPointerType(llvm::LLVMInt8TypeInContext(llcx), 0) };
-
     for used in &mut used {
-        *used = unsafe { llvm::LLVMConstBitCast(used, ptr_ty) };
+        *used = unsafe { llvm::LLVMConstBitCast(used, i8p) };
     }
 
     let section = c"llvm.metadata";
-    let array = unsafe { llvm::LLVMConstArray(ptr_ty, used.as_ptr(), used.len() as u32) };
+    let array = unsafe { llvm::LLVMConstArray(i8p, used.as_ptr(), used.len() as u32) };
     let g = unsafe {
         llvm::LLVMAddGlobal(llmod, llvm::LLVMTypeOf(array), c"llvm.used".as_ptr().cast())
     };
