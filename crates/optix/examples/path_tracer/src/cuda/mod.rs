@@ -5,7 +5,9 @@ use imgui::Ui;
 
 use std::time::Duration;
 
-use crate::{common::Camera, optix::OptixRenderer};
+use crate::common::Camera;
+// See the OPTIX_DISABLED comment.
+// use crate::optix::OptixRenderer;
 use anyhow::Result;
 use cust::{
     error::CudaResult,
@@ -15,10 +17,11 @@ use cust::{
     prelude::*,
 };
 use glam::{U8Vec3, USizeVec2};
-use optix::{
-    context::DeviceContext,
-    denoiser::{Denoiser, DenoiserModelKind, Image, ImageFormat},
-};
+// See the OPTIX_DISABLED comment.
+// use optix::{
+//     context::DeviceContext,
+//     denoiser::{Denoiser, DenoiserModelKind, Image, ImageFormat},
+// };
 use path_tracer_kernels::scene::Scene;
 /// Seed for the random states
 pub const SEED: u64 = 932174513921034;
@@ -33,45 +36,51 @@ pub(crate) static PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/kernels.pt
 pub struct CudaRenderer {
     stream: Stream,
     module: Module,
-    denoiser: Denoiser,
-    _optix_context: DeviceContext,
+    // See the OPTIX_DISABLED comment.
+    // denoiser: Denoiser,
+    // _optix_context: DeviceContext,
     _context: Context,
 
     buffers: CudaRendererBuffers,
     cpu_image: Vec<U8Vec3>,
-    optix_renderer: OptixRenderer,
+    // See the OPTIX_DISABLED comment.
+    // optix_renderer: OptixRenderer,
 }
 
 impl CudaRenderer {
     pub fn new(dimensions: USizeVec2, camera: &Camera, scene: &Scene) -> Result<Self> {
         let context = cust::quick_init()?;
-        optix::init().unwrap();
-
-        let mut optix_context = DeviceContext::new(&context, false).unwrap();
+        // See the OPTIX_DISABLED comment.
+        // optix::init().unwrap();
+        // let mut optix_context = DeviceContext::new(&context, false).unwrap();
 
         let module = Module::from_ptx(PTX, &[]).unwrap();
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
-        let mut denoiser =
-            Denoiser::new(&optix_context, DenoiserModelKind::Ldr, Default::default()).unwrap();
 
-        denoiser
-            .setup_state(&stream, dimensions.x as u32, dimensions.y as u32, false)
-            .unwrap();
+        // See the OPTIX_DISABLED comment.
+        // let mut denoiser =
+        //     Denoiser::new(&optix_context, DenoiserModelKind::Ldr, Default::default()).unwrap();
+        // denoiser
+        //     .setup_state(&stream, dimensions.x as u32, dimensions.y as u32, false)
+        //     .unwrap();
 
         let buffers = CudaRendererBuffers::new(dimensions, camera, scene)?;
         let cpu_image = vec![U8Vec3::ZERO; dimensions.element_product()];
 
-        let optix_renderer = OptixRenderer::new(&mut optix_context, &stream, scene)?;
+        // See the OPTIX_DISABLED comment.
+        // let optix_renderer = OptixRenderer::new(&mut optix_context, &stream, scene)?;
 
         Ok(Self {
             _context: context,
-            _optix_context: optix_context,
-            denoiser,
+            // See the OPTIX_DISABLED comment.
+            // _optix_context: optix_context,
+            // denoiser,
             module,
             stream,
             buffers,
             cpu_image,
-            optix_renderer,
+            // See the OPTIX_DISABLED comment.
+            // optix_renderer,
         })
     }
 
@@ -97,9 +106,11 @@ impl CudaRenderer {
         self.cpu_image
             .resize(new_size.element_product(), U8Vec3::ZERO);
 
-        self.denoiser
-            .setup_state(&self.stream, new_size.x as u32, new_size.y as u32, false)
-            .unwrap();
+        // See the OPTIX_DISABLED comment.
+        // self.denoiser
+        //     .setup_state(&self.stream, new_size.x as u32, new_size.y as u32, false)
+        //     .unwrap();
+
         Ok(())
     }
 
@@ -123,8 +134,9 @@ impl CudaRenderer {
         let stream = &self.stream;
 
         let (blocks, threads) = self.launch_dimensions();
-        let width = self.buffers.viewport.bounds.x as u32;
-        let height = self.buffers.viewport.bounds.y as u32;
+        // See the OPTIX_DISABLED comment.
+        // let width = self.buffers.viewport.bounds.x as u32;
+        // let height = self.buffers.viewport.bounds.y as u32;
 
         let start = Event::new(EventFlags::DEFAULT)?;
         let denoising_stop = Event::new(EventFlags::DEFAULT)?;
@@ -144,23 +156,24 @@ impl CudaRenderer {
         }
 
         let input_buf = if denoise {
-            let input_image = Image::new(
-                &self.buffers.scaled_buffer,
-                ImageFormat::Float3,
-                width,
-                height,
-            );
-
-            self.denoiser
-                .invoke(
-                    stream,
-                    Default::default(),
-                    input_image,
-                    Default::default(),
-                    &mut self.buffers.denoised_buffer,
-                )
-                .unwrap();
-
+            // See the OPTIX_DISABLED comment.
+            // let input_image = Image::new(
+            //     &self.buffers.scaled_buffer,
+            //     ImageFormat::Float3,
+            //     width,
+            //     height,
+            // );
+            //
+            // self.denoiser
+            //     .invoke(
+            //         stream,
+            //         Default::default(),
+            //         input_image,
+            //         Default::default(),
+            //         &mut self.buffers.denoised_buffer,
+            //     )
+            //     .unwrap();
+            //
             self.buffers.denoised_buffer.as_device_ptr()
         } else {
             self.buffers.scaled_buffer.as_device_ptr()
@@ -204,7 +217,8 @@ impl CudaRenderer {
         start.record(stream)?;
 
         if use_optix {
-            self.optix_renderer.render(stream, &mut self.buffers)?;
+            // See the OPTIX_DISABLED comment.
+            // self.optix_renderer.render(stream, &mut self.buffers)?;
         } else {
             unsafe {
                 let scene = DeviceBox::new_async(

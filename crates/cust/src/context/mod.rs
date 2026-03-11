@@ -34,7 +34,7 @@
 //! with the [`legacy`] module.
 
 use std::{
-    mem::{self, transmute, MaybeUninit},
+    mem::{self, MaybeUninit, transmute},
     ptr,
 };
 
@@ -45,10 +45,10 @@ pub mod legacy;
 
 use crate::context::legacy::StreamPriorityRange;
 use crate::{
+    CudaApiVersion,
     device::Device,
     error::{CudaResult, DropResult, ToResult},
     private::Sealed,
-    CudaApiVersion,
 };
 
 pub trait ContextHandle: Sealed {
@@ -215,7 +215,7 @@ impl Context {
     /// Nothing else should be using the primary context for this device, otherwise,
     /// spurious errors or segfaults will occur.
     pub unsafe fn reset(device: &Device) -> CudaResult<()> {
-        driver_sys::cuDevicePrimaryCtxReset(device.as_raw()).to_result()
+        unsafe { driver_sys::cuDevicePrimaryCtxReset(device.as_raw()).to_result() }
     }
 
     /// Sets the flags for the device context, these flags will apply to any user of the primary

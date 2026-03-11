@@ -5,19 +5,19 @@
 
 use std::ffi::c_void;
 use std::mem;
-use std::mem::zeroed;
 use std::mem::ManuallyDrop;
 use std::mem::MaybeUninit;
+use std::mem::zeroed;
 use std::os::raw::c_uint;
 use std::panic;
 use std::ptr::null;
 use std::ptr::null_mut;
 
 use cust_raw::driver_sys;
+use cust_raw::driver_sys::CUDA_MEMCPY2D;
 use cust_raw::driver_sys::cuMemcpy2D;
 use cust_raw::driver_sys::cuMemcpyAtoH;
 use cust_raw::driver_sys::cuMemcpyHtoA;
-use cust_raw::driver_sys::CUDA_MEMCPY2D;
 use cust_raw::driver_sys::{CUarray, CUarray_format, CUarray_format_enum};
 
 use crate::context::CurrentContext;

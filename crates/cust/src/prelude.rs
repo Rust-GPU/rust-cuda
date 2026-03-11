@@ -3,6 +3,7 @@
 //! This allows the user to `use cust::prelude::*;` and have the most commonly-used types
 //! available quickly.
 
+pub use crate::CudaFlags;
 pub use crate::context::{Context, ContextFlags};
 pub use crate::device::Device;
 pub use crate::event::{Event, EventFlags, EventStatus};
@@ -15,4 +16,3 @@ pub use crate::memory::{
 pub use crate::module::Module;
 pub use crate::stream::{Stream, StreamFlags};
 pub use crate::util::*;
-pub use crate::CudaFlags;

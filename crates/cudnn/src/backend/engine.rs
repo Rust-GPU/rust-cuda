@@ -1,6 +1,6 @@
 use crate::{
-    backend::{Descriptor, Graph},
     CudnnError, IntoResult,
+    backend::{Descriptor, Graph},
 };
 
 #[derive(Default, Debug, PartialEq)]

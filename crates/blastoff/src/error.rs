@@ -38,8 +38,8 @@ pub trait ToResult {
 
 impl ToResult for cublas_sys::cublasStatus_t {
     fn to_result(self) -> Result<(), CublasError> {
-        use cust_raw::cublas_sys::cublasStatus_t::*;
         use CublasError::*;
+        use cust_raw::cublas_sys::cublasStatus_t::*;
 
         Err(match self {
             CUBLAS_STATUS_SUCCESS => return Ok(()),
@@ -58,8 +58,8 @@ impl ToResult for cublas_sys::cublasStatus_t {
 
 impl CublasError {
     pub fn into_raw(self) -> cublas_sys::cublasStatus_t {
-        use cust_raw::cublas_sys::cublasStatus_t::*;
         use CublasError::*;
+        use cust_raw::cublas_sys::cublasStatus_t::*;
 
         match self {
             NotInitialized => CUBLAS_STATUS_NOT_INITIALIZED,

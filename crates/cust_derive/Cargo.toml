@@ -2,7 +2,7 @@
 name = "cust_derive"
 version = "0.2.0"
 authors = ["Brook Heisler <brookheisler@gmail.com>", "Riccardo D'Ambrosio <rdambrosio016@gmail.com>"]
-edition = "2018"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "Macros for cust"
 repository = "https://github.com/Rust-GPU/rust-cuda"

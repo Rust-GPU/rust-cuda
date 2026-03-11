@@ -1,7 +1,7 @@
 use cust::memory::GpuBuffer;
 
 use crate::{
-    private, CudnnContext, CudnnError, DataType, IntoResult, ScalingDataType, TensorDescriptor,
+    CudnnContext, CudnnError, DataType, IntoResult, ScalingDataType, TensorDescriptor, private,
 };
 
 mod activation_descriptor;

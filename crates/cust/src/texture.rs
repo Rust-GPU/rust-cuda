@@ -1,15 +1,15 @@
-use std::mem::transmute;
 use std::mem::ManuallyDrop;
 use std::mem::MaybeUninit;
+use std::mem::transmute;
 use std::os::raw::c_ulonglong;
 use std::os::raw::{c_float, c_uint};
 use std::ptr;
 
 use cust_raw::driver_sys;
 use cust_raw::driver_sys::{
-    cuTexObjectCreate, cuTexObjectDestroy, cuTexObjectGetResourceDesc,
-    CUDA_RESOURCE_DESC_st__bindgen_ty_1, CUDA_RESOURCE_DESC_st__bindgen_ty_1__bindgen_ty_1,
-    CUresourcetype, CUtexObject, CUDA_RESOURCE_DESC, CUDA_RESOURCE_VIEW_DESC, CUDA_TEXTURE_DESC,
+    CUDA_RESOURCE_DESC, CUDA_RESOURCE_DESC_st__bindgen_ty_1,
+    CUDA_RESOURCE_DESC_st__bindgen_ty_1__bindgen_ty_1, CUDA_RESOURCE_VIEW_DESC, CUDA_TEXTURE_DESC,
+    CUresourcetype, CUtexObject, cuTexObjectCreate, cuTexObjectDestroy, cuTexObjectGetResourceDesc,
 };
 
 use crate::error::CudaResult;
@@ -491,8 +491,10 @@ impl Texture {
     unsafe fn resource_desc(&mut self) -> CudaResult<ManuallyDrop<ResourceDescriptor>> {
         let raw = {
             let mut uninit = MaybeUninit::<CUDA_RESOURCE_DESC>::uninit();
-            cuTexObjectGetResourceDesc(uninit.as_mut_ptr(), self.handle).to_result()?;
-            uninit.assume_init()
+            unsafe {
+                cuTexObjectGetResourceDesc(uninit.as_mut_ptr(), self.handle).to_result()?;
+                uninit.assume_init()
+            }
         };
         Ok(ManuallyDrop::new(ResourceDescriptor::from_raw(raw)))
     }

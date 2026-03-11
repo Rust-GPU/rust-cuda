@@ -15,15 +15,21 @@ pub unsafe fn vec3_basic_ops(
 ) {
     // Vector addition
     let sum = a + b;
-    *result_add = sum;
+    unsafe {
+        *result_add = sum;
+    }
 
     // Dot product
     let dot = a.dot(b);
-    *result_dot = dot;
+    unsafe {
+        *result_dot = dot;
+    }
 
     // Cross product
     let cross = a.cross(b);
-    *result_cross = cross;
+    unsafe {
+        *result_cross = cross;
+    }
 }
 
 #[kernel]
@@ -34,9 +40,13 @@ pub unsafe fn vec3_normalization(
 ) {
     // Get length
     let len = input.length();
-    *result_length = len;
+    unsafe {
+        *result_length = len;
+    }
 
     // Normalize
     let normalized = input.normalize();
-    *result_normalized = normalized;
+    unsafe {
+        *result_normalized = normalized;
+    }
 }

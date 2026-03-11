@@ -1,8 +1,8 @@
 use cust::memory::bytemuck::Contiguous;
 
 use crate::{
-    backend::{Descriptor, MatMulCfg, Operation, Tensor},
     CudnnError, DataType, IntoResult,
+    backend::{Descriptor, MatMulCfg, Operation, Tensor},
 };
 
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]

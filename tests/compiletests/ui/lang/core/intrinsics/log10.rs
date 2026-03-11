@@ -10,5 +10,7 @@ use cuda_std::GpuFloat;
 
 #[kernel]
 pub unsafe fn test_log10(input: *const f32, output: *mut f32) {
-    *output = (*input).log10();
+    unsafe {
+        *output = (*input).log10();
+    }
 }

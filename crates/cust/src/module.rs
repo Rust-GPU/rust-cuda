@@ -1,6 +1,6 @@
 //! Functions and types for working with CUDA modules.
 
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
@@ -63,7 +63,7 @@ pub enum ModuleJitOption {
     /// architecture.
     Fallback(JitFallback),
     /// Generates debug info in the compiled binary.
-    GenenerateDebugInfo(bool),
+    GenerateDebugInfo(bool),
     /// Generates line info in the compiled binary.
     GenerateLineInfo(bool),
 }
@@ -103,13 +103,13 @@ impl ModuleJitOption {
                     raw_opts.push(driver_sys::CUjit_option::CU_JIT_FALLBACK_STRATEGY);
                     raw_vals.push(*fallback as usize as *mut c_void);
                 }
-                Self::GenenerateDebugInfo(gen) => {
+                Self::GenerateDebugInfo(gen_) => {
                     raw_opts.push(driver_sys::CUjit_option::CU_JIT_GENERATE_DEBUG_INFO);
-                    raw_vals.push(*gen as usize as *mut c_void);
+                    raw_vals.push(*gen_ as usize as *mut c_void);
                 }
-                Self::GenerateLineInfo(gen) => {
+                Self::GenerateLineInfo(gen_) => {
                     raw_opts.push(driver_sys::CUjit_option::CU_JIT_GENERATE_LINE_INFO);
-                    raw_vals.push(*gen as usize as *mut c_void)
+                    raw_vals.push(*gen_ as usize as *mut c_void)
                 }
             }
         }
@@ -231,13 +231,15 @@ impl Module {
             inner: ptr::null_mut(),
         };
         let (mut options, mut option_values) = ModuleJitOption::into_raw(options);
-        driver_sys::cuModuleLoadDataEx(
-            &mut module.inner as *mut driver_sys::CUmodule,
-            image,
-            options.len() as c_uint,
-            options.as_mut_ptr(),
-            option_values.as_mut_ptr(),
-        )
+        unsafe {
+            driver_sys::cuModuleLoadDataEx(
+                &mut module.inner as *mut driver_sys::CUmodule,
+                image,
+                options.len() as c_uint,
+                options.as_mut_ptr(),
+                option_values.as_mut_ptr(),
+            )
+        }
         .to_result()?;
         Ok(module)
     }
@@ -336,9 +338,10 @@ impl Module {
 
     /// Get a reference to a global symbol, which can then be copied to/from.
     ///
-    /// # Panics:
+    /// # Panics
     ///
-    /// This function panics if the size of the symbol is not the same as the `mem::sizeof<T>()`.
+    /// This function panics if the size of the symbol is greater than
+    /// `mem::sizeof<T>()`.
     ///
     /// # Examples
     ///
@@ -373,7 +376,7 @@ impl Module {
                 name.as_ptr(),
             )
             .to_result()?;
-            assert_eq!(size, mem::size_of::<T>());
+            assert!(size <= mem::size_of::<T>());
             Ok(Symbol {
                 ptr,
                 module: PhantomData,

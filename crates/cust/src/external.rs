@@ -22,15 +22,17 @@ impl ExternalMemory {
 
         let mut memory: driver_sys::CUexternalMemory = std::ptr::null_mut();
 
-        driver_sys::cuImportExternalMemory(&mut memory, &desc)
-            .to_result()
-            .map(|_| ExternalMemory(memory))
+        unsafe {
+            driver_sys::cuImportExternalMemory(&mut memory, &desc)
+                .to_result()
+                .map(|_| ExternalMemory(memory))
+        }
     }
 
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn reimport(&mut self, fd: i32, size: usize) -> CudaResult<()> {
         // import new memory - this will call drop to destroy the old one
-        *self = ExternalMemory::import(fd, size)?;
+        *self = unsafe { ExternalMemory::import(fd, size)? };
 
         Ok(())
     }

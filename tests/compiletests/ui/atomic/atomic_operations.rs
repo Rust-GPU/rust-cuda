@@ -17,7 +17,7 @@ pub unsafe fn test_cuda_atomic_floats() {
 
     // Block-scoped atomic float
     let block_atomic = BlockAtomicF32::new(1.5);
-    let _old = block_atomic.fetch_add(0.5, Ordering::Relaxed);
+    let _old = unsafe { block_atomic.fetch_add(0.5, Ordering::Relaxed) };
 
     // System-scoped atomic float
     let system_atomic = SystemAtomicF32::new(0.0);
@@ -29,7 +29,7 @@ pub unsafe fn test_cuda_atomic_floats() {
 
     // Test block-scoped f64
     let block_f64 = BlockAtomicF64::new(2.718);
-    let _old = block_f64.fetch_sub(0.5, Ordering::Relaxed);
+    let _old = unsafe { block_f64.fetch_sub(0.5, Ordering::Relaxed) };
 
     // Test bitwise operations on floats
     let _old = atomic_f32.fetch_and(3.14, Ordering::Relaxed);

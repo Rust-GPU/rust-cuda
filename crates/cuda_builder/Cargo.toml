@@ -1,7 +1,7 @@
 [package]
 name = "cuda_builder"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 authors = ["Riccardo D'Ambrosio <rdambrosio016@gmail.com>", "The rust-gpu Authors"]
 license = "MIT OR Apache-2.0"
 description = "Builder for easily building rustc_codegen_nvvm crates"

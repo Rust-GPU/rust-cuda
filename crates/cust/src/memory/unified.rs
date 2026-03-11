@@ -15,8 +15,8 @@ use crate::device::Device;
 #[allow(unused_imports)]
 use crate::device::DeviceAttribute;
 use crate::error::*;
-use crate::memory::malloc::{cuda_free_unified, cuda_malloc_unified};
 use crate::memory::UnifiedPointer;
+use crate::memory::malloc::{cuda_free_unified, cuda_malloc_unified};
 use crate::prelude::Stream;
 
 /// A pointer type for heap-allocation in CUDA unified memory.
@@ -88,7 +88,7 @@ impl<T: DeviceCopy> UnifiedBox<T> {
                 ptr: UnifiedPointer::null(),
             })
         } else {
-            let ptr = cuda_malloc_unified(1)?;
+            let ptr = unsafe { cuda_malloc_unified(1)? };
             Ok(UnifiedBox { ptr })
         }
     }
@@ -117,7 +117,7 @@ impl<T: DeviceCopy> UnifiedBox<T> {
     /// ```
     pub unsafe fn from_raw(ptr: *mut T) -> Self {
         UnifiedBox {
-            ptr: UnifiedPointer::wrap(ptr),
+            ptr: unsafe { UnifiedPointer::wrap(ptr) },
         }
     }
 
@@ -420,9 +420,9 @@ impl<T: DeviceCopy> UnifiedBuffer<T> {
     /// ```
     pub unsafe fn uninitialized(size: usize) -> CudaResult<Self> {
         let ptr = if size > 0 && mem::size_of::<T>() > 0 {
-            cuda_malloc_unified(size)?
+            unsafe { cuda_malloc_unified(size)? }
         } else {
-            UnifiedPointer::wrap(ptr::NonNull::dangling().as_ptr())
+            unsafe { UnifiedPointer::wrap(ptr::NonNull::dangling().as_ptr()) }
         };
         Ok(UnifiedBuffer {
             buf: ptr,

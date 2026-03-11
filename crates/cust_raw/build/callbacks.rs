@@ -35,19 +35,6 @@ impl BindgenCallbacks {
 }
 
 impl ParseCallbacks for BindgenCallbacks {
-    fn process_comment(&self, comment: &str) -> Option<String> {
-        // First replace backslashes with @ to avoid doctest parsing issues
-        let cleaned = comment.replace('\\', "@");
-        // Then transform doxygen syntax to rustdoc
-        match doxygen_bindgen::transform(&cleaned) {
-            Ok(res) => Some(res),
-            Err(err) => {
-                println!("cargo:warning=Problem processing doxygen comment: {comment}\n{err}");
-                None
-            }
-        }
-    }
-
     fn will_parse_macro(&self, name: &str) -> MacroParsingBehavior {
         match self {
             Self::WithFunctionRenames {

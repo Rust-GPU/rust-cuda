@@ -4,8 +4,8 @@ use std::{
 };
 
 use cust_raw::driver_sys::{
-    cuSurfObjectCreate, cuSurfObjectDestroy, cuSurfObjectGetResourceDesc, CUsurfObject,
-    CUDA_RESOURCE_DESC,
+    CUDA_RESOURCE_DESC, CUsurfObject, cuSurfObjectCreate, cuSurfObjectDestroy,
+    cuSurfObjectGetResourceDesc,
 };
 
 use crate::{
@@ -75,8 +75,10 @@ impl Surface {
     unsafe fn resource_desc(&mut self) -> CudaResult<ManuallyDrop<ResourceDescriptor>> {
         let raw = {
             let mut uninit = MaybeUninit::<CUDA_RESOURCE_DESC>::uninit();
-            cuSurfObjectGetResourceDesc(uninit.as_mut_ptr(), self.handle).to_result()?;
-            uninit.assume_init()
+            unsafe {
+                cuSurfObjectGetResourceDesc(uninit.as_mut_ptr(), self.handle).to_result()?;
+                uninit.assume_init()
+            }
         };
         Ok(ManuallyDrop::new(ResourceDescriptor::from_raw(raw)))
     }

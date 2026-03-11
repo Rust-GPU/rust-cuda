@@ -1,7 +1,7 @@
 //! Functions and types for working with CUDA kernels.
 
 use std::marker::PhantomData;
-use std::mem::{transmute, MaybeUninit};
+use std::mem::{MaybeUninit, transmute};
 
 use cust_raw::driver_sys;
 use cust_raw::driver_sys::CUfunction;
@@ -474,7 +474,7 @@ impl Function<'_> {
 
 /// Launch a kernel function asynchronously.
 ///
-/// # Syntax:
+/// # Syntax
 ///
 /// The format of this macro is designed to resemble the triple-chevron syntax used to launch
 /// kernels in CUDA C. There are two forms available:

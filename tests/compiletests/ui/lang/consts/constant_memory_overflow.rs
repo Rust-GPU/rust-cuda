@@ -17,5 +17,5 @@ static BIG_ARRAY_3: [u32; ARRAY_SIZE] = [333u32; ARRAY_SIZE];
 
 #[kernel]
 pub unsafe fn test_kernel(out: *mut u32) {
-    *out = BIG_ARRAY_1[0] + BIG_ARRAY_2[0] + BIG_ARRAY_3[0];
+    unsafe { *out = BIG_ARRAY_1[0] + BIG_ARRAY_2[0] + BIG_ARRAY_3[0] };
 }

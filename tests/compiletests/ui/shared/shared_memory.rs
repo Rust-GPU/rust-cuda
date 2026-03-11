@@ -16,13 +16,13 @@ pub unsafe fn test_static_shared_memory() {
     let tid = thread::thread_idx_x() as usize;
 
     // Write to shared memory
-    SHARED_DATA[tid].write(tid as i32);
+    unsafe { SHARED_DATA[tid] }.write(tid as i32);
 
     // Synchronize threads before reading
     thread::sync_threads();
 
     // Read from shared memory
-    let _value = SHARED_DATA[tid].assume_init();
+    let _value = unsafe { SHARED_DATA[tid].assume_init() };
 }
 
 #[kernel]

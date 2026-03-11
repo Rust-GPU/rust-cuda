@@ -69,7 +69,7 @@ use cuda_std_macros::gpu_only;
 use glam::{UVec2, UVec3};
 
 // different calling conventions dont exist in nvptx, so we just use C as a placeholder.
-extern "C" {
+unsafe extern "C" {
     // defined in libintrinsics.ll
     fn __nvvm_warp_size() -> u32;
 
@@ -286,7 +286,7 @@ pub fn sync_threads() {
 #[gpu_only]
 #[inline(always)]
 pub fn sync_threads_count(predicate: u32) -> u32 {
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "llvm.nvvm.barrier0.popc"]
         fn __nvvm_sync_threads_count(predicate: u32) -> u32;
     }
@@ -299,7 +299,7 @@ pub fn sync_threads_count(predicate: u32) -> u32 {
 #[gpu_only]
 #[inline(always)]
 pub fn sync_threads_and(predicate: u32) -> u32 {
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "llvm.nvvm.barrier0.and"]
         fn __nvvm_sync_threads_and(predicate: u32) -> u32;
     }
@@ -313,7 +313,7 @@ pub fn sync_threads_and(predicate: u32) -> u32 {
 #[gpu_only]
 #[inline(always)]
 pub fn sync_threads_or(predicate: u32) -> u32 {
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "llvm.nvvm.barrier0.or"]
         fn __nvvm_sync_threads_or(predicate: u32) -> u32;
     }

@@ -33,8 +33,10 @@ which I will add to the project soon.
 ## Miscompilations 
 
 Miscompilations are rare but annoying. They usually result in one of two things happening:
-- CUDA rejecting the PTX as a whole (throwing an InvalidPtx error). This is rare but the most common cause is declaring invalid
-extern functions (just grep for `extern` in the PTX file and check if it's odd functions that aren't CUDA syscalls like vprintf, malloc, free, etc).
+- CUDA rejecting the PTX as a whole (throwing an `InvalidPtx` error). Run `ptxas` on the `.ptx`
+  file to get a more informative error message. This is rare but the most common cause is declaring
+  invalid extern functions (just grep for `extern` in the PTX file and check if it's odd functions
+  that aren't CUDA syscalls like vprintf, malloc, free, etc).
 - The PTX containing invalid behavior. This is very specific and rare but if you find this, the best way to debug it is:
   - Try to get a minimal working example so we don't have to search through megabytes of LLVM IR/PTX.
   - Use `RUSTFLAGS="--emit=llvm-ir"` and find `crate_name.ll` in `target/nvptx64-nvidia-cuda/<debug/release>/deps/` and attach it in any bug report.
@@ -51,4 +53,4 @@ If you set up the codegen backend for debug, it should give you a mapping from R
 
 Here is an example of the screen you should see:
 
-![](../../../assets/nsight.png)
+![](../../assets/nsight.png)

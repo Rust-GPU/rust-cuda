@@ -1,6 +1,6 @@
 use crate::error::*;
-use crate::memory::malloc::{cuda_free_locked, cuda_malloc_locked};
 use crate::memory::DeviceCopy;
+use crate::memory::malloc::{cuda_free_locked, cuda_malloc_locked};
 use std::mem;
 use std::ops;
 use std::ptr;
@@ -98,7 +98,7 @@ impl<T: DeviceCopy> LockedBuffer<T> {
     /// ```
     pub unsafe fn uninitialized(size: usize) -> CudaResult<Self> {
         let ptr: *mut T = if size > 0 && mem::size_of::<T>() > 0 {
-            cuda_malloc_locked(size)?
+            unsafe { cuda_malloc_locked(size)? }
         } else {
             ptr::NonNull::dangling().as_ptr()
         };

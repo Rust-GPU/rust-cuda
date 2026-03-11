@@ -125,7 +125,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 
     // // crate::println!("{}", msg);
 
-    extern "C" {
+    unsafe extern "C" {
         fn __nvvm_trap() -> !;
     }
 

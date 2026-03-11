@@ -1,4 +1,4 @@
-use crate::{hittable::HitRecord, math::*, Ray, Vec3};
+use crate::{Ray, Vec3, hittable::HitRecord, math::*};
 use approx::{AbsDiffEq, RelativeEq};
 use cust_core::DeviceCopy;
 use enum_dispatch::enum_dispatch;
@@ -90,16 +90,16 @@ impl Material for DielectricMaterial {
             cos = -incoming.dir.dot(hit.normal) / incoming.dir.length();
         }
 
-        if let Some(refracted) = refract(incoming.dir, outward_norm, ni_over_nt) {
-            if rng.normal_f32() > schlick(cos, self.ior) {
-                return (
-                    self.color,
-                    Some(Ray {
-                        origin: hit.point,
-                        dir: refracted,
-                    }),
-                );
-            }
+        if let Some(refracted) = refract(incoming.dir, outward_norm, ni_over_nt)
+            && rng.normal_f32() > schlick(cos, self.ior)
+        {
+            return (
+                self.color,
+                Some(Ray {
+                    origin: hit.point,
+                    dir: refracted,
+                }),
+            );
         }
 
         (

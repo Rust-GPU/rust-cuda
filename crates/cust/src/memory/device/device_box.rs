@@ -5,11 +5,11 @@ use std::os::raw::c_void;
 use cust_raw::driver_sys;
 
 use crate::error::{CudaResult, DropResult, ToResult};
+use crate::memory::DevicePointer;
 use crate::memory::device::AsyncCopyDestination;
 use crate::memory::device::CopyDestination;
 use crate::memory::malloc::{cuda_free, cuda_malloc};
-use crate::memory::DevicePointer;
-use crate::memory::{cuda_free_async, cuda_malloc_async, DeviceCopy};
+use crate::memory::{DeviceCopy, cuda_free_async, cuda_malloc_async};
 use crate::stream::Stream;
 
 /// A pointer type for heap-allocation in CUDA device memory.
@@ -86,9 +86,11 @@ impl<T: DeviceCopy> DeviceBox<T> {
     /// # Ok(())
     /// # }
     pub unsafe fn new_async(val: &T, stream: &Stream) -> CudaResult<Self> {
-        let mut dev_box = DeviceBox::uninitialized_async(stream)?;
-        dev_box.async_copy_from(val, stream)?;
-        Ok(dev_box)
+        unsafe {
+            let mut dev_box = DeviceBox::uninitialized_async(stream)?;
+            dev_box.async_copy_from(val, stream)?;
+            Ok(dev_box)
+        }
     }
 
     /// Enqueues an operation to free the memory backed by this [`DeviceBox`] on a
@@ -204,14 +206,16 @@ impl<T: DeviceCopy + bytemuck::Zeroable> DeviceBox<T> {
     /// ```
     #[cfg_attr(docsrs, doc(cfg(feature = "bytemuck")))]
     pub unsafe fn zeroed_async(stream: &Stream) -> CudaResult<Self> {
-        let new_box = DeviceBox::uninitialized_async(stream)?;
+        let new_box = unsafe { DeviceBox::uninitialized_async(stream)? };
         if mem::size_of::<T>() != 0 {
-            driver_sys::cuMemsetD8Async(
-                new_box.as_device_ptr().as_raw(),
-                0,
-                mem::size_of::<T>(),
-                stream.as_inner(),
-            )
+            unsafe {
+                driver_sys::cuMemsetD8Async(
+                    new_box.as_device_ptr().as_raw(),
+                    0,
+                    mem::size_of::<T>(),
+                    stream.as_inner(),
+                )
+            }
             .to_result()?;
         }
         Ok(new_box)
@@ -243,7 +247,7 @@ impl<T: DeviceCopy> DeviceBox<T> {
                 ptr: DevicePointer::null(),
             })
         } else {
-            let ptr = cuda_malloc(1)?;
+            let ptr = unsafe { cuda_malloc(1)? };
             Ok(DeviceBox { ptr })
         }
     }
@@ -266,7 +270,7 @@ impl<T: DeviceCopy> DeviceBox<T> {
                 ptr: DevicePointer::null(),
             })
         } else {
-            let ptr = cuda_malloc_async(stream, 1)?;
+            let ptr = unsafe { cuda_malloc_async(stream, 1)? };
             Ok(DeviceBox { ptr })
         }
     }
@@ -473,12 +477,14 @@ impl<T: DeviceCopy> AsyncCopyDestination<T> for DeviceBox<T> {
     unsafe fn async_copy_from(&mut self, val: &T, stream: &Stream) -> CudaResult<()> {
         let size = mem::size_of::<T>();
         if size != 0 {
-            driver_sys::cuMemcpyHtoDAsync(
-                self.ptr.as_raw(),
-                val as *const _ as *const c_void,
-                size,
-                stream.as_inner(),
-            )
+            unsafe {
+                driver_sys::cuMemcpyHtoDAsync(
+                    self.ptr.as_raw(),
+                    val as *const _ as *const c_void,
+                    size,
+                    stream.as_inner(),
+                )
+            }
             .to_result()?
         }
         Ok(())
@@ -487,12 +493,14 @@ impl<T: DeviceCopy> AsyncCopyDestination<T> for DeviceBox<T> {
     unsafe fn async_copy_to(&self, val: &mut T, stream: &Stream) -> CudaResult<()> {
         let size = mem::size_of::<T>();
         if size != 0 {
-            driver_sys::cuMemcpyDtoHAsync(
-                val as *mut _ as *mut c_void,
-                self.ptr.as_raw(),
-                size,
-                stream.as_inner(),
-            )
+            unsafe {
+                driver_sys::cuMemcpyDtoHAsync(
+                    val as *mut _ as *mut c_void,
+                    self.ptr.as_raw(),
+                    size,
+                    stream.as_inner(),
+                )
+            }
             .to_result()?
         }
         Ok(())
@@ -502,12 +510,14 @@ impl<T: DeviceCopy> AsyncCopyDestination<DeviceBox<T>> for DeviceBox<T> {
     unsafe fn async_copy_from(&mut self, val: &DeviceBox<T>, stream: &Stream) -> CudaResult<()> {
         let size = mem::size_of::<T>();
         if size != 0 {
-            driver_sys::cuMemcpyDtoDAsync(
-                self.ptr.as_raw(),
-                val.ptr.as_raw(),
-                size,
-                stream.as_inner(),
-            )
+            unsafe {
+                driver_sys::cuMemcpyDtoDAsync(
+                    self.ptr.as_raw(),
+                    val.ptr.as_raw(),
+                    size,
+                    stream.as_inner(),
+                )
+            }
             .to_result()?
         }
         Ok(())
@@ -516,12 +526,14 @@ impl<T: DeviceCopy> AsyncCopyDestination<DeviceBox<T>> for DeviceBox<T> {
     unsafe fn async_copy_to(&self, val: &mut DeviceBox<T>, stream: &Stream) -> CudaResult<()> {
         let size = mem::size_of::<T>();
         if size != 0 {
-            driver_sys::cuMemcpyDtoDAsync(
-                val.ptr.as_raw(),
-                self.ptr.as_raw(),
-                size,
-                stream.as_inner(),
-            )
+            unsafe {
+                driver_sys::cuMemcpyDtoDAsync(
+                    val.ptr.as_raw(),
+                    self.ptr.as_raw(),
+                    size,
+                    stream.as_inner(),
+                )
+            }
             .to_result()?
         }
         Ok(())

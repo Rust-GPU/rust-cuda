@@ -4,7 +4,7 @@ use glam::{U8Vec3, USizeVec2, UVec2, Vec2, Vec3};
 use gpu_rand::{DefaultRand, GpuRand};
 use imgui::Ui;
 use path_tracer_kernels::{
-    material::MaterialKind, render::generate_ray, scene::Scene, Object, Viewport,
+    Object, Viewport, material::MaterialKind, render::generate_ray, scene::Scene,
 };
 use rayon::prelude::*;
 use sysinfo::System;

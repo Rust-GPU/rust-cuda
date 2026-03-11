@@ -1,8 +1,8 @@
 use crate::{
     error::CudaResult,
     memory::{
-        array::{ArrayObject, ArrayPrimitive},
         DeviceBox, DeviceCopy, UnifiedBuffer,
+        array::{ArrayObject, ArrayPrimitive},
     },
     prelude::DeviceBuffer,
     surface::Surface,

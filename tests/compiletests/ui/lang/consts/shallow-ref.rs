@@ -20,7 +20,9 @@ pub unsafe fn test_shallow_ref(
     bool_out: *mut u32,
     vec_out: *mut Vec2,
 ) {
-    *scalar_out = scalar_load(&123);
-    *bool_out = (vec_in == Vec2::ZERO) as u32;
-    *vec_out = ROT90.transpose() * vec_in;
+    unsafe {
+        *scalar_out = scalar_load(&123);
+        *bool_out = (vec_in == Vec2::ZERO) as u32;
+        *vec_out = ROT90.transpose() * vec_in;
+    }
 }

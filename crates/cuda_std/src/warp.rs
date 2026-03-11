@@ -21,12 +21,14 @@ use half::{bf16, f16};
 #[gpu_only]
 #[inline(always)]
 pub unsafe fn sync_warp(mask: u32) {
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "llvm.nvvm.bar.warp.sync"]
         fn sync(mask: u32);
     }
 
-    sync(mask);
+    unsafe {
+        sync(mask);
+    }
 }
 
 /// Returns the thread's lane within its warp. This value ranges from `0` to `WARP_SIZE - 1` (`WARP_SIZE` is 32 on all
@@ -72,7 +74,7 @@ pub fn activemask() -> u32 {
 #[gpu_only]
 #[inline(always)]
 pub unsafe fn warp_reduce<T: WarpReduceValue>(mask: u32, value: T, op: WarpReductionOp) -> T {
-    T::reduce(mask, value, op)
+    unsafe { T::reduce(mask, value, op) }
 }
 
 /// The type of operation to apply in a warp reduction.
@@ -98,7 +100,7 @@ macro_rules! impl_reduce {
             paste::paste! {
                 impl WarpReduceValue for $type {
                     unsafe fn reduce(mask: u32, value: Self, op: WarpReductionOp) -> Self {
-                        [<warp_reduce_ $type>](mask, value, op)
+                        unsafe { [<warp_reduce_ $type>](mask, value, op) }
                     }
                 }
             }
@@ -114,32 +116,34 @@ impl_reduce! {
 #[gpu_only]
 unsafe fn warp_reduce_32(mask: u32, value: u32, op: WarpReductionOp) -> u32 {
     let out;
-    match op {
-        WarpReductionOp::And => {
-            asm!(
-                "redux.sync.and.b32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
+    unsafe {
+        match op {
+            WarpReductionOp::And => {
+                asm!(
+                    "redux.sync.and.b32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            WarpReductionOp::Or => {
+                asm!(
+                    "redux.sync.or.b32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            WarpReductionOp::Xor => {
+                asm!(
+                    "redux.sync.xor.b32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            _ => unreachable!(),
         }
-        WarpReductionOp::Or => {
-            asm!(
-                "redux.sync.or.b32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
-        }
-        WarpReductionOp::Xor => {
-            asm!(
-                "redux.sync.xor.b32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
-        }
-        _ => unreachable!(),
     }
     out
 }
@@ -147,32 +151,34 @@ unsafe fn warp_reduce_32(mask: u32, value: u32, op: WarpReductionOp) -> u32 {
 #[gpu_only]
 unsafe fn warp_reduce_u32(mask: u32, value: u32, op: WarpReductionOp) -> u32 {
     let out;
-    match op {
-        WarpReductionOp::Add => {
-            asm!(
-                "redux.sync.add.u32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
+    unsafe {
+        match op {
+            WarpReductionOp::Add => {
+                asm!(
+                    "redux.sync.add.u32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            WarpReductionOp::Min => {
+                asm!(
+                    "redux.sync.min.u32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            WarpReductionOp::Max => {
+                asm!(
+                    "redux.sync.max.u32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            _ => out = warp_reduce_32(mask, value, op),
         }
-        WarpReductionOp::Min => {
-            asm!(
-                "redux.sync.min.u32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
-        }
-        WarpReductionOp::Max => {
-            asm!(
-                "redux.sync.max.u32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
-        }
-        _ => out = warp_reduce_32(mask, value, op),
     }
     out
 }
@@ -180,32 +186,34 @@ unsafe fn warp_reduce_u32(mask: u32, value: u32, op: WarpReductionOp) -> u32 {
 #[gpu_only]
 unsafe fn warp_reduce_i32(mask: u32, value: i32, op: WarpReductionOp) -> i32 {
     let out;
-    match op {
-        WarpReductionOp::Add => {
-            asm!(
-                "redux.sync.add.s32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
+    unsafe {
+        match op {
+            WarpReductionOp::Add => {
+                asm!(
+                    "redux.sync.add.s32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            WarpReductionOp::Min => {
+                asm!(
+                    "redux.sync.min.s32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            WarpReductionOp::Max => {
+                asm!(
+                    "redux.sync.max.s32 {}, {}, {};",
+                    out(reg32) out,
+                    in(reg32) value,
+                    in(reg32) mask
+                );
+            }
+            _ => out = warp_reduce_32(mask, value as u32, op) as i32,
         }
-        WarpReductionOp::Min => {
-            asm!(
-                "redux.sync.min.s32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
-        }
-        WarpReductionOp::Max => {
-            asm!(
-                "redux.sync.max.s32 {}, {}, {};",
-                out(reg32) out,
-                in(reg32) value,
-                in(reg32) mask
-            );
-        }
-        _ => out = warp_reduce_32(mask, value as u32, op) as i32,
     }
     out
 }
@@ -225,7 +233,7 @@ unsafe fn warp_reduce_i32(mask: u32, value: i32, op: WarpReductionOp) -> i32 {
 #[gpu_only]
 #[inline(always)]
 pub unsafe fn warp_match_any<T: WarpMatchValue>(mask: u32, value: T) -> u32 {
-    T::match_any(mask, value)
+    unsafe { T::match_any(mask, value) }
 }
 
 /// Synchronizes threads in a warp and performs a broadcast-and-compare operation between them.
@@ -243,7 +251,7 @@ pub unsafe fn warp_match_any<T: WarpMatchValue>(mask: u32, value: T) -> u32 {
 #[gpu_only]
 #[inline(always)]
 pub unsafe fn warp_match_all<T: WarpMatchValue>(mask: u32, value: T) -> Option<u32> {
-    T::match_all(mask, value)
+    unsafe { T::match_all(mask, value) }
 }
 
 /// A value that can be used inside of a warp match.
@@ -260,10 +268,10 @@ macro_rules! impl_match {
             paste::paste! {
                 impl WarpMatchValue for $type {
                     unsafe fn match_any(mask: u32, value: Self) -> u32 {
-                        [<match_any_ $width>](mask, value as [<u $width>])
+                        unsafe { [<match_any_ $width>](mask, value as [<u $width>]) }
                     }
                     unsafe fn match_all(mask: u32, value: Self) -> Option<u32> {
-                        let (val, pred) = [<match_all_ $width>](mask, value as [<u $width>]);
+                        let (val, pred) = unsafe { [<match_all_ $width>](mask, value as [<u $width>]) };
                         pred.then(|| val)
                     }
                 }
@@ -284,41 +292,41 @@ impl_match! {
 #[gpu_only]
 #[inline(always)]
 unsafe fn match_any_32(mask: u32, value: u32) -> u32 {
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "llvm.nvvm.match.any.sync.i32"]
         fn __nvvm_warp_match_any_32(mask: u32, value: u32) -> u32;
     }
-    __nvvm_warp_match_any_32(mask, value)
+    unsafe { __nvvm_warp_match_any_32(mask, value) }
 }
 
 #[gpu_only]
 #[inline(always)]
 unsafe fn match_any_64(mask: u32, value: u64) -> u32 {
-    extern "C" {
+    unsafe extern "C" {
         #[link_name = "llvm.nvvm.match.any.sync.i64"]
         fn __nvvm_warp_match_any_64(mask: u32, value: u64) -> u32;
     }
-    __nvvm_warp_match_any_64(mask, value)
+    unsafe { __nvvm_warp_match_any_64(mask, value) }
 }
 
 #[gpu_only]
 #[inline(always)]
 unsafe fn match_all_32(mask: u32, value: u32) -> (u32, bool) {
-    extern "C" {
+    unsafe extern "C" {
         #[allow(improper_ctypes)]
         fn __nvvm_warp_match_all_32(mask: u32, value: u32) -> (u32, bool);
     }
-    __nvvm_warp_match_all_32(mask, value)
+    unsafe { __nvvm_warp_match_all_32(mask, value) }
 }
 
 #[gpu_only]
 #[inline(always)]
 unsafe fn match_all_64(mask: u32, value: u64) -> (u32, bool) {
-    extern "C" {
+    unsafe extern "C" {
         #[allow(improper_ctypes)]
         fn __nvvm_warp_match_all_64(mask: u32, value: u64) -> (u32, bool);
     }
-    __nvvm_warp_match_all_64(mask, value)
+    unsafe { __nvvm_warp_match_all_64(mask, value) }
 }
 
 /// Synchronizes a subset of threads in a warp then performs a reduce-and-broadcast
@@ -337,19 +345,19 @@ unsafe fn match_all_64(mask: u32, value: u64) -> (u32, bool) {
 #[gpu_only]
 pub unsafe fn warp_vote_all(mask: u32, predicate: bool) -> bool {
     let mut out: u32;
-
-    asm!(
-        "{{",
-        ".reg .pred %p<3>;",
-        "setp.eq.u32 %p1, {}, 1;",
-        "vote.sync.all.pred %p2, %p1, {};",
-        "selp.u32 {}, 0, 1, %p2;",
-        "}}",
-        in(reg32) predicate as u32,
-        in(reg32) mask,
-        out(reg32) out
-    );
-
+    unsafe {
+        asm!(
+            "{{",
+            ".reg .pred %p<3>;",
+            "setp.eq.u32 %p1, {}, 1;",
+            "vote.sync.all.pred %p2, %p1, {};",
+            "selp.u32 {}, 1, 0, %p2;",
+            "}}",
+            in(reg32) predicate as u32,
+            in(reg32) mask,
+            out(reg32) out
+        );
+    }
     out != 0
 }
 
@@ -369,19 +377,19 @@ pub unsafe fn warp_vote_all(mask: u32, predicate: bool) -> bool {
 #[gpu_only]
 pub unsafe fn warp_vote_any(mask: u32, predicate: bool) -> bool {
     let mut out: u32;
-
-    asm!(
-        "{{",
-        ".reg .pred %p<3>;",
-        "setp.eq.u32 %p1, {}, 1;",
-        "vote.sync.any.pred %p2, %p1, {};",
-        "selp.u32 {}, 0, 1, %p2;",
-        "}}",
-        in(reg32) predicate as u32,
-        in(reg32) mask,
-        out(reg32) out
-    );
-
+    unsafe {
+        asm!(
+            "{{",
+            ".reg .pred %p<3>;",
+            "setp.eq.u32 %p1, {}, 1;",
+            "vote.sync.any.pred %p2, %p1, {};",
+            "selp.u32 {}, 1, 0, %p2;",
+            "}}",
+            in(reg32) predicate as u32,
+            in(reg32) mask,
+            out(reg32) out
+        );
+    }
     out != 0
 }
 
@@ -402,18 +410,18 @@ pub unsafe fn warp_vote_any(mask: u32, predicate: bool) -> bool {
 #[gpu_only]
 pub unsafe fn warp_vote_ballot(mask: u32, predicate: bool) -> u32 {
     let mut out: u32;
-
-    asm!(
-        "{{",
-        ".reg .pred %p1;",
-        "setp.eq.u32 %p1, {}, 1;",
-        "vote.sync.ballot.b32 {}, %p1, {};",
-        "}}",
-        in(reg32) predicate as u32,
-        out(reg32) out,
-        in(reg32) mask,
-    );
-
+    unsafe {
+        asm!(
+            "{{",
+            ".reg .pred %p1;",
+            "setp.eq.u32 %p1, {}, 1;",
+            "vote.sync.ballot.b32 {}, %p1, {};",
+            "}}",
+            in(reg32) predicate as u32,
+            out(reg32) out,
+            in(reg32) mask,
+        );
+    }
     out
 }
 
@@ -465,7 +473,7 @@ pub unsafe fn warp_shuffle_down<T: WarpShuffleValue>(
     delta: u32,
     width: u32,
 ) -> (T, bool) {
-    T::shuffle(WarpShuffleMode::Down, mask, value, delta, width)
+    unsafe { T::shuffle(WarpShuffleMode::Down, mask, value, delta, width) }
 }
 
 /// Waits for threads in a warp to reach this point and shuffles a value across the
@@ -516,7 +524,7 @@ pub unsafe fn warp_shuffle_up<T: WarpShuffleValue>(
     delta: u32,
     width: u32,
 ) -> (T, bool) {
-    T::shuffle(WarpShuffleMode::Up, mask, value, delta, width)
+    unsafe { T::shuffle(WarpShuffleMode::Up, mask, value, delta, width) }
 }
 
 /// Waits for threads in a warp to reach this point and shuffles a value across the
@@ -568,7 +576,7 @@ pub unsafe fn warp_shuffle_idx<T: WarpShuffleValue>(
     idx: u32,
     width: u32,
 ) -> (T, bool) {
-    T::shuffle(WarpShuffleMode::Idx, mask, value, idx, width)
+    unsafe { T::shuffle(WarpShuffleMode::Idx, mask, value, idx, width) }
 }
 
 /// Waits for threads in a warp to reach this point and shuffles a value across the
@@ -619,7 +627,7 @@ pub unsafe fn warp_shuffle_xor<T: WarpShuffleValue>(
     lane_mask: u32,
     width: u32,
 ) -> (T, bool) {
-    T::shuffle(WarpShuffleMode::Xor, mask, value, lane_mask, width)
+    unsafe { T::shuffle(WarpShuffleMode::Xor, mask, value, lane_mask, width) }
 }
 
 /// A value that can be used in a warp shuffle
@@ -647,7 +655,7 @@ macro_rules! impl_shuffle {
                         b: u32,
                         width: u32,
                     ) -> (Self, bool) {
-                        let (res, oob) = [<warp_shuffle_ $width>](mode, mask, value as [<u $width>], b, width);
+                        let (res, oob) = unsafe { [<warp_shuffle_ $width>](mode, mask, value as [<u $width>], b, width) };
                         (res as $type, oob)
                     }
                 }
@@ -679,7 +687,7 @@ impl WarpShuffleValue for f32 {
         b: u32,
         width: u32,
     ) -> (Self, bool) {
-        let (res, oob) = warp_shuffle_32(mode, mask, value.to_bits(), b, width);
+        let (res, oob) = unsafe { warp_shuffle_32(mode, mask, value.to_bits(), b, width) };
         (f32::from_bits(res), oob)
     }
 }
@@ -692,7 +700,7 @@ impl WarpShuffleValue for f64 {
         b: u32,
         width: u32,
     ) -> (Self, bool) {
-        let (res, oob) = warp_shuffle_64(mode, mask, value.to_bits(), b, width);
+        let (res, oob) = unsafe { warp_shuffle_64(mode, mask, value.to_bits(), b, width) };
         (f64::from_bits(res), oob)
     }
 }
@@ -705,7 +713,7 @@ impl WarpShuffleValue for f16 {
         b: u32,
         width: u32,
     ) -> (Self, bool) {
-        let (res, oob) = warp_shuffle_16(mode, mask, value.to_bits(), b, width);
+        let (res, oob) = unsafe { warp_shuffle_16(mode, mask, value.to_bits(), b, width) };
         (f16::from_bits(res), oob)
     }
 }
@@ -718,7 +726,7 @@ impl WarpShuffleValue for bf16 {
         b: u32,
         width: u32,
     ) -> (Self, bool) {
-        let (res, oob) = warp_shuffle_16(mode, mask, value.to_bits(), b, width);
+        let (res, oob) = unsafe { warp_shuffle_16(mode, mask, value.to_bits(), b, width) };
         (bf16::from_bits(res), oob)
     }
 }
@@ -727,10 +735,10 @@ impl WarpShuffleValue for bf16 {
 #[repr(u32)]
 #[derive(Clone, Copy)]
 pub enum WarpShuffleMode {
-    Up,
-    Down,
-    Idx,
-    Xor,
+    Idx = 0,
+    Up = 1,
+    Down = 2,
+    Xor = 3,
 }
 
 // C-compatible struct to match LLVM IR's {i32, i8} return type
@@ -751,7 +759,7 @@ unsafe fn warp_shuffle_32(
     b: u32,
     width: u32,
 ) -> (u32, bool) {
-    extern "C" {
+    unsafe extern "C" {
         // see libintrinsics.ll
         // Returns {i32, i8} in LLVM IR, which maps to our WarpShuffleResult struct
         fn __nvvm_warp_shuffle(mask: u32, mode: u32, a: u32, b: u32, c: u32) -> WarpShuffleResult;
@@ -767,7 +775,7 @@ unsafe fn warp_shuffle_32(
     c |= 0b11111;
     c |= (32 - width) << 8;
 
-    let result = __nvvm_warp_shuffle(mask, mode as u32, value, b, c);
+    let result = unsafe { __nvvm_warp_shuffle(mask, mode as u32, value, b, c) };
     (result.value, result.predicate != 0)
 }
 
@@ -782,8 +790,8 @@ unsafe fn warp_shuffle_128(
     let second_half = (value >> 64) as u64;
     // shuffle the first and second half of the value then recombine them
     // this will perform 4 shuffles in total (4 32-bit shuffles)
-    let (new_first_half, oob) = warp_shuffle_64(mode, mask, first_half, b, width);
-    let (new_second_half, _) = warp_shuffle_64(mode, mask, second_half, b, width);
+    let (new_first_half, oob) = unsafe { warp_shuffle_64(mode, mask, first_half, b, width) };
+    let (new_second_half, _) = unsafe { warp_shuffle_64(mode, mask, second_half, b, width) };
     (
         ((new_second_half as u128) << 64) | (new_first_half as u128),
         oob,
@@ -800,8 +808,8 @@ unsafe fn warp_shuffle_64(
     let first_half = value as u32;
     let second_half = (value >> 32) as u32;
     // shuffle the first and second half of the value then recombine them
-    let (new_first_half, oob) = warp_shuffle_32(mode, mask, first_half, b, width);
-    let (new_second_half, _) = warp_shuffle_32(mode, mask, second_half, b, width);
+    let (new_first_half, oob) = unsafe { warp_shuffle_32(mode, mask, first_half, b, width) };
+    let (new_second_half, _) = unsafe { warp_shuffle_32(mode, mask, second_half, b, width) };
     (
         ((new_second_half as u64) << 32) | (new_first_half as u64),
         oob,
@@ -815,7 +823,7 @@ unsafe fn warp_shuffle_16(
     b: u32,
     width: u32,
 ) -> (u16, bool) {
-    let (value, oob) = warp_shuffle_32(mode, mask, value as u32, b, width);
+    let (value, oob) = unsafe { warp_shuffle_32(mode, mask, value as u32, b, width) };
     ((value as u16), oob)
 }
 
@@ -826,6 +834,6 @@ unsafe fn warp_shuffle_8(
     b: u32,
     width: u32,
 ) -> (u8, bool) {
-    let (value, oob) = warp_shuffle_32(mode, mask, value as u32, b, width);
+    let (value, oob) = unsafe { warp_shuffle_32(mode, mask, value as u32, b, width) };
     ((value as u8), oob)
 }

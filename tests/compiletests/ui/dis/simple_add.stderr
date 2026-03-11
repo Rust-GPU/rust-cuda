@@ -19,17 +19,17 @@ $L__tmp0:
     cvta.to.global.u64     %rd4, %rd3;
     cvta.to.global.u64     %rd5, %rd2;
     cvta.to.global.u64     %rd6, %rd1;
-    .loc    1 10 15
+    .loc    1 11 19
     ld.global.f32     %f1, [%rd6];
-    .loc    1 10 20
+    .loc    1 11 24
     ld.global.f32     %f2, [%rd5];
-    .loc    1 10 15
+    .loc    1 11 19
     add.f32     %f3, %f1, %f2;
 $L__tmp1:
-    .loc    1 11 5
+    .loc    1 12 9
     st.global.f32     [%rd4], %f3;
 $L__tmp2:
-    .loc    1 12 2
+    .loc    1 14 2
     ret;
 $L__tmp3:
 $L__func_end0:

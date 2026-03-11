@@ -6,5 +6,7 @@ use cuda_std::kernel;
 #[kernel]
 pub unsafe fn test_init_array_i8(o: *mut i8) {
     let array = [0i8; 4];
-    *o = array[1];
+    unsafe {
+        *o = array[1];
+    }
 }

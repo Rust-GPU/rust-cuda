@@ -276,12 +276,24 @@ There are two ways to build and run this example: natively, and with docker.
 
 ### Native
 
-If you have all the required libraries installed, try building with `cargo build`. If you get an
-error "libnvvm.so.4: cannot open shared object file", you will need to adjust `LD_LIBRARY_PATH`,
-something like this:
+If you have all the required libraries installed, try building with `cargo build`.
+
+If you get an error "libnvvm.so.4: cannot open shared object file", you will need to adjust
+`LD_LIBRARY_PATH`, something like this:
 ```
 export LD_LIBRARY_PATH="/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
 ```
+
+If you get an error "error: couldn't load codegen backend" on Windows, you will need to adjust
+`PATH`, something like this with CUDA 12:
+```
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\nvvm\bin"
+```
+or this with CUDA 13:
+```
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\nvvm\bin\x64"
+```
+
 You should then be able to `cargo run`, and see the expected output:
 ```
 c = [3.0, 5.0, 7.0, 9.0]
@@ -327,6 +339,9 @@ is recognized.
 - NVIDIA provides a number of [samples](https://github.com/NVIDIA/cuda-samples). You could try
   `make`ing and running the [`deviceQuery`] sample. If all is well it will print various details
   about your GPU.
+
+A sample `.devcontainer.json` file is also included, configured for Ubuntu 24.04. Copy this to
+`.devcontainer/devcontainer.json` to make additional customizations.
 
 [`deviceQuery`]: https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery
 

@@ -12,13 +12,15 @@ pub unsafe fn render(fb: *mut Vec3, view: Viewport, scene: &Scene, rand_states: 
     let px_idx = idx.y as usize * view.bounds.x + idx.x as usize;
 
     // generate a tiny offset for the ray for antialiasing
-    let rng = &mut *rand_states.add(px_idx);
+    let rng = unsafe { &mut *rand_states.add(px_idx) };
     let offset = Vec2::from(rng.normal_f32_2());
 
     let ray = generate_ray(idx, &view, offset);
 
     let color = scene.ray_color(ray, rng);
-    *fb.add(px_idx) += color;
+    unsafe {
+        *fb.add(px_idx) += color;
+    }
 }
 
 /// Scales an accumulated buffer by the sample count, storing each pixel in the corresponding `out` pixel.
@@ -29,8 +31,8 @@ pub unsafe fn scale_buffer(fb: *const Vec3, out: *mut Vec3, samples: u32, view: 
         return;
     }
     let idx = idx_2d.y as usize * view.bounds.x + idx_2d.x as usize;
-    let original = &*fb.add(idx);
-    let out = &mut *out.add(idx);
+    let original = unsafe { &*fb.add(idx) };
+    let out = unsafe { &mut *out.add(idx) };
 
     let scale = 1.0 / samples as f32;
     let scaled = original * scale;
@@ -45,8 +47,8 @@ pub unsafe fn postprocess(fb: *const Vec3, out: *mut U8Vec3, view: Viewport) {
         return;
     }
     let idx = idx_2d.y as usize * view.bounds.x + idx_2d.x as usize;
-    let original = &*fb.add(idx);
-    let out = &mut *out.add(idx);
+    let original = unsafe { &*fb.add(idx) };
+    let out = unsafe { &mut *out.add(idx) };
     // gamma=2.0
     let gamma_corrected = original.map(f32::sqrt);
 

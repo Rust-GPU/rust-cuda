@@ -1,6 +1,6 @@
 use crate::{
-    backend::{Descriptor, FloatDataType, Operation, PointwiseCfg, PointwiseMode, Real, Tensor},
     CudnnError, DataType, IntoResult, NanPropagation,
+    backend::{Descriptor, FloatDataType, Operation, PointwiseCfg, PointwiseMode, Real, Tensor},
 };
 
 #[derive(Clone, Default, Debug, PartialEq)]

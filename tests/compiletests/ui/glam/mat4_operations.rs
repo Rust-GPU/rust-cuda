@@ -16,15 +16,21 @@ pub unsafe fn mat4_transform_operations(
 ) {
     // Transform a 3D point (w=1 implied)
     let transformed_point = matrix.transform_point3(point);
-    *result_point = transformed_point;
+    unsafe {
+        *result_point = transformed_point;
+    }
 
     // Transform a 4D vector
     let transformed_vector = matrix * vector;
-    *result_vector = transformed_vector;
+    unsafe {
+        *result_vector = transformed_vector;
+    }
 
     // Calculate determinant
     let det = matrix.determinant();
-    *result_determinant = det;
+    unsafe {
+        *result_determinant = det;
+    }
 }
 
 #[kernel]
@@ -39,13 +45,19 @@ pub unsafe fn mat4_construction(
 ) {
     // Create translation matrix
     let trans_mat = Mat4::from_translation(translation);
-    *result_translation = trans_mat;
+    unsafe {
+        *result_translation = trans_mat;
+    }
 
     // Create scale matrix
     let scale_mat = Mat4::from_scale(scale);
-    *result_scale = scale_mat;
+    unsafe {
+        *result_scale = scale_mat;
+    }
 
     // Create rotation matrix
     let rot_mat = Mat4::from_axis_angle(axis, angle_radians);
-    *result_rotation = rot_mat;
+    unsafe {
+        *result_rotation = rot_mat;
+    }
 }

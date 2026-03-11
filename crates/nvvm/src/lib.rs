@@ -312,8 +312,10 @@ pub enum NvvmArch {
     /// This default value of 7.5 corresponds to Turing and later devices. We default to this
     /// because it is the minimum supported by CUDA 13.0 while being in the middle of the range
     /// supported by CUDA 12.x.
-    // WARNING: If you change the default, consider updating the `--target-arch` values used for
-    // compiletests in `ci_linux.yml` and `.github/workflows/ci_{linux,windows}.yml`.
+    // WARNING: If you change the default, consider updating:
+    // - The `--target-arch` values used for compiletests in `ci_linux.yml` and
+    //   `.github/workflows/ci_{linux,windows}.yml`.
+    // - The CUDA versions used in `setup_cuda_environment` in `compiletests`.
     #[default]
     Compute75,
     Compute80,
@@ -744,8 +746,8 @@ impl NvvmProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::str::FromStr;
     use NvvmArch::*;
+    use std::str::FromStr;
 
     #[test]
     fn nvvm_arch_capability_value() {
@@ -834,7 +836,9 @@ mod tests {
 
         assert_eq!(
             Compute70.all_target_features(),
-            vec![Compute50, Compute52, Compute53, Compute60, Compute61, Compute62, Compute70]
+            vec![
+                Compute50, Compute52, Compute53, Compute60, Compute61, Compute62, Compute70
+            ]
         );
 
         assert_eq!(

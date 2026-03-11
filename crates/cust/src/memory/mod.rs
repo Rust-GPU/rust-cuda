@@ -212,7 +212,7 @@ pub unsafe fn memcpy_htod(
     src_ptr: *const c_void,
     size: usize,
 ) -> CudaResult<()> {
-    driver_sys::cuMemcpyHtoD(d_ptr, src_ptr, size).to_result()?;
+    unsafe { driver_sys::cuMemcpyHtoD(d_ptr, src_ptr, size).to_result()? };
     Ok(())
 }
 
@@ -223,7 +223,7 @@ pub unsafe fn memcpy_dtoh(
     src_ptr: driver_sys::CUdeviceptr,
     size: usize,
 ) -> CudaResult<()> {
-    driver_sys::cuMemcpyDtoH(d_ptr, src_ptr, size).to_result()?;
+    unsafe { driver_sys::cuMemcpyDtoH(d_ptr, src_ptr, size).to_result()? };
     Ok(())
 }
 
@@ -309,7 +309,7 @@ pub unsafe fn memcpy_2d_htod<T: DeviceCopy>(
         Height: height,
     };
 
-    driver_sys::cuMemcpy2D(&pcopy).to_result()?;
+    unsafe { driver_sys::cuMemcpy2D(&pcopy).to_result()? };
     Ok(())
 }
 
@@ -395,7 +395,7 @@ pub unsafe fn memcpy_2d_dtoh<T: DeviceCopy>(
         Height: height,
     };
 
-    driver_sys::cuMemcpy2D(&pcopy).to_result()?;
+    unsafe { driver_sys::cuMemcpy2D(&pcopy).to_result()? };
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, mem::MaybeUninit};
 
-use crate::{private, CudnnError, DataType, IntoResult, SeqDataAxis};
+use crate::{CudnnError, DataType, IntoResult, SeqDataAxis, private};
 
 /// Specifies the allowed types for the sequential data buffer.
 ///

@@ -214,7 +214,7 @@ impl<T: DeviceCopy> DevicePointer<T> {
     where
         T: Sized,
     {
-        self.offset(count as isize)
+        unsafe { self.offset(count as isize) }
     }
 
     /// Calculates the offset from a pointer (convenience for
@@ -256,7 +256,7 @@ impl<T: DeviceCopy> DevicePointer<T> {
     where
         T: Sized,
     {
-        self.offset((count as isize).wrapping_neg())
+        unsafe { self.offset((count as isize).wrapping_neg()) }
     }
 
     /// Calculates the offset from a pointer using wrapping arithmetic.
@@ -429,7 +429,7 @@ impl<T: DeviceCopy> UnifiedPointer<T> {
 
     /// Returns a null unified pointer.
     ///
-    /// # Examples:
+    /// # Examples
     ///
     /// ```
     /// # let _context = cust::quick_init().unwrap();
@@ -481,7 +481,7 @@ impl<T: DeviceCopy> UnifiedPointer<T> {
     where
         T: Sized,
     {
-        Self::wrap(self.0.offset(count))
+        unsafe { Self::wrap(self.0.offset(count)) }
     }
 
     /// Calculates the offset from a unified pointer using wrapping arithmetic.
@@ -559,7 +559,7 @@ impl<T: DeviceCopy> UnifiedPointer<T> {
     where
         T: Sized,
     {
-        self.offset(count as isize)
+        unsafe { self.offset(count as isize) }
     }
 
     /// Calculates the offset from a pointer (convenience for
@@ -600,7 +600,7 @@ impl<T: DeviceCopy> UnifiedPointer<T> {
     where
         T: Sized,
     {
-        self.offset((count as isize).wrapping_neg())
+        unsafe { self.offset((count as isize).wrapping_neg()) }
     }
 
     /// Calculates the offset from a pointer using wrapping arithmetic.

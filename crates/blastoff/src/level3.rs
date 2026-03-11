@@ -1,8 +1,8 @@
 use crate::{
+    GemmDatatype, MatrixOp,
     context::CublasContext,
     error::{Error, ToResult},
     raw::GemmOps,
-    GemmDatatype, MatrixOp,
 };
 use cust::memory::{GpuBox, GpuBuffer};
 use cust::stream::Stream;

@@ -320,9 +320,11 @@ impl CublasContext {
     ///
     /// The callback must not panic and unwind.
     pub unsafe fn set_logger_callback(callback: Option<unsafe extern "C" fn(*const c_char)>) {
-        cublas_sys::cublasSetLoggerCallback(callback)
-            .to_result()
-            .unwrap();
+        unsafe {
+            cublas_sys::cublasSetLoggerCallback(callback)
+                .to_result()
+                .unwrap();
+        }
     }
 
     /// Gets the logger callback that was previously set.

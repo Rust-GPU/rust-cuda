@@ -15,7 +15,7 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  rust:
+  build:
     name: Build / ${{ matrix.os }} / CUDA-${{ matrix.cuda }}
     runs-on: ${{ matrix.os }}
     env:
@@ -27,18 +27,37 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             cuda: "12.8.1"
-            linux-local-args: []
+            nvvm-dll-dir: "nvvm\\bin"
             sub-packages:
               [
+                "cublas",
+                "cublas_dev",
+                "cuda_profiler_api",
+                "cudart",
+                "curand",
+                "curand_dev",
                 "nvcc",
                 "nvrtc",
                 "nvrtc_dev",
-                "cuda_profiler_api",
-                "cudart",
+              ]
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            cuda: "13.0.2"
+            nvvm-dll-dir: "nvvm\\bin\\x64"
+            sub-packages:
+              [
+                "crt",                # new subpackage in CUDA 13
                 "cublas",
                 "cublas_dev",
+                "cuda_profiler_api",
+                "cudart",
                 "curand",
                 "curand_dev",
+                "nvcc",
+                "nvptxcompiler",      # new subpackage in CUDA 13
+                "nvrtc",
+                "nvrtc_dev",
+                "nvvm",               # new subpackage in CUDA 13
               ]
 
     steps:
@@ -46,18 +65,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.22
+        uses: Jimver/cuda-toolkit@v0.2.29
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda }}
           method: network
-          linux-local-args: ${{ toJson(matrix.linux-local-args) }}
           use-local-cache: false
           sub-packages: ${{ toJson(matrix.sub-packages) }}
           log-file-suffix: "${{matrix.os}}-${{matrix.cuda}}"
 
       - name: List CUDA_PATH files
-        shell: pwsh
         run: Get-ChildItem -Path $env:CUDA_PATH -Recurse | ForEach-Object { $_.FullName }
 
       # random command that forces rustup to install stuff in rust-toolchain
@@ -68,9 +85,9 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Update PATH to expose CUDA codegen backend
-        shell: pwsh
         run: |
-          echo "$env:CUDA_PATH\nvvm\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "$env:CUDA_PATH\\${{matrix.nvvm-dll-dir}}" | `
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Verify CUDA, Rust installation
         run: |
@@ -103,15 +120,20 @@ jobs:
       # Exclude crates with tests that require an NVIDIA GPU: blastoff, cudnn, cust.
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
       - name: Test
-        run: cargo test --workspace --exclude blastoff --exclude cudnn --exclude cudnn-sys --exclude cust
+        run: |
+          cargo test --workspace `
+            --exclude blastoff --exclude cudnn --exclude cudnn-sys --exclude cust
 
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
-      # Exclude cust_raw because it triggers hundreds of warnings.
       - name: Check documentation
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --all-features --document-private-items --no-deps --exclude cudnn --exclude cudnn-sys --exclude cust_raw
+        run: |
+          cargo doc --workspace --all-features --document-private-items --no-deps `
+            --exclude cudnn --exclude cudnn-sys
 
       # Disabled due to dll issues, someone with Windows knowledge needed
       # - name: Compiletest
-      #  run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90
+      #  run: |
+      #    cargo run -p compiletests --release --no-default-features `
+      #      -- --target-arch compute_61,compute_75,compute_90

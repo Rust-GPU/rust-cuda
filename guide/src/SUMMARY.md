@@ -1,8 +1,6 @@
 # Summary 
 
-- [Introduction](README.md)
-- [Supported Features](features.md)
-- [Frequently Asked Questions](faq.md)
+- [Introduction](introduction.md)
 - [Guide](guide/README.md)
   - [Getting Started](guide/getting_started.md)
   - [Compute Capability Gating](guide/compute_capabilities.md)
@@ -18,3 +16,9 @@
   - [Types](nvvm/types.md)
   - [PTX Generation](nvvm/ptxgen.md)
   - [Debugging](nvvm/debugging.md)
+
+----
+
+[Supported Features](features.md)
+[Frequently Asked Questions](faq.md)
+

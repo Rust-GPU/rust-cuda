@@ -1,6 +1,6 @@
 use crate::{
-    backend::{Descriptor, EngineCfgBuilder, Graph},
     CudnnContext, CudnnError, IntoResult,
+    backend::{Descriptor, EngineCfgBuilder, Graph},
 };
 
 pub enum HeuristicMode {

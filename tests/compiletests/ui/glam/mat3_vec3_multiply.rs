@@ -7,5 +7,7 @@ use cuda_std::kernel;
 #[kernel]
 pub unsafe fn mat3_vec3_multiply(input: glam::Mat3, output: *mut glam::Vec3) {
     let vector = input * glam::Vec3::new(1.0, 2.0, 3.0);
-    *output = vector;
+    unsafe {
+        *output = vector;
+    }
 }

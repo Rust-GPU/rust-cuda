@@ -52,15 +52,15 @@ by reference (by allocating a device box):
 
 ```rs
 let foo = Foo { 
-  a: 5,
-  b: 6,
-  c: 7
+    a: 5,
+    b: 6,
+    c: 7
 };
 
 unsafe {
-  launch!(
-    module.kernel<<<1, 1, 0, stream>>>(foo)
-  )?;
+    launch!(
+        module.kernel<<<1, 1, 0, stream>>>(foo)
+    )?;
 }
 ```
 
@@ -68,15 +68,15 @@ And not
 
 ```rs
 let foo = DeviceBox::new(Foo { 
-  a: 5,
-  b: 6,
-  c: 7
+    a: 5,
+    b: 6,
+    c: 7
 });
 
 unsafe {
-  launch!(
-    module.kernel<<<1, 1, 0, stream>>>(foo.as_device_ptr())
-  )?;
+    launch!(
+        module.kernel<<<1, 1, 0, stream>>>(foo.as_device_ptr())
+    )?;
 }
 ```
 

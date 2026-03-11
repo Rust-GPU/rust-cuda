@@ -1,4 +1,4 @@
-use crate::{backend::Descriptor, CudnnError, DataType, IntoResult};
+use crate::{CudnnError, DataType, IntoResult, backend::Descriptor};
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Hash)]
 pub struct TensorBuilder<'a> {

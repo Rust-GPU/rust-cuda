@@ -1,6 +1,6 @@
 use crate::{
-    backend::{Descriptor, EngineCfg},
     CudnnContext, CudnnError, IntoResult,
+    backend::{Descriptor, EngineCfg},
 };
 
 #[derive(Default, PartialEq, Debug)]

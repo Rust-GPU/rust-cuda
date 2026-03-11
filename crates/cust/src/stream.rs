@@ -16,7 +16,7 @@ use std::panic;
 use std::ptr;
 
 use cust_raw::driver_sys;
-use cust_raw::driver_sys::{cudaError_enum, CUstream};
+use cust_raw::driver_sys::{CUstream, cudaError_enum};
 
 use crate::error::{CudaResult, DropResult, ToResult};
 use crate::event::Event;
@@ -271,19 +271,21 @@ impl Stream {
         let grid_size: GridSize = grid_size.into();
         let block_size: BlockSize = block_size.into();
 
-        driver_sys::cuLaunchKernel(
-            func.to_raw(),
-            grid_size.x,
-            grid_size.y,
-            grid_size.z,
-            block_size.x,
-            block_size.y,
-            block_size.z,
-            shared_mem_bytes,
-            self.inner,
-            args.as_ptr() as *mut _,
-            ptr::null_mut(),
-        )
+        unsafe {
+            driver_sys::cuLaunchKernel(
+                func.to_raw(),
+                grid_size.x,
+                grid_size.y,
+                grid_size.z,
+                block_size.x,
+                block_size.y,
+                block_size.z,
+                shared_mem_bytes,
+                self.inner,
+                args.as_ptr() as *mut _,
+                ptr::null_mut(),
+            )
+        }
         .to_result()
     }
 
@@ -357,7 +359,7 @@ unsafe extern "C" fn callback_wrapper<T>(
 {
     // Stop panics from unwinding across the FFI
     let _ = panic::catch_unwind(|| {
-        let callback: Box<T> = Box::from_raw(callback as *mut T);
+        let callback: Box<T> = unsafe { Box::from_raw(callback as *mut T) };
         callback(status.to_result());
     });
 }

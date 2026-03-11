@@ -8,5 +8,7 @@ use cuda_std::kernel;
 
 #[kernel]
 pub unsafe fn test_unwrap_or(out: *mut u32) {
-    *out = None.unwrap_or(15);
+    unsafe {
+        *out = None.unwrap_or(15);
+    }
 }

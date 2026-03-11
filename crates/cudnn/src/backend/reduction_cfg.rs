@@ -1,6 +1,6 @@
 use crate::{
-    backend::{Descriptor, ReductionMode},
     CudnnError, DataType, IntoResult,
+    backend::{Descriptor, ReductionMode},
 };
 
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]

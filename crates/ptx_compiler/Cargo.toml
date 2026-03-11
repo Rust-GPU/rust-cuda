@@ -1,11 +1,11 @@
 [package]
 name = "ptx_compiler"
 version = "0.1.1"
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "High level bindings to CUDA's ptx compilation APIs"
 repository = "https://github.com/Rust-GPU/rust-cuda"
 readme = "../../README.md"
 
 [dependencies]
-cust_raw = { path = "../cust_raw", default-features = false, features = ["nvptx-compiler"] }
+cust_raw = { version = "0.11.3", path = "../cust_raw", default-features = false, features = ["nvptx-compiler"] }

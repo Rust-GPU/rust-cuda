@@ -1,4 +1,4 @@
-use crate::{backend::Descriptor, CudnnError, DataType, IntoResult};
+use crate::{CudnnError, DataType, IntoResult, backend::Descriptor};
 
 #[derive(Clone, Default, PartialEq, Eq, Hash, Debug)]
 pub struct MatMulCfgBuilder {

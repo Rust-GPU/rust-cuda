@@ -1,6 +1,6 @@
 use std::{marker::PhantomData, mem::MaybeUninit};
 
-use crate::{private, CudnnError, DataType, IntoResult, RnnDataLayout};
+use crate::{CudnnError, DataType, IntoResult, RnnDataLayout, private};
 
 /// Specifies the allowed types for the recurrent neural network inputs and outputs.
 ///

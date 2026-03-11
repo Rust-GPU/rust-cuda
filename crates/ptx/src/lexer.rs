@@ -107,10 +107,10 @@ impl<'src> Lexer<'src> {
         Some(Ok(match cur {
             AsciiChar::Percent => {
                 let peek = self.peek();
-                if let Some(peeked) = peek {
-                    if is_ident_continue(peeked) {
-                        return Some(Ok(self.opcode_or_ident()));
-                    }
+                if let Some(peeked) = peek
+                    && is_ident_continue(peeked)
+                {
+                    return Some(Ok(self.opcode_or_ident()));
                 }
                 self.eat_and_ret_token(1, TokenKind::Modulo)
             }
@@ -440,14 +440,14 @@ impl<'src> Lexer<'src> {
         let cur = self.cur;
         let ident = self.eat_until(|c, _| is_ident_continue(c));
         // check if its an instruction
-        if ident.chars().all(|c| c.is_ascii_alphanumeric()) {
-            if let Ok(kind) = InstructionKind::from_str(ident.as_str()) {
-                *self.values.last_mut().unwrap() = Some(TokenValue::Instruction(kind));
-                return Token {
-                    kind: TokenKind::Instruction,
-                    range: cur..self.cur,
-                };
-            }
+        if ident.chars().all(|c| c.is_ascii_alphanumeric())
+            && let Ok(kind) = InstructionKind::from_str(ident.as_str())
+        {
+            *self.values.last_mut().unwrap() = Some(TokenValue::Instruction(kind));
+            return Token {
+                kind: TokenKind::Instruction,
+                range: cur..self.cur,
+            };
         }
 
         *self.values.last_mut().unwrap() =
@@ -468,7 +468,7 @@ impl<'src> Lexer<'src> {
                 return Ok(Token {
                     kind: TokenKind::Dot,
                     range: cur..self.cur,
-                })
+                });
             }
             Some(c) if !is_ident_continue(c) => {
                 return Ok(Token {

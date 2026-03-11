@@ -7,7 +7,7 @@ use alloc::alloc::*;
 use core::ffi::c_void;
 
 #[cfg(target_arch = "nvptx64")]
-extern "C" {
+unsafe extern "C" {
     // implicitly defined by cuda.
     pub fn malloc(size: usize) -> *mut c_void;
 
@@ -19,10 +19,12 @@ pub struct CUDAAllocator;
 #[cfg(target_arch = "nvptx64")]
 unsafe impl GlobalAlloc for CUDAAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        malloc(layout.size()) as *mut u8
+        unsafe { malloc(layout.size()) as *mut u8 }
     }
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        free(ptr as *mut _);
+        unsafe {
+            free(ptr as *mut _);
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::{private, DataType};
+use crate::{DataType, private};
 
 /// Supported data types configurations for convolution operations.
 ///

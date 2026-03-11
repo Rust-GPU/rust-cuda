@@ -15,12 +15,12 @@ unsafe fn init_raw_op_descriptor<T: DataType>(
 ) -> Result<cudnn_sys::cudnnOpTensorDescriptor_t, CudnnError> {
     let mut raw = MaybeUninit::uninit();
 
-    cudnn_sys::cudnnCreateOpTensorDescriptor(raw.as_mut_ptr()).into_result()?;
-
-    let raw = raw.assume_init();
-
-    cudnn_sys::cudnnSetOpTensorDescriptor(raw, op, T::into_raw(), nan_opt).into_result()?;
-    Ok(raw)
+    unsafe {
+        cudnn_sys::cudnnCreateOpTensorDescriptor(raw.as_mut_ptr()).into_result()?;
+        let raw = raw.assume_init();
+        cudnn_sys::cudnnSetOpTensorDescriptor(raw, op, T::into_raw(), nan_opt).into_result()?;
+        Ok(raw)
+    }
 }
 
 /// The description of a unary Tensor Core operation.

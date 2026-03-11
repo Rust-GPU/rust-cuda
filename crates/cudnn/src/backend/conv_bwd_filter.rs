@@ -1,6 +1,6 @@
 use crate::{
-    backend::{ConvCfg, Descriptor, FloatDataType, Operation, Real, Tensor},
     CudnnError, DataType, IntoResult,
+    backend::{ConvCfg, Descriptor, FloatDataType, Operation, Real, Tensor},
 };
 
 pub struct ConvBwdFilterBuilder {

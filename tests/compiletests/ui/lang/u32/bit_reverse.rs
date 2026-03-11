@@ -6,40 +6,56 @@ use cuda_std::kernel;
 
 #[kernel]
 pub unsafe fn reverse_bits_u8(buffer: *const u8, out: *mut u8) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_u16(buffer: *const u16, out: *mut u16) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_u32(buffer: *const u32, out: *mut u32) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_u64(buffer: *const u64, out: *mut u64) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_i8(buffer: *const i8, out: *mut i8) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_i16(buffer: *const i16, out: *mut i16) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_i32(buffer: *const i32, out: *mut i32) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }
 
 #[kernel]
 pub unsafe fn reverse_bits_i64(buffer: *const i64, out: *mut i64) {
-    *out = (*buffer).reverse_bits();
+    unsafe {
+        *out = (*buffer).reverse_bits();
+    }
 }

@@ -1,6 +1,6 @@
 use cust::memory::GpuBuffer;
 
-use crate::{private, CudnnContext, CudnnError, DataType, IntoResult, TensorDescriptor};
+use crate::{CudnnContext, CudnnError, DataType, IntoResult, TensorDescriptor, private};
 
 mod softmax_algo;
 mod softmax_mode;

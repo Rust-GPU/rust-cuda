@@ -1,4 +1,4 @@
-use crate::{backend::Descriptor, ConvMode, CudnnError, DataType, IntoResult};
+use crate::{ConvMode, CudnnError, DataType, IntoResult, backend::Descriptor};
 
 #[derive(Default, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ConvCfgBuilder<'a> {

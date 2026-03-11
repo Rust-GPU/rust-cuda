@@ -21,7 +21,7 @@
 //! This does NOT include exiting the program, however, because rust uses RAII, unless you leak the
 //! context, output will always be flushed.
 
-extern "C" {
+unsafe extern "C" {
     // CUDA syscalls implicitly defined by nvvm you can link to.
 
     #[doc(hidden)]

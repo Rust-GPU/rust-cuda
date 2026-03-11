@@ -1,4 +1,4 @@
-use std::mem::{self, align_of, size_of, transmute, ManuallyDrop};
+use std::mem::{self, ManuallyDrop, align_of, size_of, transmute};
 use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "bytemuck")]
@@ -10,8 +10,8 @@ use cust_raw::driver_sys;
 use crate::error::{CudaResult, DropResult, ToResult};
 use crate::memory::device::{AsyncCopyDestination, CopyDestination, DeviceSlice};
 use crate::memory::malloc::{cuda_free, cuda_malloc};
-use crate::memory::{cuda_free_async, DevicePointer};
-use crate::memory::{cuda_malloc_async, DeviceCopy};
+use crate::memory::{DeviceCopy, cuda_malloc_async};
+use crate::memory::{DevicePointer, cuda_free_async};
 use crate::stream::Stream;
 
 /// Fixed-size device-side buffer. Provides basic access to device memory.
@@ -49,7 +49,7 @@ impl<T: DeviceCopy> DeviceBuffer<T> {
     /// ```
     pub unsafe fn uninitialized(size: usize) -> CudaResult<Self> {
         let ptr = if size > 0 && size_of::<T>() > 0 {
-            cuda_malloc(size)?
+            unsafe { cuda_malloc(size)? }
         } else {
             // FIXME (AL): Do we /really/ want to allow creating an invalid buffer?
             DevicePointer::null()
@@ -74,7 +74,7 @@ impl<T: DeviceCopy> DeviceBuffer<T> {
     /// You can synchronize the stream to ensure the memory allocation operation is complete.
     pub unsafe fn uninitialized_async(size: usize, stream: &Stream) -> CudaResult<Self> {
         let ptr = if size > 0 && size_of::<T>() > 0 {
-            cuda_malloc_async(stream, size)?
+            unsafe { cuda_malloc_async(stream, size)? }
         } else {
             DevicePointer::null()
         };
@@ -272,14 +272,16 @@ impl<T: DeviceCopy + Zeroable> DeviceBuffer<T> {
     /// ```
     #[cfg_attr(docsrs, doc(cfg(feature = "bytemuck")))]
     pub unsafe fn zeroed_async(size: usize, stream: &Stream) -> CudaResult<Self> {
-        let new_buf = DeviceBuffer::uninitialized_async(size, stream)?;
+        let new_buf = unsafe { DeviceBuffer::uninitialized_async(size, stream)? };
         if size_of::<T>() != 0 {
-            driver_sys::cuMemsetD8Async(
-                new_buf.as_device_ptr().as_raw(),
-                0,
-                size_of::<T>() * size,
-                stream.as_inner(),
-            )
+            unsafe {
+                driver_sys::cuMemsetD8Async(
+                    new_buf.as_device_ptr().as_raw(),
+                    0,
+                    size_of::<T>() * size,
+                    stream.as_inner(),
+                )
+            }
             .to_result()?;
         }
         Ok(new_buf)
@@ -394,9 +396,11 @@ impl<T: DeviceCopy> DeviceBuffer<T> {
     /// }
     /// ```
     pub unsafe fn from_slice_async(slice: &[T], stream: &Stream) -> CudaResult<Self> {
-        let mut uninit = DeviceBuffer::uninitialized_async(slice.len(), stream)?;
-        uninit.async_copy_from(slice, stream)?;
-        Ok(uninit)
+        unsafe {
+            let mut uninit = DeviceBuffer::uninitialized_async(slice.len(), stream)?;
+            uninit.async_copy_from(slice, stream)?;
+            Ok(uninit)
+        }
     }
 
     /// Explicitly creates a [`DeviceSlice`] from this buffer.

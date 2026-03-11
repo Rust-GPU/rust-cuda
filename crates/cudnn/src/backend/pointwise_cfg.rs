@@ -1,6 +1,6 @@
 use crate::{
-    backend::{Descriptor, PointwiseMode},
     CudnnError, DataType, IntoResult, NanPropagation,
+    backend::{Descriptor, PointwiseMode},
 };
 
 #[derive(Clone, Default, PartialEq, Debug)]

@@ -14,7 +14,7 @@
 
 // Generated file, do not edit by hand, see scripts/gen_intrinsics.py
 
-extern "C" {
+unsafe extern "C" {
     #[link_name = "__nv_abs"]
     #[doc = "Determine the absolute value of the 32-bit signed integer x.
 

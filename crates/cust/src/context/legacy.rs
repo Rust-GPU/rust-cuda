@@ -121,11 +121,11 @@ use std::ptr;
 use cust_raw::driver_sys;
 use cust_raw::driver_sys::CUcontext;
 
+use crate::CudaApiVersion;
 use crate::context::ContextHandle;
 use crate::device::Device;
 use crate::error::{CudaResult, DropResult, ToResult};
 use crate::private::Sealed;
-use crate::CudaApiVersion;
 
 /// This enumeration represents configuration settings for devices which share hardware resources
 /// between L1 cache and shared memory.

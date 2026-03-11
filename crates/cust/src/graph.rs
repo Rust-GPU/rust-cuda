@@ -281,7 +281,10 @@ impl Graph {
                 .enumerate()
                 .position(|(cur_idx, x)| x == node && cur_idx != idx)
             {
-                panic!("Duplicate dependency found in call to `{}`, the first instance is at index {}, the second instance is at index {}", func_name, idx, pos);
+                panic!(
+                    "Duplicate dependency found in call to `{}`, the first instance is at index {}, the second instance is at index {}",
+                    func_name, idx, pos
+                );
             }
 
             assert!(

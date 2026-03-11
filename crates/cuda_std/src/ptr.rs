@@ -28,19 +28,22 @@ pub enum AddressSpace {
 #[gpu_only]
 pub unsafe fn is_in_address_space<T>(ptr: *const T, address_space: AddressSpace) -> bool {
     let ret: u32;
-    // create a predicate register to store the result of the isspacep into.
-    asm!(".reg .pred p;");
+    unsafe {
+        // Create a predicate register to store the result of the isspacep into.
+        asm!(".reg .pred p;");
 
-    // perform the actual isspacep operation, and store the result in the predicate register we made.
-    match address_space {
-        AddressSpace::Global => asm!("isspacep.global p, {}", in(reg64) ptr),
-        AddressSpace::Shared => asm!("isspacep.shared p, {}", in(reg64) ptr),
-        AddressSpace::Constant => asm!("isspacep.const p, {}", in(reg64) ptr),
-        AddressSpace::Local => asm!("isspacep.local p, {}", in(reg64) ptr),
+        // Perform the actual isspacep operation, and store the result in the predicate register we
+        // made.
+        match address_space {
+            AddressSpace::Global => asm!("isspacep.global p, {}", in(reg64) ptr),
+            AddressSpace::Shared => asm!("isspacep.shared p, {}", in(reg64) ptr),
+            AddressSpace::Constant => asm!("isspacep.const p, {}", in(reg64) ptr),
+            AddressSpace::Local => asm!("isspacep.local p, {}", in(reg64) ptr),
+        }
+
+        // Finally, use the predicate register to write out a value.
+        asm!("selp.u32 {}, 1, 0, p;", out(reg32) ret);
     }
-
-    // finally, use the predicate register to write out a value.
-    asm!("selp.u32 {}, 1, 0, p;", out(reg32) ret);
 
     ret != 0
 }
@@ -59,27 +62,29 @@ pub unsafe fn convert_generic_to_specific_address_space<T>(
 ) -> *const T {
     let ret: *const T;
 
-    match address_space {
-        AddressSpace::Global => asm!(
-            "cvta.to.global.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
-        AddressSpace::Shared => asm!(
-            "cvta.to.shared.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
-        AddressSpace::Constant => asm!(
-            "cvta.to.const.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
-        AddressSpace::Local => asm!(
-            "cvta.to.local.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
+    unsafe {
+        match address_space {
+            AddressSpace::Global => asm!(
+                "cvta.to.global.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+            AddressSpace::Shared => asm!(
+                "cvta.to.shared.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+            AddressSpace::Constant => asm!(
+                "cvta.to.const.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+            AddressSpace::Local => asm!(
+                "cvta.to.local.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+        }
     }
 
     ret
@@ -99,27 +104,29 @@ pub unsafe fn convert_specific_address_space_to_generic<T>(
 ) -> *const T {
     let ret: *const T;
 
-    match address_space {
-        AddressSpace::Global => asm!(
-            "cvta.global.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
-        AddressSpace::Shared => asm!(
-            "cvta.shared.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
-        AddressSpace::Constant => asm!(
-            "cvta.const.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
-        AddressSpace::Local => asm!(
-            "cvta.local.u64 {}, {}",
-            out(reg64) ret,
-            in(reg64) ptr
-        ),
+    unsafe {
+        match address_space {
+            AddressSpace::Global => asm!(
+                "cvta.global.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+            AddressSpace::Shared => asm!(
+                "cvta.shared.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+            AddressSpace::Constant => asm!(
+                "cvta.const.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+            AddressSpace::Local => asm!(
+                "cvta.local.u64 {}, {}",
+                out(reg64) ret,
+                in(reg64) ptr
+            ),
+        }
     }
 
     ret

@@ -1,10 +1,10 @@
 //! Scalar and Vector-based operations
 
 use crate::{
+    BlasDatatype, Float,
     context::CublasContext,
     error::{Error, ToResult},
     raw::{ComplexLevel1, FloatLevel1, Level1},
-    BlasDatatype, Float,
 };
 use cust::memory::{GpuBox, GpuBuffer};
 use cust::stream::Stream;

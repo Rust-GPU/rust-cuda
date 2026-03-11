@@ -1,6 +1,6 @@
 use crate::error::CudaResult;
-use crate::memory::device::CopyDestination;
 use crate::memory::DeviceCopy;
+use crate::memory::device::CopyDestination;
 use crate::memory::{DeviceBox, DevicePointer};
 use std::ops::{Deref, DerefMut};
 

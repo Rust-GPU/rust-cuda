@@ -225,11 +225,7 @@ impl GpuFloat for f32 {
     #[inline]
     fn rem_euclid(self, rhs: f32) -> f32 {
         let r = self % rhs;
-        if r < 0.0 {
-            r + rhs.abs()
-        } else {
-            r
-        }
+        if r < 0.0 { r + rhs.abs() } else { r }
     }
 
     /// Raises a number to an integer power.
@@ -557,11 +553,7 @@ impl GpuFloat for f64 {
     #[inline]
     fn rem_euclid(self, rhs: f64) -> f64 {
         let r = self % rhs;
-        if r < 0.0 {
-            r + rhs.abs()
-        } else {
-            r
-        }
+        if r < 0.0 { r + rhs.abs() } else { r }
     }
 
     /// Raises a number to an integer power.

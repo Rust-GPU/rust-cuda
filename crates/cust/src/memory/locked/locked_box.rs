@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     error::CudaResult,
-    memory::{cuda_free_locked, cuda_malloc_locked, DeviceCopy},
+    memory::{DeviceCopy, cuda_free_locked, cuda_malloc_locked},
 };
 
 /// Page-locked box in host memory.
@@ -45,7 +45,7 @@ impl<T: DeviceCopy> LockedBox<T> {
         if mem::size_of::<T>() == 0 {
             Ok(LockedBox { ptr: null_mut() })
         } else {
-            let ptr = cuda_malloc_locked(1)?;
+            let ptr = unsafe { cuda_malloc_locked(1)? };
             Ok(LockedBox { ptr })
         }
     }

@@ -1,6 +1,6 @@
 [package]
 authors = ["frjnn <f.iannelli.francesco229@gmail.com>"]
-edition = "2021"
+edition = "2024"
 name = "cudnn"
 version = "0.1.0"
 

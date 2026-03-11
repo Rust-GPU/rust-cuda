@@ -487,12 +487,11 @@ fn find_in_dir(dir: &Path, filename: &str) -> Option<PathBuf> {
                 continue;
             }
 
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if (name == filename)
-                    || (name.starts_with(&hashed_prefix) && name.ends_with(dll_suffix))
-                {
-                    return Some(path);
-                }
+            if let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && (name == filename
+                    || (name.starts_with(&hashed_prefix) && name.ends_with(dll_suffix)))
+            {
+                return Some(path);
             }
         }
     }
@@ -598,12 +597,11 @@ fn workspace_root_dir() -> Option<PathBuf> {
 
     loop {
         let candidate = path.join("Cargo.toml");
-        if candidate.is_file() {
-            if let Ok(contents) = fs::read_to_string(&candidate) {
-                if contents.contains("[workspace]") {
-                    return Some(path.clone());
-                }
-            }
+        if candidate.is_file()
+            && let Ok(contents) = fs::read_to_string(&candidate)
+            && contents.contains("[workspace]")
+        {
+            return Some(path.clone());
         }
 
         if !path.pop() {

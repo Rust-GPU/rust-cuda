@@ -44,7 +44,7 @@ impl GemmOps for half::f16 {
     ) -> cublasStatus_t {
         // for some weird reason cublas only defines Hgemm if __cplusplus is defined, no idea why
         // but for now we just link against it manually, in the future we should figure out why
-        extern "C" {
+        unsafe extern "C" {
             fn cublasHgemm(
                 handle: cublasHandle_t,
                 transa: cublasOperation_t,
@@ -62,9 +62,11 @@ impl GemmOps for half::f16 {
                 ldc: c_int,
             ) -> cublasStatus_t;
         }
-        cublasHgemm(
-            handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
-        )
+        unsafe {
+            cublasHgemm(
+                handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
+            )
+        }
     }
 }
 
@@ -85,9 +87,11 @@ impl GemmOps for f32 {
         c: *mut Self,
         ldc: c_int,
     ) -> cublasStatus_t {
-        cublasSgemm(
-            handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
-        )
+        unsafe {
+            cublasSgemm(
+                handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
+            )
+        }
     }
 }
 
@@ -108,9 +112,11 @@ impl GemmOps for f64 {
         c: *mut Self,
         ldc: c_int,
     ) -> cublasStatus_t {
-        cublasDgemm(
-            handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
-        )
+        unsafe {
+            cublasDgemm(
+                handle, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c, ldc,
+            )
+        }
     }
 }
 
@@ -131,22 +137,24 @@ impl GemmOps for Complex32 {
         c: *mut Self,
         ldc: c_int,
     ) -> cublasStatus_t {
-        cublasCgemm(
-            handle,
-            transa,
-            transb,
-            m,
-            n,
-            k,
-            alpha.cast(),
-            a.cast(),
-            lda,
-            b.cast(),
-            ldb,
-            beta.cast(),
-            c.cast(),
-            ldc,
-        )
+        unsafe {
+            cublasCgemm(
+                handle,
+                transa,
+                transb,
+                m,
+                n,
+                k,
+                alpha.cast(),
+                a.cast(),
+                lda,
+                b.cast(),
+                ldb,
+                beta.cast(),
+                c.cast(),
+                ldc,
+            )
+        }
     }
 }
 
@@ -167,21 +175,23 @@ impl GemmOps for Complex64 {
         c: *mut Self,
         ldc: c_int,
     ) -> cublasStatus_t {
-        cublasCgemm(
-            handle,
-            transa,
-            transb,
-            m,
-            n,
-            k,
-            alpha.cast(),
-            a.cast(),
-            lda,
-            b.cast(),
-            ldb,
-            beta.cast(),
-            c.cast(),
-            ldc,
-        )
+        unsafe {
+            cublasCgemm(
+                handle,
+                transa,
+                transb,
+                m,
+                n,
+                k,
+                alpha.cast(),
+                a.cast(),
+                lda,
+                b.cast(),
+                ldb,
+                beta.cast(),
+                c.cast(),
+                ldc,
+            )
+        }
     }
 }

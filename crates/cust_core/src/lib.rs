@@ -108,36 +108,36 @@ pub mod _hidden {
     {
     }
     unsafe impl<
-            A: DeviceCopy,
-            B: DeviceCopy,
-            C: DeviceCopy,
-            D: DeviceCopy,
-            E: DeviceCopy,
-            F: DeviceCopy,
-        > DeviceCopy for (A, B, C, D, E, F)
+        A: DeviceCopy,
+        B: DeviceCopy,
+        C: DeviceCopy,
+        D: DeviceCopy,
+        E: DeviceCopy,
+        F: DeviceCopy,
+    > DeviceCopy for (A, B, C, D, E, F)
     {
     }
     unsafe impl<
-            A: DeviceCopy,
-            B: DeviceCopy,
-            C: DeviceCopy,
-            D: DeviceCopy,
-            E: DeviceCopy,
-            F: DeviceCopy,
-            G: DeviceCopy,
-        > DeviceCopy for (A, B, C, D, E, F, G)
+        A: DeviceCopy,
+        B: DeviceCopy,
+        C: DeviceCopy,
+        D: DeviceCopy,
+        E: DeviceCopy,
+        F: DeviceCopy,
+        G: DeviceCopy,
+    > DeviceCopy for (A, B, C, D, E, F, G)
     {
     }
     unsafe impl<
-            A: DeviceCopy,
-            B: DeviceCopy,
-            C: DeviceCopy,
-            D: DeviceCopy,
-            E: DeviceCopy,
-            F: DeviceCopy,
-            G: DeviceCopy,
-            H: DeviceCopy,
-        > DeviceCopy for (A, B, C, D, E, F, G, H)
+        A: DeviceCopy,
+        B: DeviceCopy,
+        C: DeviceCopy,
+        D: DeviceCopy,
+        E: DeviceCopy,
+        F: DeviceCopy,
+        G: DeviceCopy,
+        H: DeviceCopy,
+    > DeviceCopy for (A, B, C, D, E, F, G, H)
     {
     }
 

@@ -13,7 +13,7 @@ pub fn dynamic_shared_mem<T>() -> *mut T {
     // it is unclear whether an alignment of 16 is actually required for correctness, however,
     // it seems like nvcc always generates the global with .align 16 no matter the type, so we just copy
     // nvcc's behavior for now.
-    extern "C" {
+    unsafe extern "C" {
         // need to use nvvm_internal and not address_space because address_space only parses
         // static definitions, not extern static definitions.
         #[nvvm_internal::addrspace(3)]

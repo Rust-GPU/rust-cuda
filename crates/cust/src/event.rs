@@ -18,8 +18,8 @@ use std::ptr;
 use std::time::Duration;
 
 use cust_raw::driver_sys::{
-    cuEventCreate, cuEventDestroy, cuEventElapsedTime, cuEventQuery, cuEventRecord,
-    cuEventSynchronize, CUevent,
+    CUevent, cuEventCreate, cuEventDestroy, cuEventElapsedTime, cuEventQuery, cuEventRecord,
+    cuEventSynchronize,
 };
 
 use crate::error::{CudaError, CudaResult, DropResult, ToResult};
