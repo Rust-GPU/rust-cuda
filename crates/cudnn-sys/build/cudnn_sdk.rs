@@ -73,8 +73,15 @@ impl CudnnSdk {
         ];
         #[cfg(target_os = "windows")]
         const CUDNN_DEFAULT_PATHS: &[&str] = &[
+            // Standalone cuDNN installs following NVIDIA's documentation.
             "C:/Program Files/NVIDIA/CUDNN/v9.x/include",
             "C:/Program Files/NVIDIA/CUDNN/v8.x/include",
+            // CUDA Toolkit installs that bundle cuDNN headers.
+            // These are the default Windows install locations for recent CUDA versions.
+            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.2/include",
+            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/include",
+            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include",
+            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/include",
         ];
 
         let mut cudnn_paths: Vec<&Path> = CUDNN_DEFAULT_PATHS.iter().map(Path::new).collect();
