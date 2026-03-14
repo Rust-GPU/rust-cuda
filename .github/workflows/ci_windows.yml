@@ -106,10 +106,8 @@ jobs:
         run: cargo build --all-features -p cust_raw
 
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
-      # Exclude vecadd because of a link error involving nanorand and `SystemFunction036` (a.k.a.
-      # `RtlGenRandom`).
       - name: Build workspace
-        run: cargo build --workspace --exclude cudnn --exclude cudnn-sys --exclude "vecadd*"
+        run: cargo build --workspace --exclude cudnn --exclude cudnn-sys
 
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
       - name: Clippy
