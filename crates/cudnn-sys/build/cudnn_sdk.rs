@@ -71,22 +71,52 @@ impl CudnnSdk {
             "/usr/local/include/x86_64-linux-gnu",
             "/usr/local/include/aarch64-linux-gnu",
         ];
-        #[cfg(target_os = "windows")]
-        const CUDNN_DEFAULT_PATHS: &[&str] = &[
-            // Standalone cuDNN installs following NVIDIA's documentation.
-            "C:/Program Files/NVIDIA/CUDNN/v9.x/include",
-            "C:/Program Files/NVIDIA/CUDNN/v8.x/include",
-            // CUDA Toolkit installs that bundle cuDNN headers.
-            // These are the default Windows install locations for recent CUDA versions.
-            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.2/include",
-            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/include",
-            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/include",
-            "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/include",
-        ];
 
-        let mut cudnn_paths: Vec<&Path> = CUDNN_DEFAULT_PATHS.iter().map(Path::new).collect();
+        #[cfg(not(target_os = "windows"))]
+        let mut cudnn_paths: Vec<path::PathBuf> =
+            CUDNN_DEFAULT_PATHS.iter().map(Path::new).map(path::PathBuf::from).collect();
+
+        #[cfg(target_os = "windows")]
+        let mut cudnn_paths: Vec<path::PathBuf> = {
+            // Legacy standalone cuDNN installs following NVIDIA's documentation.
+            let mut paths = vec![
+                path::PathBuf::from("C:/Program Files/NVIDIA/CUDNN/v9.x/include"),
+                path::PathBuf::from("C:/Program Files/NVIDIA/CUDNN/v8.x/include"),
+            ];
+
+            // Dynamically discover CUDA and cuDNN installs by matching vX.Y-style directories.
+            let bases = [
+                Path::new("C:/Program Files/NVIDIA/CUDNN"),
+                Path::new("C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA"),
+            ];
+
+            for base in bases {
+                if let Ok(entries) = fs::read_dir(base) {
+                    for entry in entries.flatten() {
+                        if let Ok(file_type) = entry.file_type() {
+                            if file_type.is_dir() {
+                                let name = entry.file_name();
+                                if let Some(name_str) = name.to_str() {
+                                    // Match directories like v9.0, v10.2, v13.0, etc.
+                                    if name_str.starts_with('v')
+                                        && name_str[1..]
+                                            .split('.')
+                                            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+                                    {
+                                        paths.push(base.join(name_str).join("include"));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            paths
+        };
+
         if let Some(override_path) = &cudnn_include_dir {
-            cudnn_paths.push(Path::new(override_path));
+            cudnn_paths.push(Path::new(override_path).to_path_buf());
         }
 
         cudnn_paths
