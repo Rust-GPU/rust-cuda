@@ -105,8 +105,11 @@ impl CudnnSdk {
         ];
 
         #[cfg(not(target_os = "windows"))]
-        let mut cudnn_paths: Vec<path::PathBuf> =
-            CUDNN_DEFAULT_PATHS.iter().map(Path::new).map(path::PathBuf::from).collect();
+        let mut cudnn_paths: Vec<path::PathBuf> = CUDNN_DEFAULT_PATHS
+            .iter()
+            .map(Path::new)
+            .map(path::PathBuf::from)
+            .collect();
 
         #[cfg(target_os = "windows")]
         let mut cudnn_paths: Vec<path::PathBuf> = {
