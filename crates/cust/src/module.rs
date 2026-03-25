@@ -418,6 +418,12 @@ impl Module {
         }
     }
 
+    // Get the inner `CUmodule` from the `Module`. If you use this handle elsewhere,
+    // make sure not to use it after the module has been dropped. Or ManuallyDrop the struct to be safe.
+    pub fn as_inner(&self) -> driver_sys::CUmodule {
+        self.inner
+    }
+
     /// Destroy a `Module`, returning an error.
     ///
     /// Destroying a module can return errors from previous asynchronous work. This function
