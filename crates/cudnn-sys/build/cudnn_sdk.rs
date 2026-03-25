@@ -169,8 +169,8 @@ mod tests {
     #[test]
     fn is_vxy_dir_name_accepts_valid_versions() {
         assert!(CudnnSdk::is_vxy_dir_name("v9.0"));
-        assert!(CudnnSdk::is_vxy_dir_name("v10.6"));
-        assert!(CudnnSdk::is_vxy_dir_name("v12.1"));
+        assert!(CudnnSdk::is_vxy_dir_name("v10.1"));
+        assert!(CudnnSdk::is_vxy_dir_name("v12.8"));
         assert!(CudnnSdk::is_vxy_dir_name("v13.0"));
         assert!(CudnnSdk::is_vxy_dir_name("v9.10.3"));
     }
@@ -198,8 +198,8 @@ mod tests {
         }
 
         let cuda_base = tmp_dir.join("CUDA");
-        let v10_6 = cuda_base.join("v10.6");
-        let v12_1 = cuda_base.join("v12.1");
+        let v10_6 = cuda_base.join("v10.1");
+        let v12_1 = cuda_base.join("v12.8");
         let v13_0 = cuda_base.join("v13.0");
 
         for ver in [&v10_6, &v12_1, &v13_0] {
