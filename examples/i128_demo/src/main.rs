@@ -119,8 +119,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let urem_gpu = DeviceBuffer::from_slice(&vec![0u128; len])?;
     let srem_gpu = DeviceBuffer::from_slice(&vec![0u128; len])?;
 
-    let block_size = 128u32;
-    let grid_size = (len as u32).div_ceil(block_size);
+    let block_size = 128usize;
+    let grid_size = len.div_ceil(block_size);
 
     unsafe {
         launch!(
@@ -241,7 +241,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let trap_launch = unsafe {
         launch!(
-            kernel<<<1u32, 1u32, 0, trap_stream>>>(
+            kernel<<<1, 1, 0, trap_stream>>>(
                 trap_a.as_device_ptr(),
                 trap_a.len(),
                 trap_b.as_device_ptr(),
