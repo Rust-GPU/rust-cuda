@@ -647,7 +647,10 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
                 #[cfg(cuMemPrefetchAsync_v2)]
                 driver_sys::CUmemLocation {
                     type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    #[cfg(cuMemLocation_anon_id)]
                     __bindgen_anon_1: driver_sys::CUmemLocation_st__bindgen_ty_1 { id },
+                    #[cfg(not(cuMemLocation_anon_id))]
+                    id,
                 },
                 #[cfg(not(cuMemPrefetchAsync_v2))]
                 id,
@@ -693,7 +696,10 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
                 #[cfg(cuMemPrefetchAsync_v2)]
                 driver_sys::CUmemLocation {
                     type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    #[cfg(cuMemLocation_anon_id)]
                     __bindgen_anon_1: driver_sys::CUmemLocation_st__bindgen_ty_1 { id },
+                    #[cfg(not(cuMemLocation_anon_id))]
+                    id,
                 },
                 #[cfg(not(cuMemPrefetchAsync_v2))]
                 id,
@@ -735,7 +741,10 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
                 #[cfg(cuMemAdvise_v2)]
                 driver_sys::CUmemLocation {
                     type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    #[cfg(cuMemLocation_anon_id)]
                     __bindgen_anon_1: driver_sys::CUmemLocation_st__bindgen_ty_1 { id },
+                    #[cfg(not(cuMemLocation_anon_id))]
+                    id,
                 },
                 #[cfg(not(cuMemAdvise_v2))]
                 id,
@@ -777,7 +786,10 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
                 #[cfg(cuMemAdvise_v2)]
                 driver_sys::CUmemLocation {
                     type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    #[cfg(cuMemLocation_anon_id)]
                     __bindgen_anon_1: driver_sys::CUmemLocation_st__bindgen_ty_1 { id },
+                    #[cfg(not(cuMemLocation_anon_id))]
+                    id,
                 },
                 #[cfg(not(cuMemAdvise_v2))]
                 id,
@@ -801,7 +813,10 @@ pub trait MemoryAdvise<T: DeviceCopy>: private::Sealed {
                 #[cfg(cuMemAdvise_v2)]
                 driver_sys::CUmemLocation {
                     type_: driver_sys::CUmemLocationType::CU_MEM_LOCATION_TYPE_DEVICE,
+                    #[cfg(cuMemLocation_anon_id)]
                     __bindgen_anon_1: driver_sys::CUmemLocation_st__bindgen_ty_1 { id },
+                    #[cfg(not(cuMemLocation_anon_id))]
+                    id,
                 },
                 #[cfg(not(cuMemAdvise_v2))]
                 id,
