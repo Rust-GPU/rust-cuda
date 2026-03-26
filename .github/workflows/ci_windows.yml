@@ -59,13 +59,32 @@ jobs:
                 "nvrtc_dev",
                 "nvvm",               # new subpackage in CUDA 13
               ]
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            cuda: "13.2.0"
+            nvvm-dll-dir: "nvvm\\bin\\x64"
+            sub-packages:
+              [
+                "crt",
+                "cublas",
+                "cublas_dev",
+                "cuda_profiler_api",
+                "cudart",
+                "curand",
+                "curand_dev",
+                "nvcc",
+                "nvptxcompiler",
+                "nvrtc",
+                "nvrtc_dev",
+                "nvvm",
+              ]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.29
+        uses: Jimver/cuda-toolkit@v0.2.30
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda }}
