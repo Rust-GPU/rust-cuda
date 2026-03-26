@@ -40,4 +40,12 @@ fn main() {
         println!("cargo::rustc-cfg=cuGraphGetEdges_v2");
         println!("cargo::rustc-cfg=cuCtxCreate_v4");
     }
+
+    // In CUDA 13.2 the `id` field in `CUmemLocation_st` was placed inside an anonymous union.
+    // Bindgen renders this as `__bindgen_anon_1: CUmemLocation_st__bindgen_ty_1` instead of a
+    // direct `id` field. This cfg gates the struct initialization syntax accordingly.
+    println!("cargo::rustc-check-cfg=cfg(cuMemLocation_anon_id)");
+    if driver_version >= 13020 {
+        println!("cargo::rustc-cfg=cuMemLocation_anon_id");
+    }
 }
