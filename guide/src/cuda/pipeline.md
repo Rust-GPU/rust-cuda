@@ -31,3 +31,43 @@ any language. For an assembly format, PTX is fairly user-friendly.
 
 PTX can be run on NVIDIA GPUs using the driver API or runtime API. Those APIs will convert the PTX
 into a final format called SASS which is register allocated and executed on the GPU.
+
+## The Rust CUDA pipeline
+
+The Rust CUDA project replaces NVCC with a custom rustc backend. The pipeline looks like this:
+
+```
++---------------------------------------------------------------------+
+|                        Rust CUDA Pipeline                           |
+|                                                                     |
+|  Host code (.rs)           GPU kernel code (.rs)                    |
+|       |                          |                                  |
+|       |                   rustc_codegen_nvvm                        |
+|       |                   (custom rustc backend)                    |
+|       |                          |                                  |
+|       |                     NVVM IR (.bc)                           |
+|       |                          |                                  |
+|       |                      libNVVM                                |
+|       |                          |                                  |
+|       |                      PTX (.ptx)  <-- embedded via           |
+|       |                          |           include_str!()         |
+|       v                          v                                  |
+|  Host binary ---- cust ------> Driver API                           |
+|                  (Rust)         (CUDA)                              |
+|                                  |                                  |
+|                              JIT compile                            |
+|                                  |                                  |
+|                              SASS (GPU machine code)                |
+|                                  |                                  |
+|                              GPU execution                          |
++---------------------------------------------------------------------+
+```
+
+- **`rustc_codegen_nvvm`** is a custom rustc backend that compiles GPU kernel crates to NVVM IR
+  (LLVM bitcode) instead of the usual host target.
+- **`cuda_std`** provides the GPU-side standard library (thread indexing, shared memory,
+  intrinsics, etc.) used inside kernel crates.
+- **`cuda_builder`** is a build-script helper that drives `rustc_codegen_nvvm` from a host
+  crate's `build.rs`, producing a `.ptx` file that is embedded in the host binary.
+- **`cust`** is the host-side safe wrapper around the CUDA Driver API, used to load modules,
+  allocate GPU memory, launch kernels, and synchronize results.

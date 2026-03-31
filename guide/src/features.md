@@ -1,4 +1,4 @@
-# Supported features 
+﻿# Supported features 
 
 This page is used for tracking Cargo/Rust and CUDA features that are currently supported 
 or planned to be supported in the future. As well as tracking some information about how they could 
@@ -50,7 +50,28 @@ around to adding it yet.
 | cuFFT | ❌ |
 | cuSOLVER | ❌ |
 | cuRAND | ➖ | cuRAND only works with the runtime API, we have our own general purpose GPU rand library called `gpu_rand` |
-| cuDNN | ❌ | In-progress |
+| cuDNN | 🟨 | Partially implemented -- see sub-table below |
+
+### cuDNN API coverage
+
+| Module | Status | Notes |
+| --- | --- | --- |
+| Activation (ReLU, sigmoid, tanh, etc.) | ✔️ | Forward and backward |
+| Attention / Multi-Head Attention | ✔️ | Forward, backward data and weights |
+| Convolution | ✔️ | Forward, bias+activation fused, backward data/filter, workspace query, grouped conv |
+| Dropout | ✔️ | Forward and backward, state management |
+| Normalization (Layer / Instance / Group) | ❌ | Not yet wrapped |
+| Batch Normalization | ❌ | Not yet wrapped |
+| Pooling (max, average) | ✔️ | Forward and backward, N-dimensional |
+| Reduction (sum, max, norm, etc.) | ✔️ | With workspace and indices support |
+| RNN (LSTM, GRU, vanilla) | ✔️ | v8 API: forward, backward data, backward weights |
+| Softmax | ✔️ | Forward and backward, accurate and fast modes |
+| Tensor ops (add, scale, set, element-wise) | ✔️ | cudnnOpTensor, cudnnAddTensor, etc. |
+| CTC Loss | ❌ | Not yet wrapped |
+| Spatial Transformer | ❌ | Not yet wrapped |
+| Backend / Graph API | 🟨 | Implemented internally but not yet public; marked WIP |
+| f16 / bf16 data types | ❌ | Not supported at the crate level |
+| cuDNN 9 error codes | 🟨 | Partial -- falls back to todo!() for unknown status codes |
 | cuSPARSE | ❌ |
 | AmgX | ❌ |
 | cuTENSOR | ❌ |

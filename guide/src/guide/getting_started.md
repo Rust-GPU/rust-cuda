@@ -345,6 +345,72 @@ A sample `.devcontainer.json` file is also included, configured for Ubuntu 24.04
 
 [`deviceQuery`]: https://github.com/NVIDIA/cuda-samples/tree/ba04faaf7328dbcc87bfc9acaf17f951ee5ddcf3/Samples/deviceQuery
 
+
+## Windows setup
+
+This section covers Windows-specific steps for getting a native (non-Docker) build working.
+
+### Prerequisites
+
+1. **Visual Studio Build Tools** with the "Desktop development with C++" workload.
+   Install from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/).
+
+2. **CUDA Toolkit 12.x or 13.x** from [NVIDIA's website](https://developer.nvidia.com/cuda-downloads).
+   The installer will add CUDA to your `PATH` automatically.
+
+3. **Rust nightly toolchain** -- `rustup` will install the pinned version automatically when you
+   run any `cargo` command inside the repo (from `rust-toolchain.toml`).
+
+### PATH configuration
+
+After installing the CUDA Toolkit, verify the following directories are on your `PATH`:
+
+```powershell
+# CUDA 13.x
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin"
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin\x64"
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\nvvm\bin\x64"
+
+# CUDA 12.x -- replace v12.x with your installed version
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\bin"
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\nvvm\bin"
+```
+
+To make these permanent, add them via **System Properties > Environment Variables**.
+
+### cuDNN (optional)
+
+If you plan to use the `cudnn` crate, install cuDNN from
+[NVIDIA cuDNN](https://developer.nvidia.com/cudnn).
+
+Place the cuDNN `bin`, `include`, and `lib` directories inside your CUDA Toolkit installation
+directory, or set the `CUDNN_PATH` environment variable to the cuDNN root:
+
+```powershell
+$env:CUDNN_PATH = "C:\path\to\cudnn"
+```
+
+The `cudnn-sys` build script searches these locations automatically (including versioned
+subdirectory layouts like `v9.x`).
+
+### Building and running
+
+Once your `PATH` is configured, build and run exactly as on Linux:
+
+```powershell
+cargo build
+cargo run -p vecadd
+```
+
+### Common errors
+
+| Error | Fix |
+| --- | --- |
+| `error: couldn't load codegen backend` | Add the `nvvm\bin\x64` directory to `PATH` (see above) |
+| `cannot open shared object file: libnvvm` | Same fix -- the NVVM DLL must be on `PATH` |
+| `LINK : fatal error LNK1181: cannot open input file 'advapi32.lib'` | Ensure MSVC Build Tools are installed |
+| `cudnn.lib not found` | Set `CUDNN_PATH` or copy cuDNN files into the CUDA Toolkit directory |
+
 ## More examples
 
 The [`examples`] directory has more complex examples. They all follow the same basic structure as
