@@ -1,4 +1,4 @@
-use crate::{
+﻿use crate::{
     CudnnContext, CudnnError,
     backend::{Descriptor, Operation},
 };
@@ -39,7 +39,6 @@ impl GraphBuilder {
             let descriptors = operations
                 .iter()
                 .map(|op| match op {
-                    Operation::ConvBwdData { raw, .. } => raw.inner(),
                     Operation::ConvBwdData { raw, .. } => raw.inner(),
                     Operation::ConvBwdFilter { raw, .. } => raw.inner(),
                     Operation::ConvFwd { raw, .. } => raw.inner(),
