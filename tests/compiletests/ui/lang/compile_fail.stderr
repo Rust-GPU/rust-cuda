@@ -1,4 +1,4 @@
-error[E0433]: failed to resolve: use of unresolved module or unlinked crate `std`
+error[E0433]: cannot find module or crate `std` in this scope
   --> $DIR/compile_fail.rs:5:14
    |
 LL |     let _s = std::fs::File::create("foo.txt");

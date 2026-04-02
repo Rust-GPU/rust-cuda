@@ -403,7 +403,7 @@ fn rust_flags(codegen_backend_path: &Path, target_arch: &str) -> String {
         "-Cdebuginfo=2",
         "-Cembed-bitcode=no",
         &format!("-Ctarget-feature=+{target_arch}"),
-        "-Cpanic=abort",
+        "-Cpanic=immediate-abort",
         "-Cno-redzone=yes",
         &format!("-Cllvm-args=-arch={target_arch}"),
         "-Cllvm-args=--override-libm",
