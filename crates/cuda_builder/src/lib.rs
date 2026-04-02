@@ -699,10 +699,12 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
 
     let mut rustflags = vec![
         format!("-Zcodegen-backend={}", rustc_codegen_nvvm.display()),
+        "-Zunstable-options".into(),
         "-Zcrate-attr=feature(register_tool)".into(),
         "-Zcrate-attr=register_tool(nvvm_internal)".into(),
         "-Zcrate-attr=no_std".into(),
         "-Zsaturating_float_casts=false".into(),
+        "-Cpanic=immediate-abort".into(),
     ];
 
     if let Some(emit) = &builder.emit {
@@ -775,12 +777,7 @@ fn invoke_rustc(builder: &CudaBuilder) -> Result<PathBuf, CudaBuilderError> {
         cargo.arg("--release");
     }
 
-    // TODO(RDambrosio016): Remove this once we can get meaningful error messages in panic to work.
-    // for now we enable it to remove some useless indirect calls in the ptx.
-    cargo.arg("-Zbuild-std-features=panic_immediate_abort");
-
     if builder.optix {
-        cargo.arg("-Zbuild-std-features=panic_immediate_abort");
         cargo.arg("-Zunstable-options");
         cargo.arg("--config");
         cargo.arg("optix=\"1\"");

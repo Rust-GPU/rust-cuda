@@ -210,6 +210,7 @@ fn build_deps(
     // Build compiletests-deps-helper using the same approach as cuda_builder
     let rustflags = vec![
         format!("-Zcodegen-backend={}", codegen_backend_path.display()),
+        "-Zunstable-options".into(),
         "-Zcrate-attr=feature(register_tool)".into(),
         "-Zcrate-attr=register_tool(nvvm_internal)".into(),
         "-Zcrate-attr=no_std".into(),
@@ -219,7 +220,7 @@ fn build_deps(
         "-Cdebuginfo=0".into(),
         "-Coverflow-checks=off".into(),
         "-Copt-level=3".into(),
-        "-Cpanic=abort".into(),
+        "-Cpanic=immediate-abort".into(),
         "-Cno-redzone=yes".into(),
         format!("-Cllvm-args=-arch={} --override-libm", arch),
         format!("-Ctarget-feature=+{}", arch),
@@ -235,7 +236,6 @@ fn build_deps(
             "compiletests-deps-helper",
             "--release",
             "-Zbuild-std=core,alloc",
-            "-Zbuild-std-features=panic_immediate_abort",
             &*format!("--target={target}"),
         ])
         .arg("--target-dir")
