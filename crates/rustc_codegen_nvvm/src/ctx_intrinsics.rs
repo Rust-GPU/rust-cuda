@@ -30,8 +30,10 @@ impl<'ll> CodegenCx<'ll, '_> {
         let t_i16 = self.type_i16();
         let t_i32 = self.type_i32();
         let t_i64 = self.type_i64();
+        let t_f16 = self.type_f16();
         let t_f32 = self.type_f32();
         let t_f64 = self.type_f64();
+        let t_f128 = self.type_f128();
         let t_isize = self.type_isize();
 
         let t_i8_i1 = self.type_struct(&[t_i8, i1], false);
@@ -140,6 +142,31 @@ impl<'ll> CodegenCx<'ll, '_> {
 
         ifn!(map, "llvm.expect.i1", fn(i1, i1) -> i1);
         ifn!(map, "llvm.prefetch", fn(i8p, t_i32, t_i32, t_i32) -> void);
+
+        ifn!(map, "llvm.copysign.f16", fn(t_f16, t_f16) -> t_f16);
+        ifn!(map, "llvm.copysign.f128", fn(t_f128, t_f128) -> t_f128);
+        ifn!(map, "llvm.fabs.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.fabs.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.sqrt.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.sqrt.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.floor.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.floor.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.ceil.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.ceil.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.trunc.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.trunc.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.round.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.round.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.rint.f16", fn(t_f16) -> t_f16);
+        ifn!(map, "llvm.rint.f128", fn(t_f128) -> t_f128);
+        ifn!(map, "llvm.fma.f16", fn(t_f16, t_f16, t_f16) -> t_f16);
+        ifn!(map, "llvm.fma.f128", fn(t_f128, t_f128, t_f128) -> t_f128);
+        ifn!(map, "llvm.minnum.f16", fn(t_f16, t_f16) -> t_f16);
+        ifn!(map, "llvm.minnum.f128", fn(t_f128, t_f128) -> t_f128);
+        ifn!(map, "llvm.maxnum.f16", fn(t_f16, t_f16) -> t_f16);
+        ifn!(map, "llvm.maxnum.f128", fn(t_f128, t_f128) -> t_f128);
+        ifn!(map, "llvm.powi.f16.i32", fn(t_f16, t_i32) -> t_f16);
+        ifn!(map, "llvm.powi.f128.i32", fn(t_f128, t_i32) -> t_f128);
 
         // This isn't an "LLVM intrinsic", but LLVM's optimization passes
         // recognize it like one and we assume it exists in `core::slice::cmp`

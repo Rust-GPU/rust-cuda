@@ -1500,6 +1500,18 @@ extern "C" LLVMValueRef LLVMRustBuildCall(LLVMBuilderRef B, LLVMValueRef Fn,
       unwrap(Fn), makeArrayRef(unwrap(Args), NumArgs), Bundles, Name));
 }
 
+extern "C" LLVMValueRef LLVMRustBuildCall2(LLVMBuilderRef B, LLVMTypeRef FnTy,
+                                           LLVMValueRef Fn, LLVMValueRef *Args,
+                                           unsigned NumArgs,
+                                           OperandBundleDef *Bundle,
+                                           const char *Name)
+{
+  assert(Bundle == nullptr && "LLVM 7 lacks CreateCall(FunctionType, ..., Bundles)");
+  return wrap(unwrap(B)->CreateCall(
+      unwrap<FunctionType>(FnTy), unwrap(Fn),
+      makeArrayRef(unwrap(Args), NumArgs), Name));
+}
+
 extern "C" LLVMValueRef
 LLVMRustBuildInvoke(LLVMBuilderRef B, LLVMValueRef Fn, LLVMValueRef *Args,
                     unsigned NumArgs, LLVMBasicBlockRef Then,

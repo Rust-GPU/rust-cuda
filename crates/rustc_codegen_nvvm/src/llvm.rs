@@ -619,6 +619,17 @@ pub(crate) unsafe fn LLVMRustBuildCall<'a>(
     unsafe { __LLVMRustBuildCall(B, Fn, Args, NumArgs, Bundle, unnamed()) }
 }
 
+pub(crate) unsafe fn LLVMRustBuildCall2<'a>(
+    B: &Builder<'a>,
+    FnTy: &'a Type,
+    Fn: &'a Value,
+    Args: *const &'a Value,
+    NumArgs: c_uint,
+    Bundle: Option<&OperandBundleDef<'a>>,
+) -> &'a Value {
+    unsafe { __LLVMRustBuildCall2(B, FnTy, Fn, Args, NumArgs, Bundle, unnamed()) }
+}
+
 /// LLVMRustCodeGenOptLevel
 #[derive(Copy, Clone, PartialEq)]
 #[repr(C)]
@@ -660,6 +671,17 @@ unsafe extern "C" {
     #[link_name = "LLVMRustBuildCall"]
     pub(crate) fn __LLVMRustBuildCall<'a>(
         B: &Builder<'a>,
+        Fn: &'a Value,
+        Args: *const &'a Value,
+        NumArgs: c_uint,
+        Bundle: Option<&OperandBundleDef<'a>>,
+        Name: *const c_char,
+    ) -> &'a Value;
+
+    #[link_name = "LLVMRustBuildCall2"]
+    pub(crate) fn __LLVMRustBuildCall2<'a>(
+        B: &Builder<'a>,
+        FnTy: &'a Type,
         Fn: &'a Value,
         Args: *const &'a Value,
         NumArgs: c_uint,

@@ -1,12 +1,12 @@
 use rustc_abi as abi;
-use rustc_abi::{self, BackendRepr, Float, HasDataLayout, Primitive};
+use rustc_abi::{self, BackendRepr, Float, HasDataLayout, Primitive, WrappingRange};
 use rustc_codegen_ssa::errors::InvalidMonomorphization;
 use rustc_codegen_ssa::mir::operand::OperandValue;
 use rustc_codegen_ssa::mir::place::PlaceValue;
 use rustc_codegen_ssa::mir::{operand::OperandRef, place::PlaceRef};
 use rustc_codegen_ssa::traits::{
     BaseTypeCodegenMethods, BuilderMethods, ConstCodegenMethods, IntrinsicCallBuilderMethods,
-    OverflowOp,
+    LayoutTypeCodegenMethods, OverflowOp,
 };
 use rustc_middle::ty::layout::{FnAbiOf, HasTypingEnv, LayoutOf};
 use rustc_middle::ty::{self, Ty};
@@ -205,6 +205,34 @@ fn get_simple_intrinsic<'ll>(
     Some(cx.get_intrinsic(llvm_name))
 }
 
+fn get_llvm_float_intrinsic<'ll>(
+    cx: &CodegenCx<'ll, '_>,
+    intrinsic: &str,
+    width: u32,
+) -> (&'ll Type, &'ll Value) {
+    let suffix = match width {
+        16 => "f16",
+        32 => "f32",
+        64 => "f64",
+        128 => "f128",
+        _ => bug!("unsupported float width {width} for intrinsic {intrinsic}"),
+    };
+    let name = format!("{intrinsic}.{suffix}");
+    cx.get_intrinsic(&name)
+}
+
+fn get_llvm_powi_intrinsic<'ll>(cx: &CodegenCx<'ll, '_>, width: u32) -> (&'ll Type, &'ll Value) {
+    let suffix = match width {
+        16 => "f16",
+        32 => "f32",
+        64 => "f64",
+        128 => "f128",
+        _ => bug!("unsupported float width {width} for llvm.powi"),
+    };
+    let name = format!("llvm.powi.{suffix}.i32");
+    cx.get_intrinsic(&name)
+}
+
 impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
     fn codegen_intrinsic_call(
         &mut self,
@@ -224,8 +252,9 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         let sig = tcx.normalize_erasing_late_bound_regions(self.typing_env(), sig);
         let arg_tys = sig.inputs();
         let ret_ty = sig.output();
-        let name = tcx.item_name(def_id);
-        let name_str = name.as_str();
+        let intrinsic = tcx.intrinsic(def_id).unwrap();
+        let name = intrinsic.name;
+        let name_str: &str = name.as_str();
 
         trace!(
             "Beginning intrinsic call: `{:?}`, args: `{:?}`, ret: `{:?}`",
@@ -251,22 +280,122 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                     Some(instance),
                 )
             }
-            sym::fabs | sym::minimumf32 | sym::minimumf64 | sym::maximumf32 | sym::maximumf64 => {
+            n if matches!(
+                n,
+                sym::fabs | sym::minimumf32 | sym::minimumf64 | sym::maximumf32 | sym::maximumf64
+            ) || matches!(
+                name_str,
+                "sqrtf16"
+                    | "sqrtf128"
+                    | "powif16"
+                    | "powif128"
+                    | "fmaf16"
+                    | "fmaf128"
+                    | "copysignf16"
+                    | "copysignf128"
+                    | "floorf16"
+                    | "floorf128"
+                    | "ceilf16"
+                    | "ceilf128"
+                    | "truncf16"
+                    | "truncf128"
+                    | "roundf16"
+                    | "roundf128"
+                    | "round_ties_even_f16"
+                    | "round_ties_even_f128"
+                    | "minimumf16"
+                    | "minimumf128"
+                    | "maximumf16"
+                    | "maximumf128"
+                    | "minimum_number_nsz_f16"
+                    | "minimum_number_nsz_f32"
+                    | "minimum_number_nsz_f64"
+                    | "minimum_number_nsz_f128"
+                    | "maximum_number_nsz_f16"
+                    | "maximum_number_nsz_f32"
+                    | "maximum_number_nsz_f64"
+                    | "maximum_number_nsz_f128"
+            ) =>
+            {
                 let ty = args[0].layout.ty;
-                let llvm_name = match name {
-                    sym::fabs if matches!(ty.kind(), ty::Float(ty::FloatTy::F32)) => "__nv_fabsf",
-                    sym::fabs if matches!(ty.kind(), ty::Float(ty::FloatTy::F64)) => "__nv_fabs",
-                    sym::minimumf32 => "__nv_fminf",
-                    sym::minimumf64 => "__nv_fmin",
-                    sym::maximumf32 => "__nv_fmaxf",
-                    sym::maximumf64 => "__nv_fmax",
+                let width = match ty.kind() {
+                    ty::Float(ty::FloatTy::F16) => 16,
+                    ty::Float(ty::FloatTy::F32) => 32,
+                    ty::Float(ty::FloatTy::F64) => 64,
+                    ty::Float(ty::FloatTy::F128) => 128,
                     _ => span_bug!(
                         span,
-                        "unsupported float intrinsic {name:?} for argument type {:?}",
-                        ty
+                        "unsupported float intrinsic {name:?} for argument type {ty:?}"
                     ),
                 };
-                let (simple_ty, simple_fn) = self.cx.get_intrinsic(llvm_name);
+                let (simple_ty, simple_fn) = match name {
+                    sym::fabs if width == 32 => self.cx.get_intrinsic("__nv_fabsf"),
+                    sym::fabs if width == 64 => self.cx.get_intrinsic("__nv_fabs"),
+                    sym::fabs => get_llvm_float_intrinsic(self.cx, "llvm.fabs", width),
+                    sym::minimumf32 if width == 32 => self.cx.get_intrinsic("__nv_fminf"),
+                    sym::minimumf64 if width == 64 => self.cx.get_intrinsic("__nv_fmin"),
+                    sym::maximumf32 if width == 32 => self.cx.get_intrinsic("__nv_fmaxf"),
+                    sym::maximumf64 if width == 64 => self.cx.get_intrinsic("__nv_fmax"),
+                    _ => match name_str {
+                        "sqrtf16" | "sqrtf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.sqrt", width)
+                        }
+                        "powif16" | "powif128" => get_llvm_powi_intrinsic(self.cx, width),
+                        "fmaf16" | "fmaf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.fma", width)
+                        }
+                        "copysignf16" | "copysignf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.copysign", width)
+                        }
+                        "floorf16" | "floorf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.floor", width)
+                        }
+                        "ceilf16" | "ceilf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.ceil", width)
+                        }
+                        "truncf16" | "truncf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.trunc", width)
+                        }
+                        "roundf16" | "roundf128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.round", width)
+                        }
+                        "round_ties_even_f16" | "round_ties_even_f128" => {
+                            get_llvm_float_intrinsic(self.cx, "llvm.rint", width)
+                        }
+                        "minimumf16"
+                        | "minimumf128"
+                        | "minimum_number_nsz_f16"
+                        | "minimum_number_nsz_f32"
+                        | "minimum_number_nsz_f64"
+                        | "minimum_number_nsz_f128" => {
+                            if width == 32 {
+                                self.cx.get_intrinsic("__nv_fminf")
+                            } else if width == 64 {
+                                self.cx.get_intrinsic("__nv_fmin")
+                            } else {
+                                get_llvm_float_intrinsic(self.cx, "llvm.minnum", width)
+                            }
+                        }
+                        "maximumf16"
+                        | "maximumf128"
+                        | "maximum_number_nsz_f16"
+                        | "maximum_number_nsz_f32"
+                        | "maximum_number_nsz_f64"
+                        | "maximum_number_nsz_f128" => {
+                            if width == 32 {
+                                self.cx.get_intrinsic("__nv_fmaxf")
+                            } else if width == 64 {
+                                self.cx.get_intrinsic("__nv_fmax")
+                            } else {
+                                get_llvm_float_intrinsic(self.cx, "llvm.maxnum", width)
+                            }
+                        }
+                        _ => span_bug!(
+                            span,
+                            "unsupported float intrinsic {name:?} for argument type {ty:?}"
+                        ),
+                    },
+                };
                 self.call(
                     simple_ty,
                     None,
@@ -639,7 +768,6 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
             // Fall back to a fallback intrinsic implementation, if possible
             _ => {
                 // This piece of code was adapted from `rustc_codegen_cranelift`.
-                let intrinsic = self.tcx.intrinsic(instance.def_id()).unwrap();
                 if intrinsic.must_be_overridden {
                     span_bug!(
                         span,
@@ -671,10 +799,92 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
     fn codegen_llvm_intrinsic_call(
         &mut self,
         instance: ty::Instance<'tcx>,
-        _args: &[OperandRef<'tcx, &'ll Value>],
-        _is_cleanup: bool,
+        args: &[OperandRef<'tcx, &'ll Value>],
+        is_cleanup: bool,
     ) -> &'ll Value {
-        bug!("LLVM intrinsic calls are unsupported for NVVM: {instance:?}")
+        let tcx = self.tcx;
+
+        let fn_ty = instance.ty(tcx, self.typing_env());
+        let fn_sig = match *fn_ty.kind() {
+            ty::FnDef(def_id, args) => {
+                tcx.instantiate_bound_regions_with_erased(tcx.fn_sig(def_id).instantiate(tcx, args))
+            }
+            _ => unreachable!(),
+        };
+        assert!(!fn_sig.c_variadic);
+
+        let ret_layout = self.layout_of(fn_sig.output());
+        let llreturn_ty = if ret_layout.is_zst() {
+            self.type_void()
+        } else {
+            ret_layout.immediate_llvm_type(self)
+        };
+
+        let mut llargument_tys = Vec::with_capacity(fn_sig.inputs().len());
+        for &arg in fn_sig.inputs() {
+            let arg_layout = self.layout_of(arg);
+            if arg_layout.is_zst() {
+                continue;
+            }
+            llargument_tys.push(arg_layout.immediate_llvm_type(self));
+        }
+
+        let fn_ty = self.type_func(&llargument_tys, llreturn_ty);
+        let sym = tcx.symbol_name(instance).name;
+        let fn_ptr = self
+            .cx
+            .get_declared_value(sym)
+            .unwrap_or_else(|| self.cx.declare_fn(sym, fn_ty, None));
+        let fn_ptr_ty = unsafe { llvm::LLVMPointerType(fn_ty, 0) };
+        let fn_ptr = if self.val_ty(fn_ptr) == fn_ptr_ty {
+            fn_ptr
+        } else {
+            self.pointercast(fn_ptr, fn_ptr_ty)
+        };
+
+        let mut llargs = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg.val {
+                OperandValue::ZeroSized => {}
+                OperandValue::Immediate(_) => llargs.push(arg.immediate()),
+                OperandValue::Pair(a, b) => {
+                    llargs.push(a);
+                    llargs.push(b);
+                }
+                OperandValue::Ref(op_place_val) => {
+                    let mut llval = op_place_val.llval;
+                    llval = self.load(self.backend_type(arg.layout), llval, op_place_val.align);
+                    if let BackendRepr::Scalar(scalar) = arg.layout.backend_repr {
+                        if scalar.is_bool() {
+                            self.range_metadata(llval, WrappingRange { start: 0, end: 1 });
+                        }
+                        llval = self.to_immediate_scalar(llval, scalar);
+                    }
+                    llargs.push(llval);
+                }
+            }
+        }
+
+        trace!(
+            "call llvm intrinsic {:?} with args ({:?})",
+            instance, llargs
+        );
+        let args = self.check_call("call", fn_ty, fn_ptr, &llargs);
+        let llret = unsafe {
+            llvm::LLVMRustBuildCall2(
+                self.llbuilder,
+                fn_ty,
+                fn_ptr,
+                args.as_ptr(),
+                args.len() as _,
+                None,
+            )
+        };
+        if is_cleanup {
+            self.apply_attrs_to_cleanup_callsite(llret);
+        }
+
+        llret
     }
 
     fn abort(&mut self) {

@@ -1355,10 +1355,17 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         trace!("Calling fn {:?} with args {:?}", llfn, args);
         self.cx.last_call_llfn.set(None);
         let args = self.check_call("call", llty, llfn, args);
+        let llfn_ptr_ty = unsafe { llvm::LLVMPointerType(llty, 0) };
+        let llfn = if self.val_ty(llfn) == llfn_ptr_ty {
+            llfn
+        } else {
+            self.pointercast(llfn, llfn_ptr_ty)
+        };
 
         let mut call = unsafe {
-            llvm::LLVMRustBuildCall(
+            llvm::LLVMRustBuildCall2(
                 self.llbuilder,
+                llty,
                 llfn,
                 args.as_ptr(),
                 args.len() as c_uint,
@@ -1461,7 +1468,7 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
         }
     }
 
-    fn check_call<'b>(
+    pub(crate) fn check_call<'b>(
         &mut self,
         typ: &str,
         fn_ty: &'ll Type,
