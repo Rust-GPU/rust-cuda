@@ -40,8 +40,6 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![allow(clippy::unreadable_literal)]
-#![feature(doc_cfg)]
-
 pub mod xoroshiro;
 
 mod default;

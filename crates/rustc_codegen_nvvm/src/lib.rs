@@ -337,9 +337,7 @@ impl ExtraBackendMethods for NvvmCodegenBackend {
         methods: &[AllocatorMethod],
     ) -> LlvmMod {
         let mut module_llvm = LlvmMod::new(module_name);
-        unsafe {
-            allocator::codegen(tcx, &mut module_llvm, module_name, methods);
-        }
+        allocator::codegen(tcx, &mut module_llvm, module_name, methods);
         module_llvm
     }
 

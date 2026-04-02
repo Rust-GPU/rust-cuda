@@ -91,7 +91,11 @@ impl<'tcx> PreDefineCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
         attributes::from_fn_attrs(self, lldecl, instance);
 
         let def_id = instance.def_id();
-        let attrs = self.tcx.get_all_attrs(def_id); // TODO: Replace with get_attrs
+        let attrs = if let Some(def_id) = def_id.as_local() {
+            self.tcx.hir_attrs(self.tcx.local_def_id_to_hir_id(def_id))
+        } else {
+            self.tcx.attrs_for_def(def_id)
+        };
         let nvvm_attrs = NvvmAttributes::parse(self, attrs);
 
         unsafe {

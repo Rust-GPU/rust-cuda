@@ -200,7 +200,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                                 }),
                             )))
                             .unwrap_memory();
-                        let init = const_alloc_to_llvm(self, alloc, /*static*/ false);
+                        let _ = const_alloc_to_llvm(self, alloc, /*static*/ false);
                         let value = self.static_addr_of(alloc, None);
                         (value, AddressSpace::ZERO)
                     }

@@ -403,11 +403,10 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
 
     fn immediate_llvm_type<'a>(&self, cx: &CodegenCx<'a, 'tcx>) -> &'a Type {
         match self.backend_repr {
-            BackendRepr::Scalar(ref scalar) => {
-                if scalar.is_bool() {
-                    return cx.type_i1();
-                }
+            BackendRepr::Scalar(ref scalar) if scalar.is_bool() => {
+                return cx.type_i1();
             }
+            BackendRepr::Scalar(..) => {}
             BackendRepr::ScalarPair(..) => {
                 // An immediate pair always contains just the two elements, without any padding
                 // filler, as it should never be stored to memory.

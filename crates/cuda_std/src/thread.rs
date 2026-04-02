@@ -236,7 +236,7 @@ pub fn index() -> u32 {
 
 #[inline(always)]
 pub fn index_1d() -> u32 {
-    thread_idx_x() as u32 + block_idx_x() as u32 * block_dim_x() as u32
+    thread_idx_x() + block_idx_x() * block_dim_x()
 }
 
 #[inline(always)]

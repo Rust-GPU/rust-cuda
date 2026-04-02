@@ -835,7 +835,7 @@ struct RustcOutput {
 }
 
 fn get_last_artifact(out: &str) -> Option<PathBuf> {
-    let artifacts =
+    let mut artifacts =
         out.lines()
             .filter_map(|line| match serde_json::from_str::<RustcOutput>(line) {
                 Ok(line) => Some(line),
@@ -846,9 +846,7 @@ fn get_last_artifact(out: &str) -> Option<PathBuf> {
                 }
             });
 
-    let last = artifacts
-        .filter(|line| line.reason == "compiler-artifact")
-        .next_back()?;
+    let last = artifacts.rfind(|line| line.reason == "compiler-artifact")?;
 
     let mut filenames = last
         .filenames

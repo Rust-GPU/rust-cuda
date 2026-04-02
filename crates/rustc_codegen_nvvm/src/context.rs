@@ -64,9 +64,6 @@ pub(crate) struct CodegenCx<'ll, 'tcx> {
     pub remapped_integer_args:
         RefCell<FxHashMap<&'ll Type, (Option<&'ll Type>, Vec<(usize, &'ll Type)>)>>,
 
-    /// Cache of emitted const globals (value -> global)
-    pub const_globals: RefCell<FxHashMap<&'ll Value, &'ll Value>>,
-
     /// List of globals for static variables which need to be passed to the
     /// LLVM function ReplaceAllUsesWith (RAUW) when codegen is complete.
     /// (We have to make sure we don't invalidate any Values referring
@@ -148,7 +145,6 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             vtables: Default::default(),
             const_cstr_cache: Default::default(),
             remapped_integer_args: Default::default(),
-            const_globals: Default::default(),
             statics_to_rauw: RefCell::new(Vec::new()),
             used_statics: RefCell::new(Vec::new()),
             compiler_used_statics: RefCell::new(Vec::new()),
@@ -265,7 +261,11 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
     pub fn static_addrspace(&self, instance: Instance<'tcx>) -> AddressSpace {
         let ty = instance.ty(self.tcx, self.typing_env());
         let is_mutable = self.tcx().is_mutable_static(instance.def_id());
-        let attrs = self.tcx.get_all_attrs(instance.def_id()); // TODO: replace with get_attrs
+        let attrs = if let Some(def_id) = instance.def_id().as_local() {
+            self.tcx.hir_attrs(self.tcx.local_def_id_to_hir_id(def_id))
+        } else {
+            self.tcx.attrs_for_def(instance.def_id())
+        };
         let nvvm_attrs = NvvmAttributes::parse(self, attrs);
 
         if let Some(addr) = nvvm_attrs.addrspace {
