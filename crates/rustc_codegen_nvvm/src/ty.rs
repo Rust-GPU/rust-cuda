@@ -305,6 +305,7 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
             BackendRepr::Scalar(_) | BackendRepr::SimdVector { .. } => true,
             BackendRepr::ScalarPair(..) => false,
             BackendRepr::Memory { .. } => self.is_zst(),
+            BackendRepr::SimdScalableVector { .. } => bug!("scalable vectors are unsupported"),
         }
     }
 
@@ -314,6 +315,7 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
             BackendRepr::Scalar(_)
             | BackendRepr::SimdVector { .. }
             | BackendRepr::Memory { .. } => false,
+            BackendRepr::SimdScalableVector { .. } => false,
         }
     }
 
@@ -372,7 +374,7 @@ impl<'tcx> LayoutLlvmExt<'tcx> for TyAndLayout<'tcx> {
 
         // Make sure lifetimes are erased, to avoid generating distinct LLVM
         // types for Rust types that only differ in the choice of lifetimes.
-        let normal_ty = cx.tcx.erase_regions(self.ty);
+        let normal_ty = cx.tcx.erase_and_anonymize_regions(self.ty);
 
         let mut defer = None;
         let llty = if self.ty != normal_ty {
@@ -513,6 +515,7 @@ fn uncached_llvm_type<'a, 'tcx>(
             let element = layout.scalar_llvm_type_at(cx, element);
             return cx.type_vector(element, count);
         }
+        BackendRepr::SimdScalableVector { .. } => bug!("scalable vectors are unsupported"),
         BackendRepr::ScalarPair(..) => {
             return cx.type_struct(
                 &[
@@ -654,10 +657,6 @@ impl<'tcx> TypeMembershipCodegenMethods<'tcx> for CodegenCx<'_, 'tcx> {
     fn add_type_metadata(&self, _function: Self::Function, _typeid: &[u8]) {}
 
     fn set_type_metadata(&self, _function: Self::Function, _typeid: &[u8]) {}
-
-    fn typeid_metadata(&self, _typeid: &[u8]) -> Option<Self::Metadata> {
-        None
-    }
 
     fn add_kcfi_type_metadata(&self, _function: Self::Function, _typeid: u32) {}
 

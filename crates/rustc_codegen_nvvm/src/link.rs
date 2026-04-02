@@ -1,11 +1,9 @@
 use object::{Object, ObjectSection};
-use rustc_ast::CRATE_NODE_ID;
-use rustc_codegen_ssa::CodegenResults;
-use rustc_codegen_ssa::CompiledModule;
-use rustc_codegen_ssa::NativeLib;
+use rustc_codegen_ssa::{CompiledModule, CompiledModules, CrateInfo, NativeLib};
+use rustc_data_structures::fx::FxHashSet;
 use rustc_data_structures::memmap::Mmap;
 use rustc_data_structures::owned_slice::{OwnedSlice, slice_owned, try_slice_owned};
-use rustc_hash::FxHashSet;
+use rustc_hir::attrs::NativeLibKind;
 use rustc_metadata::creader::MetadataLoader;
 use rustc_middle::bug;
 use rustc_middle::middle::dependency_format::Linkage;
@@ -14,7 +12,6 @@ use rustc_session::{
     Session,
     config::{CrateType, OutputFilenames, OutputType},
     output::check_file_is_writeable,
-    utils::NativeLibKind,
 };
 use rustc_span::Symbol;
 use rustc_target::spec::Target;
@@ -108,11 +105,12 @@ fn search_for_section<'a>(path: &Path, bytes: &'a [u8], section: &str) -> Result
 
 pub fn link(
     sess: &Session,
-    codegen_results: &CodegenResults,
-    outputs: &OutputFilenames,
-    crate_name: &str,
+    compiled_modules: CompiledModules,
+    crate_info: CrateInfo,
     metadata: rustc_metadata::EncodedMetadata,
+    outputs: &OutputFilenames,
 ) {
+    let crate_name = crate_info.local_crate_name.as_str();
     debug!("Linking crate `{}`", crate_name);
     // largely inspired by rust-gpu
     let output_metadata = sess.opts.output_types.contains_key(&OutputType::Metadata);
@@ -124,7 +122,7 @@ pub fn link(
             continue;
         }
 
-        for obj in codegen_results
+        for obj in compiled_modules
             .modules
             .iter()
             .filter_map(|m| m.object.as_ref())
@@ -140,18 +138,20 @@ pub fn link(
                 CrateType::Rlib => {
                     link_rlib(
                         sess,
-                        codegen_results,
+                        &compiled_modules,
+                        &crate_info,
                         &out_filename_file_for_writing,
                         &metadata,
                     );
                 }
                 CrateType::Executable | CrateType::Cdylib | CrateType::Dylib => {
                     let _ = link_exe(
-                        &codegen_results.allocator_module,
+                        &compiled_modules.allocator_module,
                         sess,
                         crate_type,
                         &out_filename_file_for_writing,
-                        codegen_results,
+                        &compiled_modules,
+                        &crate_info,
                     );
                 }
                 other => sess.dcx().fatal(format!("Invalid crate type: {other:?}")),
@@ -162,14 +162,15 @@ pub fn link(
 
 fn link_rlib(
     sess: &Session,
-    codegen_results: &CodegenResults,
+    compiled_modules: &CompiledModules,
+    crate_info: &CrateInfo,
     out_filename: &Path,
     metadata: &rustc_metadata::EncodedMetadata,
 ) {
     debug!("Linking rlib `{:?}`", out_filename);
     let mut file_list = Vec::<&Path>::new();
 
-    for obj in codegen_results
+    for obj in compiled_modules
         .modules
         .iter()
         .filter_map(|m| m.object.as_ref())
@@ -177,7 +178,7 @@ fn link_rlib(
         file_list.push(obj);
     }
 
-    for lib in codegen_results.crate_info.used_libraries.iter() {
+    for lib in crate_info.used_libraries.iter() {
         // native libraries in cuda doesnt make much sense, extern functions
         // do exist in nvvm for stuff like cuda syscalls and cuda provided functions
         // but including libraries doesnt make sense because nvvm would have to translate
@@ -204,11 +205,12 @@ fn link_exe(
     sess: &Session,
     crate_type: CrateType,
     out_filename: &Path,
-    codegen_results: &CodegenResults,
+    compiled_modules: &CompiledModules,
+    crate_info: &CrateInfo,
 ) -> io::Result<()> {
     let mut objects = Vec::new();
     let mut rlibs = Vec::new();
-    for obj in codegen_results
+    for obj in compiled_modules
         .modules
         .iter()
         .filter_map(|m| m.object.as_ref())
@@ -216,12 +218,7 @@ fn link_exe(
         objects.push(obj.clone());
     }
 
-    link_local_crate_native_libs_and_dependent_crate_libs(
-        &mut rlibs,
-        sess,
-        crate_type,
-        codegen_results,
-    );
+    link_local_crate_native_libs_and_dependent_crate_libs(&mut rlibs, sess, crate_type, crate_info);
 
     let mut root_file_name = out_filename.file_name().unwrap().to_owned();
     root_file_name.push(".dir");
@@ -370,20 +367,19 @@ fn link_local_crate_native_libs_and_dependent_crate_libs(
     rlibs: &mut Vec<PathBuf>,
     sess: &Session,
     crate_type: CrateType,
-    codegen_results: &CodegenResults,
+    crate_info: &CrateInfo,
 ) {
     if sess.opts.unstable_opts.link_native_libraries {
-        add_local_native_libraries(sess, codegen_results);
+        add_local_native_libraries(sess, crate_info);
     }
-    add_upstream_rust_crates(sess, rlibs, codegen_results, crate_type);
+    add_upstream_rust_crates(sess, rlibs, crate_info, crate_type);
     if sess.opts.unstable_opts.link_native_libraries {
-        add_upstream_native_libraries(sess, codegen_results, crate_type);
+        add_upstream_native_libraries(sess, crate_info, crate_type);
     }
 }
 
-fn add_local_native_libraries(sess: &Session, codegen_results: &CodegenResults) {
-    let relevant_libs = codegen_results
-        .crate_info
+fn add_local_native_libraries(sess: &Session, crate_info: &CrateInfo) {
+    let relevant_libs = crate_info
         .used_libraries
         .iter()
         .filter(|l| relevant_lib(sess, l));
@@ -393,21 +389,20 @@ fn add_local_native_libraries(sess: &Session, codegen_results: &CodegenResults) 
 fn add_upstream_rust_crates(
     sess: &Session,
     rlibs: &mut Vec<PathBuf>,
-    codegen_results: &CodegenResults,
+    crate_info: &CrateInfo,
     crate_type: CrateType,
 ) {
-    let (_, data) = codegen_results
-        .crate_info
+    let (_, data) = crate_info
         .dependency_formats
         .iter()
         .find(|(ty, _)| **ty == crate_type)
         .expect("failed to find crate type in dependency format list");
-    let deps = &codegen_results.crate_info.used_crates;
+    let deps = &crate_info.used_crates;
     for cnum in deps.iter() {
-        let src = &codegen_results.crate_info.used_crate_source[cnum];
+        let src = &crate_info.used_crate_source[cnum];
         match data[*cnum] {
             Linkage::NotLinked => {}
-            Linkage::Static => rlibs.push(src.rlib.as_ref().unwrap().0.clone()),
+            Linkage::Static => rlibs.push(src.rlib.as_ref().unwrap().clone()),
             // should we just ignore includedFromDylib?
             Linkage::Dynamic | Linkage::IncludedFromDylib => {
                 sess.dcx().fatal("Dynamic Linking is not supported in CUDA")
@@ -416,14 +411,10 @@ fn add_upstream_rust_crates(
     }
 }
 
-fn add_upstream_native_libraries(
-    sess: &Session,
-    codegen_results: &CodegenResults,
-    _crate_type: CrateType,
-) {
-    let crates = &codegen_results.crate_info.used_crates;
+fn add_upstream_native_libraries(sess: &Session, crate_info: &CrateInfo, _crate_type: CrateType) {
+    let crates = &crate_info.used_crates;
     for cnum in crates {
-        for lib in codegen_results.crate_info.native_libraries[cnum].iter() {
+        for lib in crate_info.native_libraries[cnum].iter() {
             if !relevant_lib(sess, lib) {
                 continue;
             }
@@ -435,7 +426,7 @@ fn add_upstream_native_libraries(
 
 fn relevant_lib(sess: &Session, lib: &NativeLib) -> bool {
     match &lib.cfg {
-        Some(cfg) => rustc_attr_parsing::cfg_matches(cfg, sess, CRATE_NODE_ID, None),
+        Some(cfg) => rustc_attr_parsing::eval_config_entry(sess, cfg).as_bool(),
         None => true,
     }
 }

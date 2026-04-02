@@ -5,6 +5,7 @@ use crate::llvm::{self, True, Type, Value};
 use libc::{c_char, c_uint};
 use rustc_abi::{AddressSpace, Align, HasDataLayout, Primitive, Scalar, Size, WrappingRange};
 use rustc_codegen_ssa::traits::*;
+use rustc_hir::attrs::Linkage;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::interpret::{
     Allocation, ConstAllocation, ErrorHandled, Pointer, read_target_uint,
@@ -16,7 +17,7 @@ use rustc_middle::{
     middle::codegen_fn_attrs::{CodegenFnAttrFlags, CodegenFnAttrs},
     mir::{
         interpret::{InitChunk, Scalar as InterpScalar},
-        mono::{Linkage, MonoItem},
+        mono::MonoItem,
     },
     span_bug,
 };
@@ -179,10 +180,15 @@ fn check_and_apply_linkage<'ll, 'tcx>(
     let llty = cx.layout_of(ty).llvm_type(cx);
     if let Some(linkage) = attrs.linkage {
         // https://docs.nvidia.com/cuda/nvvm-ir-spec/index.html#linkage-types-nvvm
-        use Linkage::*;
         match linkage {
-            External | Internal | Common | AvailableExternally | LinkOnceAny | LinkOnceODR
-            | WeakAny | WeakODR => {}
+            Linkage::External
+            | Linkage::Internal
+            | Linkage::Common
+            | Linkage::AvailableExternally
+            | Linkage::LinkOnceAny
+            | Linkage::LinkOnceODR
+            | Linkage::WeakAny
+            | Linkage::WeakODR => {}
             _ => cx
                 .sess()
                 .dcx()
@@ -315,24 +321,13 @@ impl<'ll> CodegenCx<'ll, '_> {
 }
 
 impl<'ll> StaticCodegenMethods for CodegenCx<'ll, '_> {
-    fn static_addr_of(&self, cv: &'ll Value, align: Align, kind: Option<&str>) -> &'ll Value {
-        if let Some(&gv) = self.const_globals.borrow().get(&cv) {
-            unsafe {
-                // Upgrade the alignment in cases where the same constant is used with different
-                // alignment requirements
-                let llalign = align.bytes() as u32;
-                if llalign > llvm::LLVMGetAlignment(gv) {
-                    llvm::LLVMSetAlignment(gv, llalign);
-                }
-            }
-            return gv;
-        }
-        let gv = self.static_addr_of_mut(cv, align, kind);
+    fn static_addr_of(&self, alloc: ConstAllocation<'_>, kind: Option<&str>) -> &'ll Value {
+        let cv = const_alloc_to_llvm(self, alloc, /*static*/ false);
+        let gv = self.static_addr_of_mut(cv, alloc.inner().align, kind);
         unsafe {
             llvm::LLVMSetGlobalConstant(gv, True);
         }
-        self.const_globals.borrow_mut().insert(cv, gv);
-        gv
+        self.const_ptrcast(gv, self.type_ptr())
     }
 
     fn codegen_static(&mut self, def_id: DefId) {

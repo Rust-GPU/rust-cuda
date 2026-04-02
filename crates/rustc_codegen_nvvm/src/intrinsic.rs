@@ -187,12 +187,6 @@ fn get_simple_intrinsic<'ll>(
         sym::log2f64      => "__nv_log2",
         sym::fmaf32       => "__nv_fmaf",
         sym::fmaf64       => "__nv_fma",
-        sym::fabsf32      => "__nv_fabsf",
-        sym::fabsf64      => "__nv_fabs",
-        sym::minnumf32    => "__nv_fminf",
-        sym::minnumf64    => "__nv_fmin",
-        sym::maxnumf32    => "__nv_fmaxf",
-        sym::maxnumf64    => "__nv_fmax",
         sym::copysignf32  => "__nv_copysignf",
         sym::copysignf64  => "__nv_copysign",
         sym::floorf32     => "__nv_floorf",
@@ -257,6 +251,32 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                     Some(instance),
                 )
             }
+            sym::fabs | sym::minimumf32 | sym::minimumf64 | sym::maximumf32 | sym::maximumf64 => {
+                let ty = args[0].layout.ty;
+                let llvm_name = match name {
+                    sym::fabs if matches!(ty.kind(), ty::Float(ty::FloatTy::F32)) => "__nv_fabsf",
+                    sym::fabs if matches!(ty.kind(), ty::Float(ty::FloatTy::F64)) => "__nv_fabs",
+                    sym::minimumf32 => "__nv_fminf",
+                    sym::minimumf64 => "__nv_fmin",
+                    sym::maximumf32 => "__nv_fmaxf",
+                    sym::maximumf64 => "__nv_fmax",
+                    _ => span_bug!(
+                        span,
+                        "unsupported float intrinsic {name:?} for argument type {:?}",
+                        ty
+                    ),
+                };
+                let (simple_ty, simple_fn) = self.cx.get_intrinsic(llvm_name);
+                self.call(
+                    simple_ty,
+                    None,
+                    None,
+                    simple_fn,
+                    &args.iter().map(|arg| arg.immediate()).collect::<Vec<_>>(),
+                    None,
+                    Some(instance),
+                )
+            }
             sym::is_val_statically_known => {
                 // LLVM 7 does not support this intrinsic, so always assume false.
                 self.const_bool(false)
@@ -287,7 +307,7 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                     _ => span_bug!(span, "Incompatible OperandValue for select_unpredictable"),
                 }
             }
-            sym::likely => self.call_intrinsic(
+            _ if name_str == "likely" => self.call_intrinsic(
                 "llvm.expect.i1",
                 &[args[0].immediate(), self.const_bool(true)],
             ),
@@ -300,7 +320,7 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                 let data = args[1].immediate();
 
                 self.call(self.type_i1(), None, None, try_func, &[data], None, None);
-                let ret_align = self.data_layout().i32_align.abi;
+                let ret_align = self.data_layout().i32_align;
                 self.store(self.const_i32(0), result.val.llval, ret_align)
             }
             sym::breakpoint => {
@@ -533,6 +553,15 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                 let use_integer_compare = match layout.backend_repr() {
                     BackendRepr::Scalar(_) | BackendRepr::ScalarPair(_, _) => true,
                     BackendRepr::SimdVector { .. } => false,
+                    BackendRepr::SimdScalableVector { .. } => {
+                        tcx.dcx()
+                            .emit_err(InvalidMonomorphization::NonScalableType {
+                                span,
+                                name: sym::raw_eq,
+                                ty: tp_ty,
+                            });
+                        return Ok(());
+                    }
                     BackendRepr::Memory { .. } => {
                         // For rusty ABIs, small aggregates are actually passed
                         // as `RegKind::Integer` (see `FnAbi::adjust_for_abi`),
@@ -639,6 +668,15 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         Ok(())
     }
 
+    fn codegen_llvm_intrinsic_call(
+        &mut self,
+        instance: ty::Instance<'tcx>,
+        _args: &[OperandRef<'tcx, &'ll Value>],
+        _is_cleanup: bool,
+    ) -> &'ll Value {
+        bug!("LLVM intrinsic calls are unsupported for NVVM: {instance:?}")
+    }
+
     fn abort(&mut self) {
         trace!("Generate abort call");
         self.call_intrinsic("llvm.trap", &[]);
@@ -658,7 +696,7 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         &mut self,
         _llvtable: Self::Value,
         _vtable_byte_offset: u64,
-        _typeid: Self::Metadata,
+        _typeid: &[u8],
     ) -> Self::Value {
         // LLVM CFI doesnt make sense on the GPU
         self.const_i32(0)

@@ -18,9 +18,8 @@ use rustc_codegen_ssa::traits::{
     MiscCodegenMethods,
 };
 use rustc_data_structures::base_n::{ALPHANUMERIC_ONLY, ToBaseN};
+use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::DiagMessage;
-use rustc_hash::FxHashMap;
-use rustc_middle::dep_graph::DepContext;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOf, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError, LayoutOf,
 };
@@ -33,8 +32,7 @@ use rustc_middle::{
 };
 use rustc_session::Session;
 use rustc_session::config::DebugInfo;
-use rustc_span::source_map::Spanned;
-use rustc_span::{Span, Symbol};
+use rustc_span::{Span, Spanned, Symbol};
 use rustc_target::callconv::FnAbi;
 
 use rustc_target::spec::{HasTargetSpec, Target};
@@ -178,7 +176,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
                 addrspace: Symbol::intern("addrspace"),
             },
             dbg_cx,
-            codegen_args: CodegenArgs::from_session(tcx.sess()),
+            codegen_args: CodegenArgs::from_session(tcx.sess),
             last_call_llfn: Cell::new(None),
             constant_memory_usage: Cell::new(0),
         };
@@ -728,9 +726,9 @@ impl CodegenArgs {
 impl<'ll> BackendTypes for CodegenCx<'ll, '_> {
     type Value = &'ll Value;
     type Function = &'ll Value;
-
     type BasicBlock = &'ll BasicBlock;
     type Type = &'ll Type;
+    type FunctionSignature = &'ll Type;
     // not applicable to nvvm, unwinding/exception handling
     // doesnt exist on the gpu
     type Funclet = ();
@@ -738,8 +736,6 @@ impl<'ll> BackendTypes for CodegenCx<'ll, '_> {
     type DIScope = &'ll llvm::DIScope;
     type DILocation = &'ll llvm::DILocation;
     type DIVariable = &'ll llvm::DIVariable;
-
-    type Metadata = &'ll llvm::Metadata;
 }
 
 impl HasDataLayout for CodegenCx<'_, '_> {
@@ -769,16 +765,9 @@ impl<'tcx> HasTypingEnv<'tcx> for CodegenCx<'_, 'tcx> {
 impl<'tcx> LayoutOfHelpers<'tcx> for CodegenCx<'_, 'tcx> {
     #[inline]
     fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: Ty<'tcx>) -> ! {
-        if let LayoutError::SizeOverflow(_) | LayoutError::ReferencesError(_) = err {
-            self.tcx.dcx().emit_fatal(Spanned {
-                span,
-                node: err.into_diagnostic(),
-            })
-        } else {
-            self.tcx
-                .dcx()
-                .emit_fatal(ssa_errors::FailedToGetLayout { span, ty, err })
-        }
+        self.tcx
+            .dcx()
+            .emit_fatal(ssa_errors::FailedToGetLayout { span, ty, err })
     }
 }
 

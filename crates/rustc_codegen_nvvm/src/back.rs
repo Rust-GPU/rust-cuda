@@ -4,15 +4,16 @@ use std::sync::Arc;
 
 use libc::{c_char, size_t};
 use rustc_codegen_ssa::back::write::{TargetMachineFactoryConfig, TargetMachineFactoryFn};
-use rustc_codegen_ssa::traits::{DebugInfoCodegenMethods, MiscCodegenMethods};
+use rustc_codegen_ssa::traits::{DebugInfoCodegenMethods, MiscCodegenMethods, ModuleBufferMethods};
 use rustc_codegen_ssa::{
     CompiledModule, ModuleCodegen,
-    back::write::{CodegenContext, ModuleConfig},
+    back::write::{CodegenContext, ModuleConfig, SharedEmitter},
     base::maybe_create_entry_wrapper,
     mono_item::MonoItemExt,
-    traits::{BaseTypeCodegenMethods, ThinBufferMethods},
+    traits::BaseTypeCodegenMethods,
 };
-use rustc_errors::{DiagCtxtHandle, FatalError};
+use rustc_data_structures::profiling::SelfProfilerRef;
+use rustc_errors::{DiagCtxt, DiagCtxtHandle, FatalError};
 use rustc_fs_util::path_to_c_string;
 use rustc_middle::bug;
 use rustc_middle::mir::mono::{MonoItem, MonoItemData};
@@ -25,7 +26,7 @@ use rustc_target::spec::{CodeModel, RelocModel};
 use crate::common::AsCCharPtr;
 use crate::llvm::{self};
 use crate::override_fns::define_or_override_fn;
-use crate::{LlvmMod, NvvmCodegenBackend, builder::Builder, context::CodegenCx, lto::ThinBuffer};
+use crate::{LlvmMod, NvvmCodegenBackend, builder::Builder, context::CodegenCx, lto::ModuleBuffer};
 
 pub fn llvm_err(handle: DiagCtxtHandle, msg: &str) -> FatalError {
     match llvm::last_error() {
@@ -81,7 +82,7 @@ pub fn target_machine_factory(
     let reloc_model = to_llvm_relocation_model(sess.relocation_model());
 
     let (opt_level, _) = to_llvm_opt_settings(optlvl);
-    let use_softfp = sess.opts.cg.soft_float;
+    let use_softfp = false;
 
     let ffunction_sections = sess
         .opts
@@ -101,7 +102,7 @@ pub fn target_machine_factory(
         .trap_unreachable
         .unwrap_or(sess.target.trap_unreachable);
 
-    Arc::new(move |_config: TargetMachineFactoryConfig| {
+    Arc::new(move |dcx, _config: TargetMachineFactoryConfig| {
         let tm = unsafe {
             llvm::LLVMRustCreateTargetMachine(
                 triple.as_c_char_ptr(),
@@ -121,7 +122,11 @@ pub fn target_machine_factory(
                 false,
             )
         };
-        tm.ok_or_else(|| format!("Could not create LLVM TargetMachine for triple: {triple}"))
+        tm.unwrap_or_else(|| {
+            dcx.fatal(format!(
+                "Could not create LLVM TargetMachine for triple: {triple}"
+            ))
+        })
     })
 }
 
@@ -156,11 +161,13 @@ pub extern "C" fn demangle_callback(
 
 /// Compile a single module (in an nvvm context this means getting the llvm bitcode out of it)
 pub(crate) unsafe fn codegen(
-    cgcx: &CodegenContext<NvvmCodegenBackend>,
+    cgcx: &CodegenContext,
+    prof: &SelfProfilerRef,
+    shared_emitter: &SharedEmitter,
     module: ModuleCodegen<LlvmMod>,
     config: &ModuleConfig,
 ) -> Result<CompiledModule, FatalError> {
-    let dcx = cgcx.create_dcx();
+    let dcx = DiagCtxt::new(Box::new(shared_emitter.clone()));
     let dcx = dcx.handle();
 
     // For NVVM, all the codegen we need to do is turn the llvm modules
@@ -172,28 +179,29 @@ pub(crate) unsafe fn codegen(
     // we also implement emit_ir so we can dump the IR fed to nvvm in case we
     // feed it anything it doesnt like
 
-    let _timer = cgcx
-        .prof
-        .generic_activity_with_arg("NVVM_module_codegen", &module.name[..]);
+    let _timer = prof.generic_activity_with_arg("NVVM_module_codegen", &module.name[..]);
 
     let llmod = unsafe { module.module_llvm.llmod.as_ref().unwrap() };
     let mod_name = module.name.clone();
     let module_name = &mod_name[..];
 
-    let out = cgcx
-        .output_filenames
-        .temp_path_for_cgu(OutputType::Object, module_name, None);
+    let out = cgcx.output_filenames.temp_path_for_cgu(
+        OutputType::Object,
+        module_name,
+        cgcx.invocation_temp.as_deref(),
+    );
 
     // nvvm ir *is* llvm ir so emit_ir fits the expectation of llvm ir which is why we
     // implement this. this is copy and pasted straight from rustc_codegen_llvm
     // because im too lazy to make it seem like i rewrote this when its the same logic
     if config.emit_ir {
-        let _timer = cgcx
-            .prof
-            .generic_activity_with_arg("NVVM_module_codegen_emit_ir", &module.name[..]);
-        let out =
-            cgcx.output_filenames
-                .temp_path_for_cgu(OutputType::LlvmAssembly, module_name, None);
+        let _timer =
+            prof.generic_activity_with_arg("NVVM_module_codegen_emit_ir", &module.name[..]);
+        let out = cgcx.output_filenames.temp_path_for_cgu(
+            OutputType::LlvmAssembly,
+            module_name,
+            cgcx.invocation_temp.as_deref(),
+        );
         let out = out.to_str().unwrap();
 
         let result = unsafe {
@@ -206,17 +214,15 @@ pub(crate) unsafe fn codegen(
         })?;
     }
 
-    let _bc_timer = cgcx
-        .prof
-        .generic_activity_with_arg("NVVM_module_codegen_make_bitcode", &module.name[..]);
+    let _bc_timer =
+        prof.generic_activity_with_arg("NVVM_module_codegen_make_bitcode", &module.name[..]);
 
-    let thin = ThinBuffer::new(llmod);
+    let thin = ModuleBuffer::new(llmod, false);
 
     let data = thin.data();
 
-    let _bc_emit_timer = cgcx
-        .prof
-        .generic_activity_with_arg("NVVM_module_codegen_emit_bitcode", &module.name[..]);
+    let _bc_emit_timer =
+        prof.generic_activity_with_arg("NVVM_module_codegen_emit_bitcode", &module.name[..]);
 
     if let Err(e) = std::fs::write(&out, data) {
         let msg = format!("failed to write bytecode to {}: {}", out.display(), e);
@@ -330,29 +336,23 @@ pub fn compile_codegen_unit(tcx: TyCtxt<'_>, cgu_name: Symbol) -> (ModuleCodegen
 // are incompatible with llvm 7 nowadays. Although we should probably consult a rustc dev on whether
 // any big things were discovered in that timespan that we should modify.
 pub(crate) unsafe fn optimize(
-    cgcx: &CodegenContext<NvvmCodegenBackend>,
-    diag_handler: DiagCtxtHandle<'_>,
-    module: &ModuleCodegen<LlvmMod>,
+    cgcx: &CodegenContext,
+    prof: &SelfProfilerRef,
+    shared_emitter: &SharedEmitter,
+    module: &mut ModuleCodegen<LlvmMod>,
     config: &ModuleConfig,
 ) -> Result<(), FatalError> {
-    let _timer = cgcx
-        .prof
-        .generic_activity_with_arg("LLVM_module_optimize", &module.name[..]);
+    let dcx = DiagCtxt::new(Box::new(shared_emitter.clone()));
+    let diag_handler = dcx.handle();
+    let _timer = prof.generic_activity_with_arg("LLVM_module_optimize", &module.name[..]);
 
     let llmod = unsafe { &*module.module_llvm.llmod };
 
-    if config.emit_no_opt_bc {
+    if config.emit_pre_lto_bc {
         let out = cgcx.output_filenames.with_extension("no-opt.bc");
         let out = path_to_c_string(&out);
         unsafe { llvm::LLVMWriteBitcodeToFile(llmod, out.as_ptr()) };
     }
-
-    let tm_factory_config = TargetMachineFactoryConfig {
-        split_dwarf_file: None,
-        output_obj_file: None,
-    };
-
-    let tm = (cgcx.tm_factory)(tm_factory_config).expect("failed to create target machine");
 
     if config.opt_level.is_some() {
         unsafe {
@@ -379,8 +379,6 @@ pub(crate) unsafe fn optimize(
             };
 
             if !config.no_prepopulate_passes {
-                llvm::LLVMRustAddAnalysisPasses(tm, fpm, llmod);
-                llvm::LLVMRustAddAnalysisPasses(tm, mpm, llmod);
                 let opt_level = config
                     .opt_level
                     .map_or(llvm::CodeGenOptLevel::None, |x| to_llvm_opt_settings(x).0);
@@ -422,7 +420,7 @@ unsafe fn with_llvm_pmb(
 
         let builder = llvm::LLVMPassManagerBuilderCreate();
         let opt_size = config
-            .opt_size
+            .opt_level
             .map_or(llvm::CodeGenOptSizeNone, |x| to_llvm_opt_settings(x).1);
 
         llvm::LLVMRustConfigurePassManagerBuilder(

@@ -2,14 +2,15 @@ use std::ffi::CString;
 use std::sync::Arc;
 
 use rustc_codegen_ssa::{
-    ModuleCodegen,
+    CompiledModule, ModuleCodegen,
     back::{
         lto::{SerializedModule, ThinModule, ThinShared},
-        write::CodegenContext,
+        write::{CodegenContext, SharedEmitter, TargetMachineFactoryFn},
     },
-    traits::{ModuleBufferMethods, ThinBufferMethods},
+    traits::ModuleBufferMethods,
 };
-use rustc_errors::{DiagCtxtHandle, FatalError};
+use rustc_data_structures::profiling::SelfProfilerRef;
+use rustc_errors::{DiagCtxt, DiagCtxtHandle, FatalError};
 use rustc_middle::dep_graph::WorkProduct;
 use tracing::{debug, trace};
 
@@ -23,7 +24,7 @@ unsafe impl Send for ModuleBuffer {}
 unsafe impl Sync for ModuleBuffer {}
 
 impl ModuleBuffer {
-    pub(crate) fn new(m: &llvm::Module) -> ModuleBuffer {
+    pub(crate) fn new(m: &llvm::Module, _is_thin: bool) -> ModuleBuffer {
         ModuleBuffer(unsafe { llvm::LLVMRustModuleBufferCreate(m) })
     }
 }
@@ -47,46 +48,6 @@ impl Drop for ModuleBuffer {
     }
 }
 
-pub struct ThinBuffer(&'static mut llvm::ThinLTOBuffer);
-
-unsafe impl Send for ThinBuffer {}
-unsafe impl Sync for ThinBuffer {}
-
-impl ThinBuffer {
-    pub(crate) fn new(m: &llvm::Module) -> ThinBuffer {
-        unsafe {
-            let buffer = llvm::LLVMRustThinLTOBufferCreate(m);
-
-            ThinBuffer(buffer)
-        }
-    }
-}
-
-impl ThinBufferMethods for ThinBuffer {
-    fn data(&self) -> &[u8] {
-        unsafe {
-            trace!("Retrieving data in thin buffer");
-            let ptr = llvm::LLVMRustThinLTOBufferPtr(self.0) as *const _;
-
-            let len = llvm::LLVMRustThinLTOBufferLen(self.0);
-
-            std::slice::from_raw_parts(ptr, len)
-        }
-    }
-
-    fn thin_link_data(&self) -> &[u8] {
-        todo!()
-    }
-}
-
-impl Drop for ThinBuffer {
-    fn drop(&mut self) {
-        unsafe {
-            llvm::LLVMRustThinLTOBufferFree(&mut *(self.0 as *mut _));
-        }
-    }
-}
-
 #[allow(dead_code)]
 pub struct ThinData(&'static mut llvm::ThinLTOData);
 
@@ -101,34 +62,23 @@ impl Drop for ThinData {
     }
 }
 
-// essentially does nothing for now.
 pub(crate) fn run_thin(
-    _cgcx: &CodegenContext<NvvmCodegenBackend>,
-    modules: Vec<(String, ThinBuffer)>,
+    _cgcx: &CodegenContext,
+    modules: Vec<(String, ModuleBuffer)>,
     cached_modules: Vec<(SerializedModule<ModuleBuffer>, WorkProduct)>,
-) -> Result<(Vec<ThinModule<NvvmCodegenBackend>>, Vec<WorkProduct>), FatalError> {
+) -> (Vec<ThinModule<NvvmCodegenBackend>>, Vec<WorkProduct>) {
     debug!("Running thin LTO");
     let mut thin_buffers = Vec::with_capacity(modules.len());
     let mut module_names = Vec::with_capacity(modules.len() + cached_modules.len());
-    // let thin_modules = Vec::with_capacity(modules.len() + cached_modules.len());
 
     for (name, buf) in modules {
-        let cname = CString::new(name.clone()).unwrap();
-        // thin_modules.push(
-        //     llvm::ThinLTOModule {
-        //         identifier: cname.as_ptr(),
-        //         data: buf.data().as_ptr(),
-        //         len: buf.data().len()
-        //     }
-        // );
         thin_buffers.push(buf);
-        module_names.push(cname);
+        module_names.push(CString::new(name).unwrap());
     }
 
     let mut serialized_modules = Vec::with_capacity(cached_modules.len());
-
     for (sm, wp) in cached_modules {
-        let _slice_u8 = sm.data();
+        let _ = sm.data();
         serialized_modules.push(sm);
         module_names.push(CString::new(wp.cgu_name).unwrap());
     }
@@ -140,34 +90,39 @@ pub(crate) fn run_thin(
         module_names,
     });
 
-    let mut opt_jobs = vec![];
-    for (module_index, _) in shared.module_names.iter().enumerate() {
+    let mut opt_jobs = Vec::with_capacity(shared.module_names.len());
+    for module_index in 0..shared.module_names.len() {
         opt_jobs.push(ThinModule {
             shared: shared.clone(),
             idx: module_index,
         });
     }
 
-    Ok((opt_jobs, vec![]))
+    (opt_jobs, vec![])
 }
 
-pub(crate) unsafe fn optimize_thin(
-    cgcx: &CodegenContext<NvvmCodegenBackend>,
+pub(crate) unsafe fn optimize_and_codegen_thin(
+    cgcx: &CodegenContext,
+    prof: &SelfProfilerRef,
+    shared_emitter: &SharedEmitter,
+    _tm_factory: TargetMachineFactoryFn<NvvmCodegenBackend>,
     thin_module: ThinModule<NvvmCodegenBackend>,
-) -> Result<ModuleCodegen<LlvmMod>, FatalError> {
-    // essentially does nothing
-    let dcx = cgcx.create_dcx();
-    let dcx = dcx.handle();
-
+) -> CompiledModule {
     let module_name = &thin_module.shared.module_names[thin_module.idx];
-
+    let dcx = DiagCtxt::new(Box::new(shared_emitter.clone()));
     let llcx = unsafe { llvm::LLVMRustContextCreate(cgcx.fewer_names) };
-    let llmod =
-        parse_module(llcx, module_name.to_str().unwrap(), thin_module.data(), dcx)? as *const _;
+    let llmod = parse_module(
+        llcx,
+        module_name.to_str().unwrap(),
+        thin_module.data(),
+        dcx.handle(),
+    )
+    .unwrap_or_else(|err| err.raise()) as *const _;
 
     let module =
         ModuleCodegen::new_regular(thin_module.name().to_string(), LlvmMod { llcx, llmod });
-    Ok(module)
+    unsafe { crate::back::codegen(cgcx, prof, shared_emitter, module, &cgcx.module_config) }
+        .unwrap_or_else(|err| err.raise())
 }
 
 pub(crate) fn parse_module<'a>(

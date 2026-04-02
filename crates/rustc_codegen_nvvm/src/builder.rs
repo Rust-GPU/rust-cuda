@@ -67,13 +67,12 @@ impl<'ll, 'tcx> BackendTypes for Builder<'_, 'll, 'tcx> {
     type Function = <CodegenCx<'ll, 'tcx> as BackendTypes>::Function;
     type BasicBlock = <CodegenCx<'ll, 'tcx> as BackendTypes>::BasicBlock;
     type Type = <CodegenCx<'ll, 'tcx> as BackendTypes>::Type;
+    type FunctionSignature = <CodegenCx<'ll, 'tcx> as BackendTypes>::FunctionSignature;
     type Funclet = <CodegenCx<'ll, 'tcx> as BackendTypes>::Funclet;
 
     type DIScope = <CodegenCx<'ll, 'tcx> as BackendTypes>::DIScope;
     type DILocation = <CodegenCx<'ll, 'tcx> as BackendTypes>::DILocation;
     type DIVariable = <CodegenCx<'ll, 'tcx> as BackendTypes>::DIVariable;
-
-    type Metadata = <CodegenCx<'ll, 'tcx> as BackendTypes>::Metadata;
 }
 
 impl HasDataLayout for Builder<'_, '_, '_> {
@@ -499,6 +498,10 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         }
     }
 
+    fn scalable_alloca(&mut self, _elt: u64, _align: Align, _element_ty: Ty<'_>) -> &'ll Value {
+        self.unsupported("scalable vector allocas");
+    }
+
     fn load(&mut self, ty: &'ll Type, ptr: &'ll Value, align: Align) -> &'ll Value {
         trace!("Load {ty:?} {:?}", ptr);
         let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
@@ -656,6 +659,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         OperandRef {
             val,
             layout: place.layout,
+            move_annotation: None,
         }
     }
 
@@ -984,6 +988,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         src_align: Align,
         size: &'ll Value,
         flags: MemFlags,
+        _tt: Option<rustc_ast::expand::typetree::FncTree>,
     ) {
         assert!(
             !flags.contains(MemFlags::NONTEMPORAL),
@@ -1137,6 +1142,10 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         _handlers: &[&'ll BasicBlock],
     ) -> &'ll Value {
         self.unsupported("catch switches");
+    }
+
+    fn get_funclet_cleanuppad(&self, _funclet: &()) -> &'ll Value {
+        self.unsupported("funclet cleanuppads");
     }
 
     fn set_personality_fn(&mut self, _personality: &'ll Value) {}

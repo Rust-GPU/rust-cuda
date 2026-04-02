@@ -5,9 +5,9 @@ use crate::builder::unnamed;
 use crate::common::AsCCharPtr;
 use crate::context::CodegenArgs;
 use crate::llvm::*;
-use crate::lto::ThinBuffer;
+use crate::lto::ModuleBuffer;
 use nvvm::*;
-use rustc_codegen_ssa::traits::ThinBufferMethods;
+use rustc_codegen_ssa::traits::ModuleBufferMethods;
 use rustc_session::{Session, config::DebugInfo};
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -101,7 +101,7 @@ pub fn codegen_bitcode_modules(
         }
     }
 
-    let buf = ThinBuffer::new(module);
+    let buf = ModuleBuffer::new(module, false);
 
     prog.add_module(buf.data(), "merged".to_string())?;
     prog.add_lazy_module(LIBDEVICE_BITCODE, "libdevice".to_string())?;

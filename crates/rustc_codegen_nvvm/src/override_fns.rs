@@ -8,8 +8,9 @@ use crate::context::CodegenCx;
 use crate::llvm;
 use rustc_codegen_ssa::mono_item::MonoItemExt;
 use rustc_codegen_ssa::traits::{BaseTypeCodegenMethods, BuilderMethods};
+use rustc_hir::attrs::Linkage;
 use rustc_hir::def_id::LOCAL_CRATE;
-use rustc_middle::mir::mono::{Linkage, MonoItem, MonoItemData, Visibility};
+use rustc_middle::mir::mono::{MonoItem, MonoItemData, Visibility};
 use rustc_middle::ty::layout::FnAbiOf;
 use rustc_middle::ty::{self, Instance};
 

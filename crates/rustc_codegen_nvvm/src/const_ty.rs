@@ -10,15 +10,11 @@ use rustc_codegen_ssa::traits::*;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
 use rustc_hashes::Hash128;
 use rustc_middle::bug;
-use rustc_middle::mir::interpret::{ConstAllocation, GlobalAlloc, Scalar};
+use rustc_middle::mir::interpret::{GlobalAlloc, Scalar};
 use rustc_middle::ty::layout::LayoutOf;
 use tracing::trace;
 
 impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
-    fn const_data_from_alloc(&self, alloc: ConstAllocation) -> &'ll Value {
-        const_alloc_to_llvm(self, alloc, /*static*/ false)
-    }
-
     fn const_null(&self, t: &'ll Type) -> &'ll Value {
         unsafe { llvm::LLVMConstNull(t) }
     }
@@ -168,16 +164,18 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                             };
                         } else {
                             let init = const_alloc_to_llvm(self, alloc, /*static*/ false);
-                            let alloc = alloc.inner();
-                            let value = match alloc.mutability {
-                                Mutability::Mut => self.static_addr_of_mut(init, alloc.align, None),
-                                _ => self.static_addr_of(init, alloc.align, None),
+                            let inner_alloc = alloc.inner();
+                            let value = match inner_alloc.mutability {
+                                Mutability::Mut => {
+                                    self.static_addr_of_mut(init, inner_alloc.align, None)
+                                }
+                                _ => self.static_addr_of(alloc, None),
                             };
                             if !self.sess().fewer_names() && llvm::get_value_name(value).is_empty()
                             {
                                 let hash = self.tcx.with_stable_hashing_context(|mut hcx| {
                                     let mut hasher = StableHasher::new();
-                                    alloc.hash_stable(&mut hcx, &mut hasher);
+                                    inner_alloc.hash_stable(&mut hcx, &mut hasher);
                                     hasher.finish::<Hash128>()
                                 });
                                 llvm::set_value_name(
@@ -203,7 +201,7 @@ impl<'ll, 'tcx> ConstCodegenMethods for CodegenCx<'ll, 'tcx> {
                             )))
                             .unwrap_memory();
                         let init = const_alloc_to_llvm(self, alloc, /*static*/ false);
-                        let value = self.static_addr_of(init, alloc.inner().align, None);
+                        let value = self.static_addr_of(alloc, None);
                         (value, AddressSpace::ZERO)
                     }
                     GlobalAlloc::Static(def_id) => {

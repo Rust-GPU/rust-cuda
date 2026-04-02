@@ -13,7 +13,7 @@ use rustc_codegen_ssa::{
         ConstCodegenMethods, GlobalAsmOperandRef, InlineAsmOperandRef,
     },
 };
-use rustc_hash::FxHashMap;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::{span_bug, ty::Instance};
 use rustc_span::{Pos, Span};
 use rustc_target::asm::{InlineAsmRegClass, InlineAsmRegOrRegClass, NvptxInlineAsmRegClass};

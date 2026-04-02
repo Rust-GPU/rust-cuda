@@ -115,7 +115,10 @@ impl ArgAttributeExt for ArgAttribute {
     where
         F: FnMut(llvm::Attribute),
     {
-        for_each_kind!(self, f, NoAlias, NoCapture, NonNull, ReadOnly, InReg)
+        for_each_kind!(self, f, NoAlias, NonNull, ReadOnly, InReg);
+        if self.contains(ArgAttribute::CapturesNone) {
+            f(llvm::Attribute::NoCapture);
+        }
     }
 }
 
@@ -672,6 +675,7 @@ impl<'ll, 'tcx> ArgAbiExt<'ll, 'tcx> for ArgAbi<'tcx, Ty<'tcx>> {
                     scratch_align,
                     bx.const_usize(copy_bytes),
                     MemFlags::empty(),
+                    None,
                 );
 
                 bx.lifetime_end(llscratch, scratch_size);
