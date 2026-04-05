@@ -174,3 +174,175 @@ impl IntoResult for cudnn_sys::cudnnStatus_t {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn success_maps_to_ok() {
+        use cudnn_sys::cudnnStatus_t::*;
+        assert!(CUDNN_STATUS_SUCCESS.into_result().is_ok());
+    }
+
+    #[test]
+    fn common_status_codes_map() {
+        use cudnn_sys::cudnnStatus_t::*;
+        assert_eq!(
+            CUDNN_STATUS_NOT_INITIALIZED.into_result().unwrap_err(),
+            CudnnError::NotInitialized
+        );
+        assert_eq!(
+            CUDNN_STATUS_BAD_PARAM.into_result().unwrap_err(),
+            CudnnError::BadParam
+        );
+        assert_eq!(
+            CUDNN_STATUS_INTERNAL_ERROR.into_result().unwrap_err(),
+            CudnnError::InternalError
+        );
+        assert_eq!(
+            CUDNN_STATUS_INVALID_VALUE.into_result().unwrap_err(),
+            CudnnError::InvalidValue
+        );
+        assert_eq!(
+            CUDNN_STATUS_EXECUTION_FAILED.into_result().unwrap_err(),
+            CudnnError::ExecutionFailed
+        );
+        assert_eq!(
+            CUDNN_STATUS_NOT_SUPPORTED.into_result().unwrap_err(),
+            CudnnError::NotSupported
+        );
+        assert_eq!(
+            CUDNN_STATUS_LICENSE_ERROR.into_result().unwrap_err(),
+            CudnnError::LicenseError
+        );
+        assert_eq!(
+            CUDNN_STATUS_RUNTIME_IN_PROGRESS.into_result().unwrap_err(),
+            CudnnError::RuntimeInProgress
+        );
+        assert_eq!(
+            CUDNN_STATUS_RUNTIME_FP_OVERFLOW.into_result().unwrap_err(),
+            CudnnError::RuntimeFpOverflow
+        );
+    }
+
+    #[cfg(not(cudnn9))]
+    #[test]
+    fn cudnn8_only_status_codes_map() {
+        use cudnn_sys::cudnnStatus_t::*;
+        assert_eq!(
+            CUDNN_STATUS_ALLOC_FAILED.into_result().unwrap_err(),
+            CudnnError::AllocFailed
+        );
+        assert_eq!(
+            CUDNN_STATUS_ARCH_MISMATCH.into_result().unwrap_err(),
+            CudnnError::ArchMismatch
+        );
+        assert_eq!(
+            CUDNN_STATUS_MAPPING_ERROR.into_result().unwrap_err(),
+            CudnnError::MappingError
+        );
+        assert_eq!(
+            CUDNN_STATUS_RUNTIME_PREREQUISITE_MISSING
+                .into_result()
+                .unwrap_err(),
+            CudnnError::RuntimePrerequisiteMissing
+        );
+        assert_eq!(
+            CUDNN_STATUS_VERSION_MISMATCH.into_result().unwrap_err(),
+            CudnnError::VersionMismatch
+        );
+    }
+
+    #[cfg(cudnn9)]
+    #[test]
+    fn cudnn9_named_status_codes_map() {
+        use cudnn_sys::cudnnStatus_t::*;
+        assert_eq!(
+            CUDNN_STATUS_SUBLIBRARY_VERSION_MISMATCH
+                .into_result()
+                .unwrap_err(),
+            CudnnError::SublibraryVersionMismatch
+        );
+        assert_eq!(
+            CUDNN_STATUS_SERIALIZATION_VERSION_MISMATCH
+                .into_result()
+                .unwrap_err(),
+            CudnnError::SerializationVersionMismatch
+        );
+        assert_eq!(
+            CUDNN_STATUS_DEPRECATED.into_result().unwrap_err(),
+            CudnnError::Deprecated
+        );
+        assert_eq!(
+            CUDNN_STATUS_SUBLIBRARY_LOADING_FAILED
+                .into_result()
+                .unwrap_err(),
+            CudnnError::SublibraryLoadingFailed
+        );
+    }
+
+    /// cuDNN 9 hierarchical sub-codes (2xxx/3xxx/…) must map to the parent category, not panic.
+    #[cfg(cudnn9)]
+    #[test]
+    fn cudnn9_hierarchical_subcodes_map_to_parent_category() {
+        use cudnn_sys::cudnnStatus_t::*;
+        assert_eq!(
+            CUDNN_STATUS_BAD_PARAM_NULL_POINTER
+                .into_result()
+                .unwrap_err(),
+            CudnnError::BadParam
+        );
+        assert_eq!(
+            CUDNN_STATUS_NOT_SUPPORTED_SHAPE.into_result().unwrap_err(),
+            CudnnError::NotSupported
+        );
+    }
+
+    #[cfg(cudnn9)]
+    #[test]
+    fn cudnn9_into_raw_round_trips_for_named_errors() {
+        let cases = [
+            CudnnError::SublibraryVersionMismatch,
+            CudnnError::SerializationVersionMismatch,
+            CudnnError::Deprecated,
+            CudnnError::SublibraryLoadingFailed,
+        ];
+        for err in cases {
+            assert_eq!(err.into_raw().into_result().unwrap_err(), err);
+        }
+    }
+
+    #[test]
+    fn into_raw_round_trips_for_common_errors() {
+        let cases = [
+            CudnnError::NotInitialized,
+            CudnnError::BadParam,
+            CudnnError::InternalError,
+            CudnnError::InvalidValue,
+            CudnnError::ExecutionFailed,
+            CudnnError::NotSupported,
+            CudnnError::LicenseError,
+            CudnnError::RuntimeInProgress,
+            CudnnError::RuntimeFpOverflow,
+        ];
+        for err in cases {
+            assert_eq!(err.into_raw().into_result().unwrap_err(), err);
+        }
+    }
+
+    #[cfg(not(cudnn9))]
+    #[test]
+    fn into_raw_round_trips_for_cudnn8_only_errors() {
+        let cases = [
+            CudnnError::AllocFailed,
+            CudnnError::ArchMismatch,
+            CudnnError::MappingError,
+            CudnnError::RuntimePrerequisiteMissing,
+            CudnnError::VersionMismatch,
+        ];
+        for err in cases {
+            assert_eq!(err.into_raw().into_result().unwrap_err(), err);
+        }
+    }
+}
