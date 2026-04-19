@@ -42,7 +42,7 @@ pub unsafe fn fence_acqrel_device() {
 
 #[gpu_only]
 pub unsafe fn fence_acqrel_block() {
-    asm!("fence.acq_rel.sys;");
+    asm!("fence.acq_rel.cta;");
 }
 
 #[gpu_only]
