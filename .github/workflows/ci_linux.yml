@@ -40,6 +40,10 @@ jobs:
           - name: RockyLinux-9 / CUDA-13.0.2 / x86_64
             image: "ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda13:latest"
             runner: ubuntu-latest
+          # CUDA 13.2 entries require container images from container_images.yml
+          # to be published first. Add these back once the images exist on ghcr.io:
+          #   ghcr.io/rust-gpu/rust-cuda-ubuntu24-cuda132:latest
+          #   ghcr.io/rust-gpu/rust-cuda-rockylinux9-cuda132:latest
 
     steps:
       - name: Free up space
