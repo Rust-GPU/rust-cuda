@@ -14,6 +14,10 @@ readme = "../../README.md"
 [lib]
 crate-type = ["dylib"]
 
+[features]
+default = []
+llvm19 = []
+
 [dependencies]
 nvvm = { version = "0.1", path = "../nvvm" }
 rustc-demangle = "0.1.24"

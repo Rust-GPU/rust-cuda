@@ -104,7 +104,9 @@ unsafe fn configure_llvm(sess: &Session) {
             false,
         );
 
-        // Use non-zero `import-instr-limit` multiplier for cold callsites.
+        // This tuning flag isn't guaranteed to be registered in the dylib-loaded
+        // LLVM19 backend configuration, and it is not required for correctness.
+        #[cfg(not(feature = "llvm19"))]
         add("-import-cold-multiplier=0.1", false);
 
         // for arg in sess_args {

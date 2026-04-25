@@ -16,6 +16,12 @@ default = []
 # HACK(see rust-gpu/spirv-builder): use `dep:` to avoid Cargo auto-creating a feature
 # with the dependency name. Consumers must explicitly opt-in to compiling the backend.
 rustc_codegen_nvvm = ["dep:rustc_codegen_nvvm"]
+# Build the backend against LLVM 19 instead of LLVM 7. Propagates to `nvvm` (which
+# uses it to flip the default `NvvmArch` to `Compute100`) and, when the optional
+# `rustc_codegen_nvvm` dep is also enabled, to `rustc_codegen_nvvm` itself. Even
+# when the optional dep is disabled, the build script's nested `cargo build -p
+# rustc_codegen_nvvm` reads `cfg(feature = "llvm19")` here and forwards it.
+llvm19 = ["nvvm/llvm19", "rustc_codegen_nvvm?/llvm19"]
 
 [dependencies]
 rustc_codegen_nvvm = { version = "0.3", path = "../rustc_codegen_nvvm", optional = true }

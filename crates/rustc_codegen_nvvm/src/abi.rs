@@ -443,6 +443,13 @@ impl<'ll, 'tcx> FnAbiLlvmExt<'ll, 'tcx> for FnAbi<'tcx, Ty<'tcx>> {
             } => {
                 assert!(!on_stack);
                 let i = apply(attrs);
+                #[cfg(feature = "llvm19")]
+                llvm::Attribute::StructRet.apply_llfn_with_type(
+                    llvm::AttributePlace::Argument(i),
+                    llfn,
+                    self.ret.memory_ty(cx),
+                );
+                #[cfg(not(feature = "llvm19"))]
                 llvm::Attribute::StructRet.apply_llfn(llvm::AttributePlace::Argument(i), llfn);
             }
             _ => {}

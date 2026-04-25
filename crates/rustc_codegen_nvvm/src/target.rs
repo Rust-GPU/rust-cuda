@@ -1,7 +1,10 @@
 use crate::llvm::{self, Type};
-use rustc_target::spec::{Target, TargetTuple};
+use rustc_target::spec::{MergeFunctions, Target, TargetTuple};
 
 // This data layout must match `datalayout` in `crates/rustc_codegen_nvvm/libintrinsics.ll`.
+// Both LLVM 7 and LLVM 19 accept this string; the explicit specs are equivalent to the
+// defaults LLVM would fill in from the shorter `clang-19 -target nvptx64-nvidia-cuda`
+// output.
 pub const DATA_LAYOUT: &str = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-i128:128:128-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64";
 pub const TARGET_TRIPLE: &str = "nvptx64-nvidia-cuda";
 pub const POINTER_WIDTH: u32 = 64;
@@ -15,5 +18,8 @@ pub fn target() -> Target {
     let mut target = Target::expect_builtin(&TargetTuple::TargetTuple(TARGET_TRIPLE.into()));
     target.data_layout = DATA_LAYOUT.into();
     target.pointer_width = POINTER_WIDTH as u16;
+    // Disable MergeFunctions LLVM optimisation pass because it can produce kernel
+    // functions that call other kernel functions, which is not supported by PTX ISA.
+    target.options.merge_functions = MergeFunctions::Disabled;
     target
 }

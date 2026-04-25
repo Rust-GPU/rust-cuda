@@ -152,11 +152,14 @@ jobs:
               --exclude cust
           '
 
+      # Exclude rustc_codegen_nvvm: `--all-features` enables its `llvm19` feature,
+      # whose build.rs requires an LLVM 19 toolchain not present in the CI image.
       - name: Check documentation
         run: |
           docker exec "$CONTAINER_NAME" bash -lc 'set -euo pipefail
             export RUSTDOCFLAGS=-Dwarnings
-            cargo doc --workspace --all-features --document-private-items --no-deps
+            cargo doc --workspace --all-features --document-private-items --no-deps \
+              --exclude rustc_codegen_nvvm
           '
 
       - name: Stop build container

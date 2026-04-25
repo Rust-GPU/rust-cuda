@@ -871,7 +871,7 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
         );
         let args = self.check_call("call", fn_ty, fn_ptr, &llargs);
         let llret = unsafe {
-            llvm::LLVMRustBuildCall2(
+            llvm::build_call2(
                 self.llbuilder,
                 fn_ty,
                 fn_ptr,

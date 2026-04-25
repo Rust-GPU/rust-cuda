@@ -10,13 +10,11 @@ use curl::easy::Easy;
 use tar::Archive;
 use xz::read::XzDecoder;
 
-static PREBUILT_LLVM_URL: &str =
+static PREBUILT_LLVM_URL_LLVM7: &str =
     "https://github.com/rust-gpu/rustc_codegen_nvvm-llvm/releases/download/LLVM-7.1.0/";
 
-static REQUIRED_MAJOR_LLVM_VERSION: u8 = 7;
-
 fn main() {
-    rustc_llvm_build();
+    rustc_llvm_build(llvm19_enabled());
 }
 
 fn fail(s: &str) -> ! {
@@ -41,6 +39,41 @@ pub fn output(cmd: &mut Command) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
+fn llvm19_enabled() -> bool {
+    tracked_env_var_os("CARGO_FEATURE_LLVM19").is_some()
+}
+
+fn required_major_llvm_version(llvm19_enabled: bool) -> u8 {
+    if llvm19_enabled { 19 } else { 7 }
+}
+
+fn command_version(path: &Path) -> Option<String> {
+    let output = Command::new(path).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    Some(String::from_utf8(output.stdout).ok()?.trim().to_string())
+}
+
+fn llvm_major_version(path: &Path) -> Option<u8> {
+    command_version(path)?
+        .split(|ch: char| !ch.is_ascii_digit())
+        .find(|segment| !segment.is_empty())?
+        .parse()
+        .ok()
+}
+
+fn llvm_version_matches(path: &Path, required_major: u8) -> bool {
+    llvm_major_version(path) == Some(required_major)
+}
+
+fn sibling_llvm_tool(llvm_config: &Path, tool_prefix: &str) -> Option<PathBuf> {
+    let file_name = llvm_config.file_name()?.to_str()?;
+    let suffix = file_name.strip_prefix("llvm-config")?;
+    Some(llvm_config.with_file_name(format!("{tool_prefix}{suffix}")))
+}
+
 fn target_to_llvm_prebuilt(target: &str) -> String {
     let base = match target {
         "x86_64-pc-windows-msvc" => "windows-x86_64",
@@ -53,7 +86,51 @@ fn target_to_llvm_prebuilt(target: &str) -> String {
     format!("{base}.tar.xz")
 }
 
-fn find_llvm_config(target: &str) -> PathBuf {
+fn find_llvm_config(target: &str, llvm19_enabled: bool) -> PathBuf {
+    if llvm19_enabled {
+        return find_llvm_config_llvm19();
+    }
+
+    find_llvm_config_llvm7(target)
+}
+
+fn find_llvm_config_llvm19() -> PathBuf {
+    let required_major = required_major_llvm_version(true);
+    let mut candidates = Vec::new();
+
+    if let Some(path) = tracked_env_var_os("LLVM_CONFIG_19") {
+        candidates.push(PathBuf::from(path));
+    }
+
+    candidates.push(PathBuf::from("llvm-config-19"));
+
+    if let Some(cuda_home) = tracked_env_var_os("CUDA_HOME") {
+        let cuda_home = PathBuf::from(cuda_home);
+        candidates.push(cuda_home.join("nvvm").join("bin").join("llvm-config"));
+        candidates.push(cuda_home.join("bin").join("llvm-config"));
+    }
+
+    for candidate in &candidates {
+        if llvm_version_matches(candidate, required_major) {
+            return candidate.clone();
+        }
+    }
+
+    let tried = candidates
+        .iter()
+        .map(|candidate| format!("  - {}", candidate.display()))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    fail(&format!(
+        "LLVM 19 support is enabled, but no LLVM 19 toolchain was found.\n\
+         Tried:\n{tried}\n\n\
+         Set LLVM_CONFIG_19=/path/to/llvm-config from an LLVM 19 installation."
+    ));
+}
+
+fn find_llvm_config_llvm7(target: &str) -> PathBuf {
+    let required_major = required_major_llvm_version(false);
     // first, if LLVM_CONFIG is set then see if its llvm version if 7.x, if so, use that.
     let config_env = tracked_env_var_os("LLVM_CONFIG");
     // if LLVM_CONFIG is not set, try using llvm-config as a normal app in PATH.
@@ -65,11 +142,11 @@ fn find_llvm_config(target: &str) -> PathBuf {
 
         if let Ok(out) = cmd {
             let version = String::from_utf8(out.stdout).unwrap();
-            if version.starts_with(&REQUIRED_MAJOR_LLVM_VERSION.to_string()) {
+            if version.starts_with(&required_major.to_string()) {
                 return PathBuf::from(path_to_try);
             }
             println!(
-                "cargo:warning=Prebuilt llvm-config version does not start with {REQUIRED_MAJOR_LLVM_VERSION}"
+                "cargo:warning=Prebuilt llvm-config version does not start with {required_major}"
             );
         } else {
             println!("cargo:warning=Failed to run prebuilt llvm-config");
@@ -80,7 +157,7 @@ fn find_llvm_config(target: &str) -> PathBuf {
     println!("cargo:warning=Downloading prebuilt LLVM");
     let mut url = tracked_env_var_os("PREBUILT_LLVM_URL")
         .map(|x| x.to_string_lossy().to_string())
-        .unwrap_or_else(|| PREBUILT_LLVM_URL.to_string());
+        .unwrap_or_else(|| PREBUILT_LLVM_URL_LLVM7.to_string());
 
     let prebuilt_name = target_to_llvm_prebuilt(target);
     url = format!("{url}{prebuilt_name}");
@@ -117,6 +194,35 @@ fn find_llvm_config(target: &str) -> PathBuf {
         .join(format!("llvm-config{}", std::env::consts::EXE_SUFFIX))
 }
 
+fn find_llvm_as_llvm19(llvm_config: &Path) -> PathBuf {
+    let required_major = required_major_llvm_version(true);
+    let mut candidates = Vec::new();
+
+    if let Some(path) = sibling_llvm_tool(llvm_config, "llvm-as") {
+        candidates.push(path);
+    }
+
+    candidates.push(PathBuf::from("llvm-as-19"));
+    candidates.push(PathBuf::from("llvm-as"));
+
+    for candidate in &candidates {
+        if llvm_version_matches(candidate, required_major) {
+            return candidate.clone();
+        }
+    }
+
+    let tried = candidates
+        .iter()
+        .map(|candidate| format!("  - {}", candidate.display()))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    fail(&format!(
+        "LLVM 19 support is enabled, but llvm-as 19 was not found.\n\
+         Tried:\n{tried}"
+    ));
+}
+
 fn detect_llvm_link() -> (&'static str, &'static str) {
     // Force the link mode we want, preferring static by default, but
     // possibly overridden by `configure --enable-llvm-link-shared`.
@@ -132,9 +238,60 @@ pub fn tracked_env_var_os<K: AsRef<OsStr> + Display>(key: K) -> Option<OsString>
     env::var_os(key)
 }
 
-fn rustc_llvm_build() {
+fn configure_libintrinsics(llvm_config: &Path, llvm19_enabled: bool) {
+    let manifest_dir =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR was not set"));
+
+    // Both paths share `libintrinsics.ll`. The LLVM 7 build consumes the checked-in
+    // `libintrinsics.bc` (regenerate manually with `llvm-as-7` when the .ll changes).
+    // The LLVM 19 build assembles the same .ll on the fly with `llvm-as-19`.
+    build_helper::rerun_if_changed(Path::new("libintrinsics.ll"));
+
+    if llvm19_enabled {
+        let input = manifest_dir.join("libintrinsics.ll");
+        let output = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR was not set"))
+            .join("libintrinsics_v19.bc");
+        let llvm_as = find_llvm_as_llvm19(llvm_config);
+
+        let status = Command::new(&llvm_as)
+            .arg(&input)
+            .arg("-o")
+            .arg(&output)
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .status()
+            .unwrap_or_else(|err| {
+                fail(&format!(
+                    "failed to execute llvm-as for LLVM 19: {llvm_as:?}\nerror: {err}"
+                ))
+            });
+
+        if !status.success() {
+            fail(&format!(
+                "llvm-as did not assemble {} successfully",
+                input.display()
+            ));
+        }
+
+        println!(
+            "cargo:rustc-env=NVVM_LIBINTRINSICS_BC_PATH={}",
+            output.display()
+        );
+    } else {
+        build_helper::rerun_if_changed(Path::new("libintrinsics.bc"));
+        println!(
+            "cargo:rustc-env=NVVM_LIBINTRINSICS_BC_PATH={}",
+            manifest_dir.join("libintrinsics.bc").display()
+        );
+    }
+}
+
+fn rustc_llvm_build(llvm19_enabled: bool) {
     let target = env::var("TARGET").expect("TARGET was not set");
-    let llvm_config = find_llvm_config(&target);
+    let llvm_config = find_llvm_config(&target, llvm19_enabled);
+    let required_major = required_major_llvm_version(llvm19_enabled);
+
+    configure_libintrinsics(&llvm_config, llvm19_enabled);
 
     let required_components = &["ipo", "bitreader", "bitwriter", "lto", "nvptx"];
 
@@ -182,6 +339,9 @@ fn rustc_llvm_build() {
         flag.push_str(&component.to_uppercase());
         cfg.define(&flag, None);
     }
+
+    let llvm_version_major = required_major.to_string();
+    cfg.define("LLVM_VERSION_MAJOR", Some(llvm_version_major.as_str()));
 
     if tracked_env_var_os("LLVM_RUSTLLVM").is_some() {
         cfg.define("LLVM_RUSTLLVM", None);

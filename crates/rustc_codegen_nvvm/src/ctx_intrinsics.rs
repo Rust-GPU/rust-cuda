@@ -137,7 +137,13 @@ impl<'ll> CodegenCx<'ll, '_> {
         ifn!(map, "llvm.cttz.i32", fn(t_i32, i1) -> t_i32);
         ifn!(map, "llvm.cttz.i64", fn(t_i64, i1) -> t_i64);
 
+        #[cfg(feature = "llvm19")]
+        ifn!(map, "llvm.lifetime.start.p0", fn(t_i64, i8p) -> void);
+        #[cfg(not(feature = "llvm19"))]
         ifn!(map, "llvm.lifetime.start.p0i8", fn(t_i64, i8p) -> void);
+        #[cfg(feature = "llvm19")]
+        ifn!(map, "llvm.lifetime.end.p0", fn(t_i64, i8p) -> void);
+        #[cfg(not(feature = "llvm19"))]
         ifn!(map, "llvm.lifetime.end.p0i8", fn(t_i64, i8p) -> void);
 
         ifn!(map, "llvm.expect.i1", fn(i1, i1) -> i1);

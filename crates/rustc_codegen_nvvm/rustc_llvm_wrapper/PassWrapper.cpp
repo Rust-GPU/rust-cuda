@@ -12,6 +12,8 @@
 
 #include <vector>
 #include <set>
+#include <optional>
+#include <string>
 
 #include "rustllvm.h"
 
@@ -21,9 +23,18 @@
 #include "llvm/IR/AssemblyAnnotationWriter.h"
 #include "llvm/Support/CBindingWrapping.h"
 #include "llvm/Support/FileSystem.h"
+#if LLVM_VERSION_MAJOR >= 19
+#include "llvm/Transforms/IPO/Internalize.h"
+#endif
+#if LLVM_VERSION_MAJOR >= 19
+#include "llvm/TargetParser/Host.h"
+#else
 #include "llvm/Support/Host.h"
+#endif
 #include "llvm/Target/TargetMachine.h"
+#if LLVM_VERSION_MAJOR < 19
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#endif
 
 #if LLVM_VERSION_GE(6, 0)
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
@@ -42,7 +53,11 @@
 #endif
 #endif
 
+#if LLVM_VERSION_MAJOR < 19
 #include "llvm-c/Transforms/PassManagerBuilder.h"
+#else
+typedef struct LLVMOpaquePassManagerBuilder *LLVMPassManagerBuilderRef;
+#endif
 
 #if LLVM_VERSION_GE(4, 0)
 #define PGO_AVAILABLE
@@ -58,11 +73,105 @@ typedef struct LLVMOpaqueTargetMachine *LLVMTargetMachineRef;
 
 DEFINE_STDCXX_CONVERSION_FUNCTIONS(Pass, LLVMPassRef)
 DEFINE_STDCXX_CONVERSION_FUNCTIONS(TargetMachine, LLVMTargetMachineRef)
+#if LLVM_VERSION_MAJOR < 19
 DEFINE_STDCXX_CONVERSION_FUNCTIONS(PassManagerBuilder,
                                    LLVMPassManagerBuilderRef)
+#else
+struct LLVMOpaquePassManagerBuilder
+{
+  unsigned OptLevel = 0;
+  unsigned SizeLevel = 0;
+  bool MergeFunctions = false;
+  bool SLPVectorize = false;
+  bool LoopVectorize = false;
+  bool PrepareForThinLTO = false;
+  bool DisableUnrollLoops = false;
+  bool DisableSimplifyLibCalls = false;
+  bool UseAlwaysInline = false;
+  bool AddLifetimes = false;
+  int InlinerThreshold = -1;
+  std::string TargetTriple;
+};
+
+static LLVMOpaquePassManagerBuilder *unwrap(LLVMPassManagerBuilderRef PMB)
+{
+  return PMB;
+}
+
+extern "C" LLVMPassManagerBuilderRef LLVMPassManagerBuilderCreate()
+{
+  return new LLVMOpaquePassManagerBuilder();
+}
+
+extern "C" void LLVMPassManagerBuilderDispose(LLVMPassManagerBuilderRef PMB)
+{
+  delete unwrap(PMB);
+}
+
+extern "C" void LLVMPassManagerBuilderSetSizeLevel(LLVMPassManagerBuilderRef PMB,
+                                                   unsigned Value)
+{
+  unwrap(PMB)->SizeLevel = Value;
+}
+
+extern "C" void LLVMPassManagerBuilderSetDisableUnrollLoops(
+    LLVMPassManagerBuilderRef PMB,
+    LLVMBool Value)
+{
+  unwrap(PMB)->DisableUnrollLoops = Value;
+}
+
+extern "C" void LLVMPassManagerBuilderUseInlinerWithThreshold(
+    LLVMPassManagerBuilderRef PMB,
+    unsigned Threshold)
+{
+  auto *Builder = unwrap(PMB);
+  Builder->UseAlwaysInline = false;
+  Builder->AddLifetimes = false;
+  Builder->InlinerThreshold = Threshold;
+}
+
+extern "C" void LLVMPassManagerBuilderPopulateModulePassManager(
+    LLVMPassManagerBuilderRef PMB,
+    LLVMPassManagerRef PMR)
+{
+  auto *Builder = unwrap(PMB);
+  PassManagerBase *PM = unwrap(PMR);
+
+  if (!Builder->TargetTriple.empty())
+  {
+    Triple TargetTriple(Builder->TargetTriple);
+    TargetLibraryInfoImpl TLII(TargetTriple);
+    if (Builder->DisableSimplifyLibCalls)
+      TLII.disableAllFunctions();
+    PM->add(new TargetLibraryInfoWrapperPass(TLII));
+  }
+
+  if (Builder->UseAlwaysInline)
+    PM->add(createAlwaysInlinerLegacyPass(Builder->AddLifetimes));
+}
+
+extern "C" void LLVMPassManagerBuilderPopulateFunctionPassManager(
+    LLVMPassManagerBuilderRef,
+    LLVMPassManagerRef)
+{
+}
+
+extern "C" void LLVMPassManagerBuilderPopulateLTOPassManager(
+    LLVMPassManagerBuilderRef,
+    LLVMPassManagerRef,
+    LLVMBool,
+    LLVMBool)
+{
+}
+#endif
 
 extern "C" void LLVMInitializePasses()
 {
+#if LLVM_VERSION_MAJOR >= 19
+  // LLVM 19's pass pipeline is driven through PassBuilder, so the legacy
+  // registry initialization hooks are not needed here.
+#else
   PassRegistry &Registry = *PassRegistry::getPassRegistry();
   initializeCore(Registry);
   initializeCodeGen(Registry);
@@ -74,6 +183,7 @@ extern "C" void LLVMInitializePasses()
   initializeInstCombine(Registry);
   initializeInstrumentation(Registry);
   initializeTarget(Registry);
+#endif
 }
 
 enum class LLVMRustPassKind
@@ -128,7 +238,11 @@ extern "C" bool LLVMRustPassManagerBuilderPopulateThinLTOPassManager(
     LLVMPassManagerBuilderRef PMBR,
     LLVMPassManagerRef PMR)
 {
-#if LLVM_VERSION_GE(4, 0)
+#if LLVM_VERSION_MAJOR >= 19
+  (void)PMBR;
+  (void)PMR;
+  return false;
+#elif LLVM_VERSION_GE(4, 0)
   unwrap(PMBR)->populateThinLTOPassManager(*unwrap(PMR));
   return true;
 #else
@@ -259,18 +373,24 @@ enum class LLVMRustCodeGenOptLevel
   Aggressive,
 };
 
-static CodeGenOpt::Level fromRust(LLVMRustCodeGenOptLevel Level)
+#if LLVM_VERSION_MAJOR >= 19
+using CodeGenOptLevelEnum = llvm::CodeGenOptLevel;
+#else
+using CodeGenOptLevelEnum = CodeGenOpt::Level;
+#endif
+
+static CodeGenOptLevelEnum fromRust(LLVMRustCodeGenOptLevel Level)
 {
   switch (Level)
   {
   case LLVMRustCodeGenOptLevel::None:
-    return CodeGenOpt::None;
+    return CodeGenOptLevelEnum::None;
   case LLVMRustCodeGenOptLevel::Less:
-    return CodeGenOpt::Less;
+    return CodeGenOptLevelEnum::Less;
   case LLVMRustCodeGenOptLevel::Default:
-    return CodeGenOpt::Default;
+    return CodeGenOptLevelEnum::Default;
   case LLVMRustCodeGenOptLevel::Aggressive:
-    return CodeGenOpt::Aggressive;
+    return CodeGenOptLevelEnum::Aggressive;
   default:
     report_fatal_error("Bad CodeGenOptLevel.");
   }
@@ -287,12 +407,20 @@ enum class LLVMRustRelocMode
   ROPIRWPI,
 };
 
+#if LLVM_VERSION_MAJOR >= 19
+static std::optional<Reloc::Model> fromRust(LLVMRustRelocMode RustReloc)
+#else
 static Optional<Reloc::Model> fromRust(LLVMRustRelocMode RustReloc)
+#endif
 {
   switch (RustReloc)
   {
   case LLVMRustRelocMode::Default:
+#if LLVM_VERSION_MAJOR >= 19
+    return std::nullopt;
+#else
     return None;
+#endif
   case LLVMRustRelocMode::Static:
     return Reloc::Static;
   case LLVMRustRelocMode::PIC:
@@ -431,7 +559,9 @@ extern "C" LLVMTargetMachineRef LLVMRustCreateTargetMachine(
     Options.ThreadModel = ThreadModel::Single;
   }
 
-#if LLVM_VERSION_GE(6, 0)
+#if LLVM_VERSION_MAJOR >= 19
+  std::optional<CodeModel::Model> CM;
+#elif LLVM_VERSION_GE(6, 0)
   Optional<CodeModel::Model> CM;
 #else
   CodeModel::Model CM = CodeModel::Model::Default;
@@ -465,6 +595,16 @@ extern "C" void LLVMRustConfigurePassManagerBuilder(
     bool MergeFunctions, bool SLPVectorize, bool LoopVectorize, bool PrepareForThinLTO,
     const char *PGOGenPath, const char *PGOUsePath)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  auto *Builder = unwrap(PMBR);
+  Builder->MergeFunctions = MergeFunctions;
+  Builder->SLPVectorize = SLPVectorize;
+  Builder->OptLevel = static_cast<unsigned>(OptLevel);
+  Builder->LoopVectorize = LoopVectorize;
+  Builder->PrepareForThinLTO = PrepareForThinLTO;
+  (void)PGOGenPath;
+  (void)PGOUsePath;
+#else
 #if LLVM_RUSTLLVM
   unwrap(PMBR)->MergeFunctions = MergeFunctions;
 #endif
@@ -490,6 +630,7 @@ extern "C" void LLVMRustConfigurePassManagerBuilder(
 #else
   assert(!PGOGenPath && !PGOUsePath && "Should've caught earlier");
 #endif
+#endif
 }
 
 // Unfortunately, the LLVM C API doesn't provide a way to set the `LibraryInfo`
@@ -498,11 +639,17 @@ extern "C" void LLVMRustAddBuilderLibraryInfo(LLVMPassManagerBuilderRef PMBR,
                                               LLVMModuleRef M,
                                               bool DisableSimplifyLibCalls)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  auto *Builder = unwrap(PMBR);
+  Builder->TargetTriple = unwrap(M)->getTargetTriple();
+  Builder->DisableSimplifyLibCalls = DisableSimplifyLibCalls;
+#else
   Triple TargetTriple(unwrap(M)->getTargetTriple());
   TargetLibraryInfoImpl *TLI = new TargetLibraryInfoImpl(TargetTriple);
   if (DisableSimplifyLibCalls)
     TLI->disableAllFunctions();
   unwrap(PMBR)->LibraryInfo = TLI;
+#endif
 }
 
 // Unfortunately, the LLVM C API doesn't provide a way to create the
@@ -559,14 +706,28 @@ enum class LLVMRustFileType
   ObjectFile,
 };
 
+#if LLVM_VERSION_MAJOR >= 19
+static CodeGenFileType fromRust(LLVMRustFileType Type)
+#else
 static TargetMachine::CodeGenFileType fromRust(LLVMRustFileType Type)
+#endif
 {
   switch (Type)
   {
   case LLVMRustFileType::AssemblyFile:
-    return TargetMachine::CGFT_AssemblyFile;
+    return
+#if LLVM_VERSION_MAJOR >= 19
+        CodeGenFileType::AssemblyFile;
+#else
+        TargetMachine::CGFT_AssemblyFile;
+#endif
   case LLVMRustFileType::ObjectFile:
-    return TargetMachine::CGFT_ObjectFile;
+    return
+#if LLVM_VERSION_MAJOR >= 19
+        CodeGenFileType::ObjectFile;
+#else
+        TargetMachine::CGFT_ObjectFile;
+#endif
   default:
     report_fatal_error("Bad FileType.");
   }
@@ -582,7 +743,13 @@ LLVMRustWriteOutputFile(LLVMTargetMachineRef Target, LLVMPassManagerRef PMR,
 
   std::string ErrorInfo;
   std::error_code EC;
-  raw_fd_ostream OS(Path, EC, sys::fs::F_None);
+  raw_fd_ostream OS(Path, EC,
+#if LLVM_VERSION_MAJOR >= 19
+                    sys::fs::OF_None
+#else
+                    sys::fs::F_None
+#endif
+  );
   if (EC)
     ErrorInfo = EC.message();
   if (ErrorInfo != "")
@@ -678,12 +845,22 @@ namespace
       if (const CallInst *CI = dyn_cast<CallInst>(I))
       {
         Name = "call";
-        Value = CI->getCalledValue();
+        Value =
+#if LLVM_VERSION_MAJOR >= 19
+            CI->getCalledOperand();
+#else
+            CI->getCalledValue();
+#endif
       }
       else if (const InvokeInst *II = dyn_cast<InvokeInst>(I))
       {
         Name = "invoke";
-        Value = II->getCalledValue();
+        Value =
+#if LLVM_VERSION_MAJOR >= 19
+            II->getCalledOperand();
+#else
+            II->getCalledValue();
+#endif
       }
       else
       {
@@ -819,18 +996,23 @@ extern "C" void LLVMRustPrintPasses()
 extern "C" void LLVMRustAddAlwaysInlinePass(LLVMPassManagerBuilderRef PMBR,
                                             bool AddLifetimes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  auto *Builder = unwrap(PMBR);
+  Builder->UseAlwaysInline = true;
+  Builder->AddLifetimes = AddLifetimes;
+  Builder->InlinerThreshold = -1;
+#else
 #if LLVM_VERSION_GE(4, 0)
   unwrap(PMBR)->Inliner = llvm::createAlwaysInlinerLegacyPass(AddLifetimes);
 #else
   unwrap(PMBR)->Inliner = createAlwaysInlinerPass(AddLifetimes);
+#endif
 #endif
 }
 
 extern "C" void LLVMRustRunRestrictionPass(LLVMModuleRef M, char **Symbols,
                                            size_t Len)
 {
-  llvm::legacy::PassManager passes;
-
   auto PreserveFunctions = [=](const GlobalValue &GV)
   {
     for (size_t I = 0; I < Len; I++)
@@ -843,9 +1025,13 @@ extern "C" void LLVMRustRunRestrictionPass(LLVMModuleRef M, char **Symbols,
     return false;
   };
 
+#if LLVM_VERSION_MAJOR >= 19
+  llvm::internalizeModule(*unwrap(M), PreserveFunctions);
+#else
+  llvm::legacy::PassManager passes;
   passes.add(llvm::createInternalizePass(PreserveFunctions));
-
   passes.run(*unwrap(M));
+#endif
 }
 
 extern "C" void LLVMRustMarkAllFunctionsNounwind(LLVMModuleRef M)
@@ -888,7 +1074,9 @@ extern "C" void LLVMRustSetModulePIELevel(LLVMModuleRef M)
 extern "C" bool
 LLVMRustThinLTOAvailable()
 {
-#if LLVM_VERSION_GE(4, 0)
+#if LLVM_VERSION_MAJOR >= 19
+  return false;
+#elif LLVM_VERSION_GE(4, 0)
   return true;
 #else
   return false;
@@ -935,6 +1123,119 @@ LLVMRustPGOAvailable()
 // and various online resources about ThinLTO to make heads or tails of all
 // this.
 
+#if LLVM_VERSION_MAJOR >= 19
+extern "C" bool
+LLVMRustWriteThinBitcodeToFile(LLVMPassManagerRef PMR,
+                               LLVMModuleRef M,
+                               const char *BcFile,
+                               size_t BcFileLen)
+{
+  (void)PMR;
+  (void)M;
+  (void)BcFile;
+  (void)BcFileLen;
+  LLVMRustSetLastError("ThinLTO bitcode writing is not implemented for LLVM 19 yet");
+  return false;
+}
+
+struct LLVMRustThinLTOData
+{
+};
+
+struct LLVMRustThinLTOModule
+{
+  const char *identifier;
+  const char *data;
+  size_t len;
+};
+
+extern "C" LLVMRustThinLTOData *
+LLVMRustCreateThinLTOData(LLVMRustThinLTOModule *modules,
+                          int num_modules,
+                          const char **preserved_symbols,
+                          int num_symbols)
+{
+  (void)modules;
+  (void)num_modules;
+  (void)preserved_symbols;
+  (void)num_symbols;
+  LLVMRustSetLastError("ThinLTO indexing is not implemented for LLVM 19 yet");
+  return nullptr;
+}
+
+extern "C" void
+LLVMRustFreeThinLTOData(LLVMRustThinLTOData *Data)
+{
+  delete Data;
+}
+
+extern "C" bool
+LLVMRustPrepareThinLTORename(const LLVMRustThinLTOData *Data, LLVMModuleRef M)
+{
+  (void)Data;
+  (void)M;
+  LLVMRustSetLastError("ThinLTO rename is not implemented for LLVM 19 yet");
+  return false;
+}
+
+extern "C" bool
+LLVMRustPrepareThinLTOResolveWeak(const LLVMRustThinLTOData *Data, LLVMModuleRef M)
+{
+  (void)Data;
+  (void)M;
+  LLVMRustSetLastError("ThinLTO weak resolution is not implemented for LLVM 19 yet");
+  return false;
+}
+
+extern "C" bool
+LLVMRustPrepareThinLTOInternalize(const LLVMRustThinLTOData *Data, LLVMModuleRef M)
+{
+  (void)Data;
+  (void)M;
+  LLVMRustSetLastError("ThinLTO internalization is not implemented for LLVM 19 yet");
+  return false;
+}
+
+extern "C" bool
+LLVMRustPrepareThinLTOImport(const LLVMRustThinLTOData *Data, LLVMModuleRef M)
+{
+  (void)Data;
+  (void)M;
+  LLVMRustSetLastError("ThinLTO importing is not implemented for LLVM 19 yet");
+  return false;
+}
+
+struct LLVMRustThinLTOBuffer
+{
+  std::string data;
+};
+
+extern "C" LLVMRustThinLTOBuffer *
+LLVMRustThinLTOBufferCreate(LLVMModuleRef M)
+{
+  (void)M;
+  auto Ret = new LLVMRustThinLTOBuffer();
+  return Ret;
+}
+
+extern "C" void
+LLVMRustThinLTOBufferFree(LLVMRustThinLTOBuffer *Buffer)
+{
+  delete Buffer;
+}
+
+extern "C" const void *
+LLVMRustThinLTOBufferPtr(const LLVMRustThinLTOBuffer *Buffer)
+{
+  return Buffer->data.data();
+}
+
+extern "C" size_t
+LLVMRustThinLTOBufferLen(const LLVMRustThinLTOBuffer *Buffer)
+{
+  return Buffer->data.length();
+}
+#else
 extern "C" bool
 LLVMRustWriteThinBitcodeToFile(LLVMPassManagerRef PMR,
                                LLVMModuleRef M,
@@ -1280,6 +1581,7 @@ LLVMRustThinLTOBufferLen(const LLVMRustThinLTOBuffer *Buffer)
 {
   return Buffer->data.length();
 }
+#endif
 
 // This is what we used to parse upstream bitcode for actual ThinLTO
 // processing.  We'll call this once per module optimized through ThinLTO, and
@@ -1356,12 +1658,16 @@ LLVMRustThinLTOPatchDICompileUnit(LLVMModuleRef Mod, DICompileUnit *Unit)
     {
       for (Instruction &BI : FI)
       {
+#if LLVM_VERSION_MAJOR >= 19
+        Finder.processInstruction(*M, BI);
+#else
         if (auto Loc = BI.getDebugLoc())
           Finder.processLocation(*M, Loc);
         if (auto DVI = dyn_cast<DbgValueInst>(&BI))
           Finder.processValue(*M, DVI);
         if (auto DDI = dyn_cast<DbgDeclareInst>(&BI))
           Finder.processDeclare(*M, DDI);
+#endif
       }
     }
   }

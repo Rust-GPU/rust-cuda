@@ -57,24 +57,16 @@ pub(crate) fn codegen(
                 False,
             );
             let from_name = mangle_internal_symbol(tcx, &global_fn_name(method.name));
-            let llfn = llvm::LLVMRustGetOrInsertFunction(
-                llmod,
-                from_name.as_ptr().cast(),
-                from_name.len(),
-                ty,
-            );
+            let llfn =
+                llvm::get_or_insert_function(llmod, from_name.as_ptr().cast(), from_name.len(), ty);
             used.push(llfn);
             if no_return {
                 llvm::Attribute::NoReturn.apply_llfn(llvm::AttributePlace::Function, llfn);
             }
 
             let to_name = mangle_internal_symbol(tcx, &default_fn_name(method.name));
-            let callee = llvm::LLVMRustGetOrInsertFunction(
-                llmod,
-                to_name.as_ptr().cast(),
-                to_name.len(),
-                ty,
-            );
+            let callee =
+                llvm::get_or_insert_function(llmod, to_name.as_ptr().cast(), to_name.len(), ty);
             used.push(callee);
             if no_return {
                 llvm::Attribute::NoReturn.apply_llfn(llvm::AttributePlace::Function, callee);
@@ -89,13 +81,8 @@ pub(crate) fn codegen(
                 .enumerate()
                 .map(|(i, _)| llvm::LLVMGetParam(llfn, i as c_uint))
                 .collect::<Vec<_>>();
-            let ret = llvm::LLVMRustBuildCall(
-                llbuilder,
-                callee,
-                args.as_ptr(),
-                args.len() as c_uint,
-                None,
-            );
+            let ret =
+                llvm::build_call(llbuilder, callee, args.as_ptr(), args.len() as c_uint, None);
             llvm::LLVMSetTailCall(ret, True);
             if output.is_some() {
                 llvm::LLVMBuildRet(llbuilder, ret);
@@ -107,7 +94,7 @@ pub(crate) fn codegen(
 
         let shim_ty = llvm::LLVMFunctionType(void, std::ptr::null(), 0, False);
         let shim_name = mangle_internal_symbol(tcx, NO_ALLOC_SHIM_IS_UNSTABLE);
-        let shim = llvm::LLVMRustGetOrInsertFunction(
+        let shim = llvm::get_or_insert_function(
             llmod,
             shim_name.as_ptr().cast(),
             shim_name.len(),

@@ -4,7 +4,6 @@ use std::{
     ffi::{CStr, CString},
     fmt::Display,
     mem::MaybeUninit,
-    ptr::null_mut,
     str::FromStr,
 };
 
@@ -311,12 +310,13 @@ pub enum NvvmArch {
     Compute73,
     /// This default value of 7.5 corresponds to Turing and later devices. We default to this
     /// because it is the minimum supported by CUDA 13.0 while being in the middle of the range
-    /// supported by CUDA 12.x.
+    /// supported by CUDA 12.x. Selected as the default only when the `llvm19` feature is off;
+    /// the LLVM 19 NVVM dialect can't target pre-Blackwell archs.
     // WARNING: If you change the default, consider updating:
     // - The `--target-arch` values used for compiletests in `ci_linux.yml` and
     //   `.github/workflows/ci_{linux,windows}.yml`.
     // - The CUDA versions used in `setup_cuda_environment` in `compiletests`.
-    #[default]
+    #[cfg_attr(not(feature = "llvm19"), default)]
     Compute75,
     Compute80,
     Compute86,
@@ -325,6 +325,12 @@ pub enum NvvmArch {
     Compute89,
     Compute90,
     Compute90a,
+    /// First Blackwell arch and the cutoff for NVVM's modern IR dialect — everything at
+    /// or above this capability uses the LLVM 19-flavored bitcode accepted by CUDA 12.9+
+    /// `libnvvm`. See [`NvvmArch::uses_modern_ir_dialect`]. Selected as the default when
+    /// the `llvm19` feature is enabled, since the LLVM 7 dialect can't target this and
+    /// the LLVM 19 dialect can't target anything below it.
+    #[cfg_attr(feature = "llvm19", default)]
     Compute100,
     Compute100f,
     Compute100a,
@@ -446,6 +452,14 @@ impl NvvmArch {
     /// Get the minor version number (e.g., 5 for Compute75)
     pub fn minor_version(&self) -> u32 {
         self.capability_value() % 10
+    }
+
+    /// Whether this target uses NVVM's modern IR dialect rather than the legacy LLVM 7 dialect.
+    ///
+    /// CUDA 13.2 documents the modern dialect as Blackwell-and-later only, which begins at
+    /// `compute_100`.
+    pub fn uses_modern_ir_dialect(&self) -> bool {
+        self.capability_value() >= 100
     }
 
     /// Get the target feature string (e.g., "compute_50" for `Compute50`, "compute_90a" for
@@ -739,7 +753,24 @@ impl NvvmProgram {
     /// Verify the program without actually compiling it. In the case of invalid IR, you can find
     /// more detailed error info by calling [`compiler_log`](Self::compiler_log).
     pub fn verify(&self) -> Result<(), NvvmError> {
-        unsafe { nvvm_sys::nvvmVerifyProgram(self.raw, 0, null_mut()).to_result() }
+        self.verify_with_options(&[])
+    }
+
+    /// Like [`verify`](Self::verify), but runs the verifier with the same `NvvmOption`s that will
+    /// be passed to [`compile`](Self::compile). Passing the user-selected `-arch=compute_XXX` in
+    /// particular matters for CUDA 12.9+ / LLVM 19 bitcode: without it the verifier can fall back
+    /// to the legacy LLVM 7 parser and reject modern-dialect bitcode that would otherwise compile
+    /// fine.
+    pub fn verify_with_options(&self, options: &[NvvmOption]) -> Result<(), NvvmError> {
+        unsafe {
+            let options = options.iter().map(|x| format!("{x}\0")).collect::<Vec<_>>();
+            let mut options_ptr = options
+                .iter()
+                .map(|x| x.as_ptr().cast())
+                .collect::<Vec<_>>();
+            nvvm_sys::nvvmVerifyProgram(self.raw, options.len() as i32, options_ptr.as_mut_ptr())
+                .to_result()
+        }
     }
 }
 

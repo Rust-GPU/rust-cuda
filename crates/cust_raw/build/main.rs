@@ -99,9 +99,12 @@ fn main() {
             println!("cargo::rustc-link-search=native={}", libdir.display());
         }
         println!("cargo::rustc-link-lib=dylib=nvvm");
-        // Handle libdevice support.
-        fs::copy(sdk.libdevice_bitcode_path(), outdir.join("libdevice.bc"))
-            .expect("Cannot copy libdevice bitcode file.");
+        // `fs::copy` preserves source mode. When libdevice.10.bc comes from
+        // the Nix store (0444), re-running this build can't overwrite the
+        // previous copy in OUT_DIR. Drop it first.
+        let dest = outdir.join("libdevice.bc");
+        let _ = fs::remove_file(&dest);
+        fs::copy(sdk.libdevice_bitcode_path(), &dest).expect("Cannot copy libdevice bitcode file.");
     }
 }
 

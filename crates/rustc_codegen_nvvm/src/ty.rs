@@ -56,8 +56,16 @@ impl Type {
 impl<'ll> CodegenCx<'ll, '_> {
     pub(crate) fn voidp(&self) -> &'ll Type {
         // llvm uses i8* for void ptrs, void* is invalid
-        let i8_ty = self.type_i8();
-        self.type_ptr_to_ext(i8_ty, AddressSpace::ZERO)
+        #[cfg(feature = "llvm19")]
+        {
+            self.type_ptr_ext(AddressSpace::ZERO)
+        }
+
+        #[cfg(not(feature = "llvm19"))]
+        {
+            let i8_ty = self.type_i8();
+            self.type_ptr_to_ext(i8_ty, AddressSpace::ZERO)
+        }
     }
 
     pub(crate) fn type_named_struct(&self, name: &str) -> &'ll Type {
@@ -97,7 +105,15 @@ impl<'ll> CodegenCx<'ll, '_> {
     }
 
     pub(crate) fn type_i8p_ext(&self, address_space: AddressSpace) -> &'ll Type {
-        self.type_ptr_to_ext(self.type_i8(), address_space)
+        #[cfg(feature = "llvm19")]
+        {
+            self.type_ptr_ext(address_space)
+        }
+
+        #[cfg(not(feature = "llvm19"))]
+        {
+            self.type_ptr_to_ext(self.type_i8(), address_space)
+        }
     }
 
     ///x Creates an integer type with the given number of bits, e.g., i24
@@ -110,17 +126,35 @@ impl<'ll> CodegenCx<'ll, '_> {
     }
 
     pub(crate) fn type_ptr_to(&self, ty: &'ll Type) -> &'ll Type {
-        assert_ne!(
-            self.type_kind(ty),
-            TypeKind::Function,
-            "don't call ptr_to on function types, use ptr_to_llvm_type on FnAbi instead or explicitly specify an address space if it makes sense"
-        );
+        #[cfg(feature = "llvm19")]
+        {
+            let _ = ty;
+            self.type_ptr_ext(AddressSpace::ZERO)
+        }
 
-        unsafe { llvm::LLVMPointerType(ty, AddressSpace::ZERO.0) }
+        #[cfg(not(feature = "llvm19"))]
+        {
+            assert_ne!(
+                self.type_kind(ty),
+                TypeKind::Function,
+                "don't call ptr_to on function types, use ptr_to_llvm_type on FnAbi instead or explicitly specify an address space if it makes sense"
+            );
+
+            unsafe { llvm::LLVMPointerType(ty, AddressSpace::ZERO.0) }
+        }
     }
 
     pub(crate) fn type_ptr_to_ext(&self, ty: &'ll Type, address_space: AddressSpace) -> &'ll Type {
-        unsafe { llvm::LLVMPointerType(ty, address_space.0) }
+        #[cfg(feature = "llvm19")]
+        {
+            let _ = ty;
+            self.type_ptr_ext(address_space)
+        }
+
+        #[cfg(not(feature = "llvm19"))]
+        {
+            unsafe { llvm::LLVMPointerType(ty, address_space.0) }
+        }
     }
 
     pub(crate) fn func_params_types(&self, ty: &'ll Type) -> Vec<&'ll Type> {
@@ -211,11 +245,27 @@ impl<'ll, 'tcx> BaseTypeCodegenMethods for CodegenCx<'ll, 'tcx> {
     }
 
     fn type_ptr(&self) -> Self::Type {
-        self.type_ptr_ext(AddressSpace::ZERO)
+        #[cfg(feature = "llvm19")]
+        unsafe {
+            return llvm::LLVMPointerTypeInContext(self.llcx, AddressSpace::ZERO.0);
+        }
+
+        #[cfg(not(feature = "llvm19"))]
+        {
+            self.type_ptr_ext(AddressSpace::ZERO)
+        }
     }
 
     fn type_ptr_ext(&self, address_space: AddressSpace) -> Self::Type {
-        self.type_ptr_to_ext(self.type_i8(), address_space)
+        #[cfg(feature = "llvm19")]
+        unsafe {
+            return llvm::LLVMPointerTypeInContext(self.llcx, address_space.0);
+        }
+
+        #[cfg(not(feature = "llvm19"))]
+        {
+            self.type_ptr_to_ext(self.type_i8(), address_space)
+        }
     }
 
     fn element_type(&self, ty: &'ll Type) -> &'ll Type {

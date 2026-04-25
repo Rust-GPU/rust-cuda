@@ -24,7 +24,12 @@ unsafe impl Send for ModuleBuffer {}
 unsafe impl Sync for ModuleBuffer {}
 
 impl ModuleBuffer {
-    pub(crate) fn new(m: &llvm::Module, _is_thin: bool) -> ModuleBuffer {
+    pub(crate) fn new(m: &llvm::Module, is_thin: bool) -> ModuleBuffer {
+        if is_thin {
+            trace!(
+                "serializing thin-LTO input via full-module bitcode; ThinLTO-specific shim APIs remain unwired on the Rust side"
+            );
+        }
         ModuleBuffer(unsafe { llvm::LLVMRustModuleBufferCreate(m) })
     }
 }

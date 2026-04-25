@@ -104,23 +104,20 @@ pub fn target_machine_factory(
 
     Arc::new(move |dcx, _config: TargetMachineFactoryConfig| {
         let tm = unsafe {
-            llvm::LLVMRustCreateTargetMachine(
-                triple.as_c_char_ptr(),
-                triple.len(),
-                std::ptr::null(),
-                0,
-                features.as_c_char_ptr(),
-                features.len(),
+            llvm::create_target_machine(&llvm::TargetMachineConfig {
+                triple: &triple,
+                cpu: None,
+                features,
                 code_model,
-                reloc_model,
+                reloc_mode: reloc_model,
                 opt_level,
-                false,
-                use_softfp,
-                ffunction_sections,
-                fdata_sections,
+                use_soft_fp: use_softfp,
+                position_independent_executable: false,
+                function_sections: ffunction_sections,
+                data_sections: fdata_sections,
                 trap_unreachable,
-                false,
-            )
+                singlethread: false,
+            })
         };
         tm.unwrap_or_else(|| {
             dcx.fatal(format!(
@@ -216,6 +213,13 @@ pub(crate) unsafe fn codegen(
 
     let _bc_timer =
         prof.generic_activity_with_arg("NVVM_module_codegen_make_bitcode", &module.name[..]);
+
+    #[cfg(feature = "llvm19")]
+    if let Err(err) = llvm::verify_module(llmod) {
+        return Err(dcx.fatal(format!(
+            "LLVM module verification failed for {module_name}: {err}"
+        )));
+    }
 
     let thin = ModuleBuffer::new(llmod, false);
 

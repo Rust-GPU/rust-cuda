@@ -792,23 +792,25 @@ pub(crate) fn build_compile_unit_di_node<'ll, 'tcx>(
             0,
         );
 
-        llvm::LLVMRustDIBuilderCreateCompileUnit(
+        llvm::di_builder_create_compile_unit(
             debug_context.builder,
-            dwarf_const::DW_LANG_Rust,
-            compile_unit_file,
-            producer.as_c_char_ptr(),
-            producer.len(),
-            tcx.sess.opts.optimize != config::OptLevel::No,
-            c"".as_ptr(),
-            0,
-            // NB: this doesn't actually have any perceptible effect, it seems. LLVM will instead
-            // put the path supplied to `MCSplitDwarfFile` into the debug info of the final
-            // output(s).
-            split_name.as_c_char_ptr(),
-            split_name.len(),
-            kind,
-            0,
-            tcx.sess.opts.unstable_opts.split_dwarf_inlining,
+            llvm::DICompileUnitOptions {
+                lang: dwarf_const::DW_LANG_Rust,
+                file: compile_unit_file,
+                producer: producer.as_c_char_ptr(),
+                producer_len: producer.len(),
+                is_optimized: tcx.sess.opts.optimize != config::OptLevel::No,
+                flags: c"".as_ptr(),
+                runtime_ver: 0,
+                // NB: this doesn't actually have any perceptible effect, it seems. LLVM will instead
+                // put the path supplied to `MCSplitDwarfFile` into the debug info of the final
+                // output(s).
+                split_name: split_name.as_c_char_ptr(),
+                split_name_len: split_name.len(),
+                emission_kind: kind,
+                dwo_id: 0,
+                split_debug_inlining: tcx.sess.opts.unstable_opts.split_dwarf_inlining,
+            },
         )
     }
 }

@@ -1,11 +1,113 @@
 use cust::prelude::*;
+use cust_raw::driver_sys;
 use nanorand::{Rng, WyRand};
 use std::error::Error;
+use std::ffi::{CStr, CString, c_void};
+use std::io::Write;
+use std::os::raw::c_uint;
+use std::ptr;
 
 /// How many numbers to generate and add together.
 const NUMBERS_LEN: usize = 100_000;
 
 static PTX: &str = include_str!(concat!(env!("OUT_DIR"), "/kernels.ptx"));
+
+fn load_ptx_with_log(ptx: &str) -> Result<Module, Box<dyn Error>> {
+    let cstr = CString::new(ptx).expect("PTX contains nul bytes");
+
+    // Pre-allocate log buffers so the driver can write its real complaint there.
+    const LOG_CAP: usize = 16 * 1024;
+    let mut info_log = vec![0u8; LOG_CAP];
+    let mut error_log = vec![0u8; LOG_CAP];
+
+    // Driver packs values directly into the *mut c_void slot when the payload fits.
+    // LOG_VERBOSE = request detailed log
+    // INFO/ERROR_LOG_BUFFER = pointer to buffer
+    // *_LOG_BUFFER_SIZE_BYTES = capacity (in), bytes written (out)
+    let mut options = [
+        driver_sys::CUjit_option::CU_JIT_LOG_VERBOSE,
+        driver_sys::CUjit_option::CU_JIT_INFO_LOG_BUFFER,
+        driver_sys::CUjit_option::CU_JIT_INFO_LOG_BUFFER_SIZE_BYTES,
+        driver_sys::CUjit_option::CU_JIT_ERROR_LOG_BUFFER,
+        driver_sys::CUjit_option::CU_JIT_ERROR_LOG_BUFFER_SIZE_BYTES,
+    ];
+    let mut option_values: [*mut c_void; 5] = [
+        std::ptr::dangling_mut::<c_void>(),
+        info_log.as_mut_ptr() as *mut c_void,
+        LOG_CAP as *mut c_void,
+        error_log.as_mut_ptr() as *mut c_void,
+        LOG_CAP as *mut c_void,
+    ];
+
+    let mut module_ptr: driver_sys::CUmodule = ptr::null_mut();
+    let res = unsafe {
+        driver_sys::cuModuleLoadDataEx(
+            &mut module_ptr,
+            cstr.as_ptr() as *const c_void,
+            options.len() as c_uint,
+            options.as_mut_ptr(),
+            option_values.as_mut_ptr(),
+        )
+    };
+
+    let info_len = option_values[2] as usize;
+    let error_len = option_values[4] as usize;
+    let info_str = String::from_utf8_lossy(&info_log[..info_len.min(LOG_CAP)]);
+    let error_str = String::from_utf8_lossy(&error_log[..error_len.min(LOG_CAP)]);
+
+    if !info_str.trim().is_empty() {
+        eprintln!("[vecadd] JIT info log ({info_len} bytes):\n{info_str}");
+    }
+    if !error_str.trim().is_empty() {
+        eprintln!("[vecadd] JIT error log ({error_len} bytes):\n{error_str}");
+    }
+    eprintln!("[vecadd] cuModuleLoadDataEx raw result code: {:?}", res);
+
+    if res != driver_sys::cudaError_enum::CUDA_SUCCESS {
+        unsafe {
+            let mut err_cstr: *const std::os::raw::c_char = ptr::null();
+            if driver_sys::cuGetErrorString(res, &mut err_cstr)
+                == driver_sys::cudaError_enum::CUDA_SUCCESS
+                && !err_cstr.is_null()
+            {
+                let msg = CStr::from_ptr(err_cstr).to_string_lossy();
+                eprintln!("[vecadd] cuGetErrorString: {msg}");
+            }
+        }
+        return Err(format!("cuModuleLoadDataEx failed: {:?}", res).into());
+    }
+
+    // The driver accepted the PTX; drop our raw handle and re-load via cust so the
+    // caller gets a typed Module with cust's lifetime/drop machinery.
+    let _ = unsafe { driver_sys::cuModuleUnload(module_ptr) };
+    Module::from_ptx(ptx, &[]).map_err(|e| e.into())
+}
+
+// Flush stdout after every println so it stays ordered against our eprintln
+// traces when the two streams get muxed (e.g. over SSH, where stdout would
+// otherwise be block-buffered and dump out-of-order).
+macro_rules! sayln {
+    ($($arg:tt)*) => {{
+        println!($($arg)*);
+        let _ = std::io::stdout().flush();
+    }};
+}
+
+macro_rules! step {
+    ($label:expr, $expr:expr) => {{
+        eprintln!("[vecadd] {} ...", $label);
+        match $expr {
+            Ok(v) => {
+                eprintln!("[vecadd] {} ok", $label);
+                v
+            }
+            Err(e) => {
+                eprintln!("[vecadd] {} FAILED: {:?}", $label, e);
+                return Err(e.into());
+            }
+        }
+    }};
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // generate our random vectors.
@@ -15,45 +117,65 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut rhs = vec![0.0f32; NUMBERS_LEN];
     wyrand.fill(&mut rhs);
 
-    // initialize CUDA, this will pick the first available device and will
-    // make a CUDA context from it.
-    // We don't need the context for anything but it must be kept alive.
-    let _ctx = cust::quick_init()?;
+    let _ctx = step!("cust::quick_init", cust::quick_init());
 
-    // Make the CUDA module, modules just house the GPU code for the kernels we created.
-    // they can be made from PTX code, cubins, or fatbins.
-    let module = Module::from_ptx(PTX, &[])?;
+    let (driver_major, driver_minor) = step!(
+        "CudaApiVersion::get",
+        cust::CudaApiVersion::get().map(|v| (v.major(), v.minor()))
+    );
+    eprintln!("[vecadd] CUDA driver API version: {driver_major}.{driver_minor}");
 
-    // make a CUDA stream to issue calls to. You can think of this as an OS thread but for dispatching
-    // GPU calls.
-    let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
+    let device = step!("Device::get_device(0)", cust::device::Device::get_device(0));
+    let cc_major = step!(
+        "Device::get_attribute(ComputeCapabilityMajor)",
+        device.get_attribute(cust::device::DeviceAttribute::ComputeCapabilityMajor)
+    );
+    let cc_minor = step!(
+        "Device::get_attribute(ComputeCapabilityMinor)",
+        device.get_attribute(cust::device::DeviceAttribute::ComputeCapabilityMinor)
+    );
+    let name = step!("Device::name", device.name());
+    eprintln!("[vecadd] GPU: {name} (compute {cc_major}.{cc_minor})");
 
-    // allocate the GPU memory needed to house our numbers and copy them over.
-    let lhs_gpu = lhs.as_slice().as_dbuf()?;
-    let rhs_gpu = rhs.as_slice().as_dbuf()?;
+    eprintln!("[vecadd] PTX size: {} bytes", PTX.len());
+    eprintln!(
+        "[vecadd] PTX header: {}",
+        PTX.lines().take(10).collect::<Vec<_>>().join(" | ")
+    );
 
-    // allocate our output buffer. You could also use DeviceBuffer::uninitialized() to avoid the
-    // cost of the copy, but you need to be careful not to read from the buffer.
+    // Load PTX via raw cuModuleLoadDataEx so we can capture the JIT error/info log
+    // buffers; cust's ModuleJitOption doesn't surface those yet, and on UnknownError
+    // the log is the only way to see the driver's real complaint.
+    let module = step!(
+        "cuModuleLoadDataEx (with JIT log buffers)",
+        load_ptx_with_log(PTX)
+    );
+
+    let stream = step!("Stream::new", Stream::new(StreamFlags::NON_BLOCKING, None));
+
+    let lhs_gpu = step!("DeviceBuffer::from lhs", lhs.as_slice().as_dbuf());
+    let rhs_gpu = step!("DeviceBuffer::from rhs", rhs.as_slice().as_dbuf());
+
     let mut out = vec![0.0f32; NUMBERS_LEN];
-    let out_buf = out.as_slice().as_dbuf()?;
+    let out_buf = step!("DeviceBuffer::from out", out.as_slice().as_dbuf());
 
-    // retrieve the `vecadd` kernel from the module so we can calculate the right launch config.
-    let vecadd = module.get_function("vecadd")?;
+    let vecadd = step!(
+        "Module::get_function(\"vecadd\")",
+        module.get_function("vecadd")
+    );
 
-    // use the CUDA occupancy API to find an optimal launch configuration for the grid and block size.
-    // This will try to maximize how much of the GPU is used by finding the best launch configuration for the
-    // current CUDA device/architecture.
-    let (_, block_size) = vecadd.suggested_launch_configuration(0, 0.into())?;
+    let (_, block_size) = step!(
+        "suggested_launch_configuration",
+        vecadd.suggested_launch_configuration(0, 0.into())
+    );
 
     let grid_size = (NUMBERS_LEN as u32).div_ceil(block_size);
 
-    println!("using {grid_size} blocks and {block_size} threads per block");
+    sayln!("using {grid_size} blocks and {block_size} threads per block");
 
-    // Actually launch the GPU kernel. This will queue up the launch on the stream, it will
-    // not block the thread until the kernel is finished.
+    eprintln!("[vecadd] launching kernel ...");
     unsafe {
         launch!(
-            // slices are passed as two parameters, the pointer and the length.
             vecadd<<<grid_size, block_size, 0, stream>>>(
                 lhs_gpu.as_device_ptr(),
                 lhs_gpu.len(),
@@ -61,15 +183,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                 rhs_gpu.len(),
                 out_buf.as_device_ptr(),
             )
-        )?;
+        )
+        .map_err(|e| {
+            eprintln!("[vecadd] launch FAILED: {e:?}");
+            e
+        })?;
     }
+    eprintln!("[vecadd] launch queued ok");
 
-    stream.synchronize()?;
+    step!("stream.synchronize", stream.synchronize());
 
-    // copy back the data from the GPU.
-    out_buf.copy_to(&mut out)?;
+    step!("copy_to", out_buf.copy_to(&mut out));
 
-    println!("{} + {} = {}", lhs[0], rhs[0], out[0]);
+    sayln!("{} + {} = {}", lhs[0], rhs[0], out[0]);
 
     Ok(())
 }

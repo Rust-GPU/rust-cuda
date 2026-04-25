@@ -15,7 +15,7 @@ use std::ptr;
 use tracing::debug;
 
 // see libintrinsics.ll on what this is.
-const LIBINTRINSICS: &[u8] = include_bytes!("../libintrinsics.bc");
+const LIBINTRINSICS: &[u8] = include_bytes!(env!("NVVM_LIBINTRINSICS_BC_PATH"));
 
 pub enum CodegenErr {
     Nvvm(NvvmError),
@@ -43,6 +43,23 @@ impl Display for CodegenErr {
     }
 }
 
+#[cfg(feature = "llvm19")]
+fn is_known_nvvm_verify_false_negative(log: &str) -> bool {
+    log.contains("Producer: 'LLVM19")
+        && log.contains("Reader: 'LLVM 7.0.1'")
+        && log.contains("parse Invalid value")
+}
+
+fn selected_arch(args: &CodegenArgs) -> NvvmArch {
+    args.nvvm_options
+        .iter()
+        .find_map(|opt| match opt {
+            NvvmOption::Arch(arch) => Some(*arch),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
 /// Take a list of bitcode module bytes and their names and codegen it
 /// into PTX bytes. The final PTX *should* be utf8, but just to be on the safe side
 /// it returns a vector of bytes.
@@ -56,6 +73,12 @@ pub fn codegen_bitcode_modules(
     llcx: &Context,
 ) -> Result<Vec<u8>, CodegenErr> {
     debug!("Codegenning bitcode to PTX");
+    let target_arch = selected_arch(args);
+    debug!(
+        "selected NVVM target arch: {} (modern dialect: {})",
+        target_arch,
+        target_arch.uses_modern_ir_dialect()
+    );
 
     // Make sure the nvvm version is high enough so users don't get confusing compilation errors.
     let (major, minor) = nvvm::ir_version();
@@ -113,23 +136,42 @@ pub fn codegen_bitcode_modules(
     // giving it to libnvvm. Then to debug codegen failures, we can just ask the user to provide the corresponding llvm ir
     // file with --emit=llvm-ir
 
+    // On the llvm19 path, pass the same options we'll hand to `compile` so the verifier uses
+    // the same arch-specific parser. Without this libnvvm can default to the legacy LLVM 7
+    // reader and reject LLVM 19 dialect bitcode that would otherwise compile fine (see
+    // `is_known_nvvm_verify_false_negative` for the resulting log signature). On the LLVM 7
+    // path we keep the original option-less verify to avoid drift from the pre-llvm19 baseline.
+    #[cfg(feature = "llvm19")]
+    let verification_res = prog.verify_with_options(&args.nvvm_options);
+    #[cfg(not(feature = "llvm19"))]
     let verification_res = prog.verify();
     if verification_res.is_err() {
         let log = prog.compiler_log().unwrap().unwrap_or_default();
-        let footer = "If you plan to submit a bug report please re-run the codegen with `RUSTFLAGS=\"--emit=llvm-ir\" and include the .ll file corresponding to the .o file mentioned in the log";
-        panic!(
-            "Malformed NVVM IR program rejected by libnvvm, dumping verifier log:\n\n{log}\n\n{footer}"
-        );
+        #[cfg(feature = "llvm19")]
+        if target_arch.uses_modern_ir_dialect() && is_known_nvvm_verify_false_negative(&log) {
+            sess.dcx().warn(
+                "libnvvm verification rejected LLVM 19 bitcode with the known legacy-reader message; proceeding to compilation anyway on the llvm19 path"
+            );
+        } else {
+            let footer = "If you plan to submit a bug report please re-run the codegen with `RUSTFLAGS=\"--emit=llvm-ir\" and include the .ll file corresponding to the .o file mentioned in the log";
+            panic!(
+                "Malformed NVVM IR program rejected by libnvvm, dumping verifier log:\n\n{log}\n\n{footer}"
+            );
+        }
+        #[cfg(not(feature = "llvm19"))]
+        {
+            let footer = "If you plan to submit a bug report please re-run the codegen with `RUSTFLAGS=\"--emit=llvm-ir\" and include the .ll file corresponding to the .o file mentioned in the log";
+            panic!(
+                "Malformed NVVM IR program rejected by libnvvm, dumping verifier log:\n\n{log}\n\n{footer}"
+            );
+        }
     }
 
     let res = match prog.compile(&args.nvvm_options) {
         Ok(b) => b,
         Err(error) => {
             let log = prog.compiler_log().unwrap().unwrap_or_default();
-            // this should never happen, if it does, something went really bad or its a bug on libnvvm's end
-            panic!(
-                "libnvvm returned an error that was not previously caught by the verifier: {error:?} {log:?}"
-            );
+            panic!("libnvvm compilation failed: {error:?}\n\n{log}");
         }
     };
 
@@ -310,6 +352,17 @@ unsafe fn internalize_pass(module: &Module, cx: &Context) {
 }
 
 unsafe fn dce_pass(module: &Module) {
+    #[cfg(feature = "llvm19")]
+    {
+        // The legacy C API entrypoint used below (`LLVMAddGlobalDCEPass`) is not
+        // available on our current LLVM 19 runtime path. Keep the backend loadable
+        // by skipping this cleanup for now; revisit if LLVM 19 smoke tests show we
+        // need an explicit replacement pass.
+        let _ = module;
+        return;
+    }
+
+    #[cfg(not(feature = "llvm19"))]
     unsafe {
         let pass_manager = LLVMCreatePassManager();
 

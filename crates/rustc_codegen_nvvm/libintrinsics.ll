@@ -1,9 +1,13 @@
 ; This is a hand-written llvm ir module which contains extra functions
-; that are easier to write. They mostly contain nvvm intrinsics that are wrapped in new 
+; that are easier to write. They mostly contain nvvm intrinsics that are wrapped in new
 ; functions so that rustc does not think they are llvm intrinsics and so you don't need to always use nightly for that.
 ;
-; if you update this make sure to update libintrinsics.bc by running llvm-as (make sure you are using llvm-7 or it won't work when
-; loaded into libnvvm).
+; The LLVM 7 path uses the checked-in `libintrinsics.bc`. If you edit this file for the
+; LLVM 7 path, regenerate the .bc with `llvm-as-7` (older or newer llvm-as will emit a
+; bitcode format libnvvm rejects).
+;
+; The LLVM 19 path assembles this same source at build time with `llvm-as-19`; no
+; regeneration required, just edit and rebuild.
 source_filename = "libintrinsics"
 ; This data layout must match `DATA_LAYOUT` in `crates/rustc_codegen_nvvm/src/target.rs`.
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-i128:128:128-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64"

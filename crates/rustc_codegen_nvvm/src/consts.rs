@@ -354,7 +354,16 @@ impl<'ll> StaticCodegenMethods for CodegenCx<'ll, '_> {
             let mut val_llty = self.val_ty(v);
             let v = if val_llty == self.type_i1() {
                 val_llty = self.type_i8();
-                llvm::LLVMConstZExt(v, val_llty)
+                #[cfg(feature = "llvm19")]
+                {
+                    let const_int = v as *const llvm::Value as *const llvm::ConstantInt;
+                    let const_val = llvm::LLVMConstIntGetZExtValue(&*const_int);
+                    llvm::LLVMConstInt(val_llty, const_val, 0)
+                }
+                #[cfg(not(feature = "llvm19"))]
+                {
+                    llvm::LLVMConstZExt(v, val_llty)
+                }
             } else {
                 v
             };
@@ -379,7 +388,7 @@ impl<'ll> StaticCodegenMethods for CodegenCx<'ll, '_> {
                 let visibility = llvm::LLVMRustGetVisibility(g);
 
                 let addrspace = self.static_addrspace(instance);
-                let new_g = llvm::LLVMRustGetOrInsertGlobal(
+                let new_g = llvm::get_or_insert_global(
                     self.llmod,
                     name.as_ptr().cast(),
                     name.len(),

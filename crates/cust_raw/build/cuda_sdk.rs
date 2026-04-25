@@ -215,6 +215,7 @@ impl CudaSdk {
             vec![
                 cuda_root.join("nvvm").join("bin"),
                 cuda_root.join("nvvm").join("lib64"),
+                cuda_root.join("nvvm").join("lib"),
             ]
         };
         let library_dirs = Self::normalize_dirpaths(search_dirs);

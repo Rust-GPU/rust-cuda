@@ -8,6 +8,14 @@ description = "High level bindings to libnvvm"
 repository = "https://github.com/Rust-GPU/rust-cuda"
 readme = "../../README.md"
 
+[features]
+default = []
+# Match the `llvm19` feature on `rustc_codegen_nvvm`. Currently only flips the
+# default `NvvmArch` to the lowest Blackwell capability, since the LLVM 7
+# bitcode dialect can't target `compute_100+` and the LLVM 19 dialect can't
+# target pre-Blackwell archs.
+llvm19 = []
+
 [dependencies]
 cust_raw = { version = "0.11.3", path = "../cust_raw", default-features = false, features = ["nvvm"] }
 strum = { version = "0.27", features = ["derive"] }

@@ -9,7 +9,9 @@
 // except according to those terms.
 
 #include "rustllvm.h"
+#if LLVM_VERSION_MAJOR < 19
 #include "llvm/IR/CallSite.h"
+#endif
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DiagnosticInfo.h"
@@ -20,10 +22,9 @@
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/Error.h"
 
-#if LLVM_VERSION_GE(5, 0)
-#include "llvm/ADT/Optional.h"
-#else
+#if LLVM_VERSION_LT(5, 0)
 #include <cstdlib>
 #endif
 
@@ -113,10 +114,17 @@ extern "C" LLVMValueRef LLVMRustBuildMemCpy(LLVMBuilderRef B,
                                             LLVMValueRef Src, unsigned SrcAlign,
                                             LLVMValueRef Size, bool IsVolatile)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(unwrap(B)->CreateMemCpy(
+      unwrap(Dst), MaybeAlign(DstAlign),
+      unwrap(Src), MaybeAlign(SrcAlign),
+      unwrap(Size), IsVolatile));
+#else
   return wrap(unwrap(B)->CreateMemCpy(
       unwrap(Dst), DstAlign,
       unwrap(Src), SrcAlign,
       unwrap(Size), IsVolatile));
+#endif
 }
 
 extern "C" LLVMValueRef LLVMRustBuildMemMove(LLVMBuilderRef B,
@@ -124,10 +132,17 @@ extern "C" LLVMValueRef LLVMRustBuildMemMove(LLVMBuilderRef B,
                                              LLVMValueRef Src, unsigned SrcAlign,
                                              LLVMValueRef Size, bool IsVolatile)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(unwrap(B)->CreateMemMove(
+      unwrap(Dst), MaybeAlign(DstAlign),
+      unwrap(Src), MaybeAlign(SrcAlign),
+      unwrap(Size), IsVolatile));
+#else
   return wrap(unwrap(B)->CreateMemMove(
       unwrap(Dst), DstAlign,
       unwrap(Src), SrcAlign,
       unwrap(Size), IsVolatile));
+#endif
 }
 
 extern "C" LLVMValueRef LLVMRustBuildMemSet(LLVMBuilderRef B,
@@ -135,8 +150,13 @@ extern "C" LLVMValueRef LLVMRustBuildMemSet(LLVMBuilderRef B,
                                             LLVMValueRef Val,
                                             LLVMValueRef Size, bool IsVolatile)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(unwrap(B)->CreateMemSet(
+      unwrap(Dst), unwrap(Val), unwrap(Size), MaybeAlign(DstAlign), IsVolatile));
+#else
   return wrap(unwrap(B)->CreateMemSet(
       unwrap(Dst), unwrap(Val), unwrap(Size), DstAlign, IsVolatile));
+#endif
 }
 
 static LLVM_THREAD_LOCAL char *LastError;
@@ -195,8 +215,12 @@ extern "C" LLVMValueRef LLVMRustGetOrInsertFunction(LLVMModuleRef M,
                                                     const char *Name,
                                                     LLVMTypeRef FunctionTy)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(unwrap(M)->getOrInsertFunction(StringRef(Name), unwrap<FunctionType>(FunctionTy)).getCallee());
+#else
   return wrap(
       unwrap(M)->getOrInsertFunction(Name, unwrap<FunctionType>(FunctionTy)));
+#endif
 }
 
 extern "C" LLVMValueRef
@@ -260,7 +284,11 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind)
   case SExt:
     return Attribute::SExt;
   case StructRet:
+#if LLVM_VERSION_MAJOR >= 19
+    report_fatal_error("StructRet not supported without a type on LLVM 19+");
+#else
     return Attribute::StructRet;
+#endif
   case UWTable:
     return Attribute::UWTable;
   case ZExt:
@@ -282,6 +310,13 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind)
 extern "C" void LLVMRustAddCallSiteAttribute(LLVMValueRef Instr, unsigned Index,
                                              LLVMRustAttribute RustAttr)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  CallBase *Call = unwrap<CallBase>(Instr);
+  LLVMContext &Ctx = Call->getContext();
+  AttrBuilder B(Ctx);
+  B.addAttribute(Attribute::get(Ctx, fromRust(RustAttr)));
+  Call->setAttributes(Call->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   CallSite Call = CallSite(unwrap<Instruction>(Instr));
   Attribute Attr = Attribute::get(Call->getContext(), fromRust(RustAttr));
 #if LLVM_VERSION_GE(5, 0)
@@ -292,12 +327,20 @@ extern "C" void LLVMRustAddCallSiteAttribute(LLVMValueRef Instr, unsigned Index,
       Call->getContext(), Index,
       AttributeSet::get(Call->getContext(), Index, B)));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddAlignmentCallSiteAttr(LLVMValueRef Instr,
                                                  unsigned Index,
                                                  uint32_t Bytes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  CallBase *Call = unwrap<CallBase>(Instr);
+  LLVMContext &Ctx = Call->getContext();
+  AttrBuilder B(Ctx);
+  B.addAlignmentAttr(Bytes);
+  Call->setAttributes(Call->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   CallSite Call = CallSite(unwrap<Instruction>(Instr));
   AttrBuilder B;
   B.addAlignmentAttr(Bytes);
@@ -309,12 +352,20 @@ extern "C" void LLVMRustAddAlignmentCallSiteAttr(LLVMValueRef Instr,
       Call->getContext(), Index,
       AttributeSet::get(Call->getContext(), Index, B)));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddDereferenceableCallSiteAttr(LLVMValueRef Instr,
                                                        unsigned Index,
                                                        uint64_t Bytes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  CallBase *Call = unwrap<CallBase>(Instr);
+  LLVMContext &Ctx = Call->getContext();
+  AttrBuilder B(Ctx);
+  B.addDereferenceableAttr(Bytes);
+  Call->setAttributes(Call->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   CallSite Call = CallSite(unwrap<Instruction>(Instr));
   AttrBuilder B;
   B.addDereferenceableAttr(Bytes);
@@ -326,12 +377,20 @@ extern "C" void LLVMRustAddDereferenceableCallSiteAttr(LLVMValueRef Instr,
       Call->getContext(), Index,
       AttributeSet::get(Call->getContext(), Index, B)));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddDereferenceableOrNullCallSiteAttr(LLVMValueRef Instr,
                                                              unsigned Index,
                                                              uint64_t Bytes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  CallBase *Call = unwrap<CallBase>(Instr);
+  LLVMContext &Ctx = Call->getContext();
+  AttrBuilder B(Ctx);
+  B.addDereferenceableOrNullAttr(Bytes);
+  Call->setAttributes(Call->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   CallSite Call = CallSite(unwrap<Instruction>(Instr));
   AttrBuilder B;
   B.addDereferenceableOrNullAttr(Bytes);
@@ -343,11 +402,19 @@ extern "C" void LLVMRustAddDereferenceableOrNullCallSiteAttr(LLVMValueRef Instr,
       Call->getContext(), Index,
       AttributeSet::get(Call->getContext(), Index, B)));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddFunctionAttribute(LLVMValueRef Fn, unsigned Index,
                                              LLVMRustAttribute RustAttr)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Function *A = unwrap<Function>(Fn);
+  LLVMContext &Ctx = A->getContext();
+  AttrBuilder B(Ctx);
+  B.addAttribute(Attribute::get(Ctx, fromRust(RustAttr)));
+  A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   Function *A = unwrap<Function>(Fn);
   Attribute Attr = Attribute::get(A->getContext(), fromRust(RustAttr));
   AttrBuilder B(Attr);
@@ -356,12 +423,52 @@ extern "C" void LLVMRustAddFunctionAttribute(LLVMValueRef Fn, unsigned Index,
 #else
   A->addAttributes(Index, AttributeSet::get(A->getContext(), Index, B));
 #endif
+#endif
+}
+
+extern "C" void LLVMRustAddFunctionAttributeWithType(LLVMValueRef Fn, unsigned Index,
+                                                     LLVMRustAttribute RustAttr,
+                                                     LLVMTypeRef Ty)
+{
+#if LLVM_VERSION_MAJOR >= 19
+  Function *A = unwrap<Function>(Fn);
+  LLVMContext &Ctx = A->getContext();
+  AttrBuilder B(Ctx);
+  if (RustAttr == StructRet) {
+    B.addStructRetAttr(unwrap(Ty));
+  } else if (RustAttr == ByVal) {
+    B.addByValAttr(unwrap(Ty));
+  } else {
+    B.addAttribute(Attribute::get(Ctx, fromRust(RustAttr)));
+  }
+  A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
+  // LLVM 7's StructRet/ByVal are plain attribute kinds with no type payload,
+  // so the Ty argument is only meaningful on the LLVM 19 path above. Fall through
+  // to the kind-only add on legacy LLVM.
+  (void)Ty;
+  Function *A = unwrap<Function>(Fn);
+  Attribute Attr = Attribute::get(A->getContext(), fromRust(RustAttr));
+  AttrBuilder B(Attr);
+#if LLVM_VERSION_GE(5, 0)
+  A->addAttributes(Index, B);
+#else
+  A->addAttributes(Index, AttributeSet::get(A->getContext(), Index, B));
+#endif
+#endif
 }
 
 extern "C" void LLVMRustAddAlignmentAttr(LLVMValueRef Fn,
                                          unsigned Index,
                                          uint32_t Bytes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Function *A = unwrap<Function>(Fn);
+  LLVMContext &Ctx = A->getContext();
+  AttrBuilder B(Ctx);
+  B.addAlignmentAttr(Bytes);
+  A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   Function *A = unwrap<Function>(Fn);
   AttrBuilder B;
   B.addAlignmentAttr(Bytes);
@@ -370,11 +477,19 @@ extern "C" void LLVMRustAddAlignmentAttr(LLVMValueRef Fn,
 #else
   A->addAttributes(Index, AttributeSet::get(A->getContext(), Index, B));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddDereferenceableAttr(LLVMValueRef Fn, unsigned Index,
                                                uint64_t Bytes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Function *A = unwrap<Function>(Fn);
+  LLVMContext &Ctx = A->getContext();
+  AttrBuilder B(Ctx);
+  B.addDereferenceableAttr(Bytes);
+  A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   Function *A = unwrap<Function>(Fn);
   AttrBuilder B;
   B.addDereferenceableAttr(Bytes);
@@ -383,12 +498,20 @@ extern "C" void LLVMRustAddDereferenceableAttr(LLVMValueRef Fn, unsigned Index,
 #else
   A->addAttributes(Index, AttributeSet::get(A->getContext(), Index, B));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddDereferenceableOrNullAttr(LLVMValueRef Fn,
                                                      unsigned Index,
                                                      uint64_t Bytes)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Function *A = unwrap<Function>(Fn);
+  LLVMContext &Ctx = A->getContext();
+  AttrBuilder B(Ctx);
+  B.addDereferenceableOrNullAttr(Bytes);
+  A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   Function *A = unwrap<Function>(Fn);
   AttrBuilder B;
   B.addDereferenceableOrNullAttr(Bytes);
@@ -397,6 +520,7 @@ extern "C" void LLVMRustAddDereferenceableOrNullAttr(LLVMValueRef Fn,
 #else
   A->addAttributes(Index, AttributeSet::get(A->getContext(), Index, B));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustAddFunctionAttrStringValue(LLVMValueRef Fn,
@@ -404,6 +528,13 @@ extern "C" void LLVMRustAddFunctionAttrStringValue(LLVMValueRef Fn,
                                                    const char *Name, size_t NameLen,
                                                    const char *Value, size_t ValueLen)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Function *F = unwrap<Function>(Fn);
+  LLVMContext &Ctx = F->getContext();
+  AttrBuilder B(Ctx);
+  B.addAttribute(StringRef(Name, NameLen), StringRef(Value, ValueLen));
+  F->setAttributes(F->getAttributes().addAttributesAtIndex(Ctx, Index, B));
+#else
   Function *F = unwrap<Function>(Fn);
   AttrBuilder B;
   B.addAttribute(StringRef(Name, NameLen), StringRef(Value, ValueLen));
@@ -412,12 +543,19 @@ extern "C" void LLVMRustAddFunctionAttrStringValue(LLVMValueRef Fn,
 #else
   F->addAttributes(Index, AttributeSet::get(F->getContext(), Index, B));
 #endif
+#endif
 }
 
 extern "C" void LLVMRustRemoveFunctionAttributes(LLVMValueRef Fn,
                                                  unsigned Index,
                                                  LLVMRustAttribute RustAttr)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Function *F = unwrap<Function>(Fn);
+  auto PALNew =
+      F->getAttributes().removeAttributeAtIndex(F->getContext(), Index, fromRust(RustAttr));
+  F->setAttributes(PALNew);
+#else
   Function *F = unwrap<Function>(Fn);
   Attribute Attr = Attribute::get(F->getContext(), fromRust(RustAttr));
   AttrBuilder B(Attr);
@@ -429,6 +567,7 @@ extern "C" void LLVMRustRemoveFunctionAttributes(LLVMValueRef Fn,
       F->getContext(), Index, AttributeSet::get(F->getContext(), Index, B));
 #endif
   F->setAttributes(PALNew);
+#endif
 }
 
 // enable fpmath flag UnsafeAlgebra
@@ -448,9 +587,13 @@ extern "C" LLVMValueRef
 LLVMRustBuildAtomicLoad(LLVMBuilderRef B, LLVMValueRef Source, const char *Name,
                         LLVMAtomicOrdering Order)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  report_fatal_error("LLVMRustBuildAtomicLoad requires a type-aware LLVM 19 wrapper");
+#else
   LoadInst *LI = new LoadInst(unwrap(Source), 0);
   LI->setAtomic(fromRust(Order));
   return wrap(unwrap(B)->Insert(LI, Name));
+#endif
 }
 
 extern "C" LLVMValueRef LLVMRustBuildAtomicStore(LLVMBuilderRef B,
@@ -458,9 +601,15 @@ extern "C" LLVMValueRef LLVMRustBuildAtomicStore(LLVMBuilderRef B,
                                                  LLVMValueRef Target,
                                                  LLVMAtomicOrdering Order)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  StoreInst *SI = unwrap(B)->CreateStore(unwrap(V), unwrap(Target));
+  SI->setAtomic(fromRust(Order));
+  return wrap(SI);
+#else
   StoreInst *SI = new StoreInst(unwrap(V), unwrap(Target));
   SI->setAtomic(fromRust(Order));
   return wrap(unwrap(B)->Insert(SI));
+#endif
 }
 
 extern "C" LLVMValueRef
@@ -469,9 +618,15 @@ LLVMRustBuildAtomicCmpXchg(LLVMBuilderRef B, LLVMValueRef Target,
                            LLVMAtomicOrdering Order,
                            LLVMAtomicOrdering FailureOrder, LLVMBool Weak)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  AtomicCmpXchgInst *ACXI = unwrap(B)->CreateAtomicCmpXchg(
+      unwrap(Target), unwrap(Old), unwrap(Source), MaybeAlign(), fromRust(Order),
+      fromRust(FailureOrder));
+#else
   AtomicCmpXchgInst *ACXI = unwrap(B)->CreateAtomicCmpXchg(
       unwrap(Target), unwrap(Old), unwrap(Source), fromRust(Order),
       fromRust(FailureOrder));
+#endif
   ACXI->setWeak(Weak);
   return wrap(ACXI);
 }
@@ -554,8 +709,13 @@ LLVMRustInlineAsm(LLVMTypeRef Ty, char *AsmString, size_t AsmStringLen,
 extern "C" bool LLVMRustInlineAsmVerify(LLVMTypeRef Ty, char *Constraints,
                                         size_t ConstraintsLen)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return !llvm::errorToBool(InlineAsm::verify(
+      unwrap<FunctionType>(Ty), StringRef(Constraints, ConstraintsLen)));
+#else
   return InlineAsm::Verify(unwrap<FunctionType>(Ty),
                            StringRef(Constraints, ConstraintsLen));
+#endif
 }
 
 extern "C" void LLVMRustAppendModuleInlineAsm(LLVMModuleRef M, const char *Asm, size_t AsmLen)
@@ -672,10 +832,12 @@ static DINode::DIFlags fromRust(LLVMRustDIFlags Flags)
   {
     Result |= DINode::DIFlags::FlagAppleBlock;
   }
+#if LLVM_VERSION_MAJOR < 19
   if (isSet(Flags & LLVMRustDIFlags::FlagBlockByrefStruct))
   {
     Result |= DINode::DIFlags::FlagBlockByrefStruct;
   }
+#endif
   if (isSet(Flags & LLVMRustDIFlags::FlagVirtual))
   {
     Result |= DINode::DIFlags::FlagVirtual;
@@ -735,10 +897,12 @@ static DINode::DIFlags fromRust(LLVMRustDIFlags Flags)
   {
     Result |= DINode::DIFlags::FlagNoReturn;
   }
+#if LLVM_VERSION_MAJOR < 19
   if (isSet(Flags & LLVMRustDIFlags::FlagMainSubprogram))
   {
     Result |= DINode::DIFlags::FlagMainSubprogram;
   }
+#endif
 #endif
 
   return Result;
@@ -865,11 +1029,29 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateFunction(
 {
   DITemplateParameterArray TParams =
       DITemplateParameterArray(unwrap<MDTuple>(TParam));
+#if LLVM_VERSION_MAJOR >= 19
+  DISubprogram::DISPFlags SPFlags = DISubprogram::DISPFlags::SPFlagZero;
+  if (IsLocalToUnit)
+    SPFlags |= DISubprogram::DISPFlags::SPFlagLocalToUnit;
+  if (IsDefinition)
+    SPFlags |= DISubprogram::DISPFlags::SPFlagDefinition;
+  if (IsOptimized)
+    SPFlags |= DISubprogram::DISPFlags::SPFlagOptimized;
+  if (isSet(Flags & LLVMRustDIFlags::FlagMainSubprogram))
+    SPFlags |= DISubprogram::DISPFlags::SPFlagMainSubprogram;
+
+  DISubprogram *Sub = Builder->createFunction(
+      unwrapDI<DIScope>(Scope), StringRef(Name ? Name : ""),
+      StringRef(LinkageName ? LinkageName : ""), unwrapDI<DIFile>(File),
+      LineNo, unwrapDI<DISubroutineType>(Ty), ScopeLine, fromRust(Flags),
+      SPFlags, TParams, unwrapDIPtr<DISubprogram>(Decl));
+#else
   DISubprogram *Sub = Builder->createFunction(
       unwrapDI<DIScope>(Scope), Name, LinkageName, unwrapDI<DIFile>(File),
       LineNo, unwrapDI<DISubroutineType>(Ty), IsLocalToUnit, IsDefinition,
       ScopeLine, fromRust(Flags), IsOptimized, TParams,
       unwrapDIPtr<DISubprogram>(Decl));
+#endif
   if (MaybeFn)
     unwrap<Function>(MaybeFn)->setSubprogram(Sub);
   return wrap(Sub);
@@ -898,12 +1080,19 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreatePointerType(
     LLVMRustDIBuilderRef Builder, LLVMMetadataRef PointeeTy,
     uint64_t SizeInBits, uint32_t AlignInBits, const char *Name)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(Builder->createPointerType(unwrapDI<DIType>(PointeeTy),
+                                         SizeInBits, AlignInBits,
+                                         std::nullopt,
+                                         StringRef(Name ? Name : "")));
+#else
   return wrap(Builder->createPointerType(unwrapDI<DIType>(PointeeTy),
                                          SizeInBits, AlignInBits,
 #if LLVM_VERSION_GE(5, 0)
                                          /* DWARFAddressSpace */ None,
 #endif
                                          Name));
+#endif
 }
 
 extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateStructType(
@@ -1004,11 +1193,20 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateStaticVariable(
         FPVal->getValueAPF().bitcastToAPInt().getZExtValue());
   }
 
+#if LLVM_VERSION_MAJOR >= 19
+  llvm::DIGlobalVariableExpression *VarExpr = Builder->createGlobalVariableExpression(
+      unwrapDI<DIDescriptor>(Context), StringRef(Name, NameLen),
+      StringRef(LinkageName, LinkageNameLen),
+      unwrapDI<DIFile>(File), LineNo, unwrapDI<DIType>(Ty), IsLocalToUnit,
+      /* isDefined */ true, InitExpr, unwrapDIPtr<MDNode>(Decl),
+      /* templateParams */ nullptr, AlignInBits);
+#else
   llvm::DIGlobalVariableExpression *VarExpr = Builder->createGlobalVariableExpression(
       unwrapDI<DIDescriptor>(Context), StringRef(Name, NameLen),
       StringRef(LinkageName, LinkageNameLen),
       unwrapDI<DIFile>(File), LineNo, unwrapDI<DIType>(Ty), IsLocalToUnit,
       InitExpr, unwrapDIPtr<MDNode>(Decl), AlignInBits);
+#endif
 
   InitVal->setMetadata("dbg", VarExpr);
 
@@ -1076,11 +1274,27 @@ extern "C" LLVMValueRef LLVMRustDIBuilderInsertDeclareAtEnd(
     int64_t *AddrOps, unsigned AddrOpsCount, LLVMMetadataRef DL,
     LLVMBasicBlockRef InsertAtEnd)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  SmallVector<uint64_t, 8> AddrOpsStorage;
+  AddrOpsStorage.reserve(AddrOpsCount);
+  for (unsigned I = 0; I < AddrOpsCount; ++I)
+    AddrOpsStorage.push_back(static_cast<uint64_t>(AddrOps[I]));
+
+  DbgInstPtr Declare = Builder->insertDeclare(
+      unwrap(V), unwrap<DILocalVariable>(VarInfo),
+      Builder->createExpression(ArrayRef<uint64_t>(AddrOpsStorage)),
+      DebugLoc(cast<MDNode>(unwrap(DL))),
+      unwrap(InsertAtEnd));
+  if (Instruction *Inst = Declare.dyn_cast<Instruction *>())
+    return wrap(Inst);
+  return nullptr;
+#else
   return wrap(Builder->insertDeclare(
       unwrap(V), unwrap<DILocalVariable>(VarInfo),
       Builder->createExpression(llvm::ArrayRef<int64_t>(AddrOps, AddrOpsCount)),
       DebugLoc(cast<MDNode>(unwrap(DL))),
       unwrap(InsertAtEnd)));
+#endif
 }
 
 extern "C" LLVMMetadataRef
@@ -1118,8 +1332,14 @@ extern "C" LLVMMetadataRef LLVMRustDIBuilderCreateTemplateTypeParameter(
     LLVMRustDIBuilderRef Builder, LLVMMetadataRef Scope, const char *Name,
     size_t NameLen, LLVMMetadataRef Ty)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(Builder->createTemplateTypeParameter(
+      unwrapDI<DIDescriptor>(Scope), StringRef(Name, NameLen),
+      unwrapDI<DIType>(Ty), false));
+#else
   return wrap(Builder->createTemplateTypeParameter(
       unwrapDI<DIDescriptor>(Scope), StringRef(Name, NameLen), unwrapDI<DIType>(Ty)));
+#endif
 }
 
 extern "C" LLVMMetadataRef
@@ -1160,10 +1380,16 @@ LLVMRustDIBuilderCreateDebugLocation(unsigned Line,
                                      unsigned Column, LLVMMetadataRef Scope,
                                      LLVMMetadataRef InlinedAt)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  MDNode *ScopeNode = unwrapDIPtr<MDNode>(Scope);
+  return wrap(DILocation::get(ScopeNode->getContext(), Line, Column, ScopeNode,
+                              unwrapDIPtr<MDNode>(InlinedAt)));
+#else
   DebugLoc debug_loc = DebugLoc::get(Line, Column, unwrapDIPtr<MDNode>(Scope),
                                      unwrapDIPtr<MDNode>(InlinedAt));
 
   return wrap(debug_loc.getAsMDNode());
+#endif
 }
 
 extern "C" LLVMMetadataRef
@@ -1221,9 +1447,22 @@ inline section_iterator *unwrap(LLVMSectionIteratorRef SI)
 extern "C" size_t LLVMRustGetSectionName(LLVMSectionIteratorRef SI,
                                          const char **Ptr)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  Expected<StringRef> NameOrErr = (*unwrap(SI))->getName();
+  if (!NameOrErr)
+  {
+    std::string Err = toString(NameOrErr.takeError());
+    report_fatal_error(Err.c_str());
+  }
+  StringRef Ret = *NameOrErr;
+#else
   StringRef Ret;
   if (std::error_code EC = (*unwrap(SI))->getName(Ret))
-    report_fatal_error(EC.message());
+  {
+    std::string Err = EC.message();
+    report_fatal_error(Err.c_str());
+  }
+#endif
   *Ptr = Ret.data();
   return Ret.size();
 }
@@ -1263,7 +1502,11 @@ extern "C" void LLVMRustUnpackOptimizationDiagnostic(
   {
     *Line = loc.getLine();
     *Column = loc.getColumn();
+#if LLVM_VERSION_MAJOR >= 19
+    FilenameOS << loc.getAbsolutePath();
+#else
     FilenameOS << loc.getFilename();
+#endif
   }
 #else
   const DebugLoc &loc = Opt->getDebugLoc();
@@ -1389,8 +1632,17 @@ extern "C" LLVMTypeKind LLVMRustGetTypeKind(LLVMTypeRef Ty)
     return LLVMArrayTypeKind;
   case Type::PointerTyID:
     return LLVMPointerTypeKind;
+#if LLVM_VERSION_MAJOR >= 19
+  case Type::FixedVectorTyID:
+    return LLVMVectorTypeKind;
+  case Type::ScalableVectorTyID:
+    return LLVMScalableVectorTypeKind;
+  case Type::BFloatTyID:
+    return LLVMBFloatTypeKind;
+#else
   case Type::VectorTyID:
     return LLVMVectorTypeKind;
+#endif
   case Type::X86_MMXTyID:
     return LLVMX86_MMXTypeKind;
   case Type::TokenTyID:
@@ -1401,11 +1653,19 @@ extern "C" LLVMTypeKind LLVMRustGetTypeKind(LLVMTypeRef Ty)
 
 DEFINE_SIMPLE_CONVERSION_FUNCTIONS(SMDiagnostic, LLVMSMDiagnosticRef)
 
+#if LLVM_VERSION_MAJOR >= 19
+extern "C" void LLVMRustSetInlineAsmDiagnosticHandler(LLVMContextRef,
+                                                      void *,
+                                                      void *)
+{
+}
+#else
 extern "C" void LLVMRustSetInlineAsmDiagnosticHandler(
     LLVMContextRef C, LLVMContext::InlineAsmDiagHandlerTy H, void *CX)
 {
   unwrap(C)->setInlineAsmDiagnosticHandler(H, CX);
 }
+#endif
 
 extern "C" void LLVMRustWriteSMDiagnosticToString(LLVMSMDiagnosticRef D,
                                                   RustStringRef Str)
@@ -1477,11 +1737,25 @@ extern "C" void LLVMRustAddHandler(LLVMValueRef CatchSwitchRef,
   cast<CatchSwitchInst>(CatchSwitch)->addHandler(unwrap(Handler));
 }
 
+#if LLVM_VERSION_MAJOR >= 19
+static FunctionType *LLVMRustGetFunctionTypeForCallee(Value *Callee)
+{
+  if (Function *Fn = dyn_cast<Function>(Callee->stripPointerCasts()))
+    return Fn->getFunctionType();
+
+  report_fatal_error("LLVMRustBuildCall requires an explicit callee type on LLVM 19");
+}
+#endif
+
 extern "C" OperandBundleDef *LLVMRustBuildOperandBundleDef(const char *Name,
                                                            LLVMValueRef *Inputs,
                                                            unsigned NumInputs)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  return new OperandBundleDef(Name, ArrayRef<Value *>(unwrap(Inputs), NumInputs));
+#else
   return new OperandBundleDef(Name, makeArrayRef(unwrap(Inputs), NumInputs));
+#endif
 }
 
 extern "C" void LLVMRustFreeOperandBundleDef(OperandBundleDef *Bundle)
@@ -1495,9 +1769,19 @@ extern "C" LLVMValueRef LLVMRustBuildCall(LLVMBuilderRef B, LLVMValueRef Fn,
                                           const char *Name)
 {
   unsigned Len = Bundle ? 1 : 0;
+#if LLVM_VERSION_MAJOR >= 19
+  Value *Callee = unwrap(Fn);
+  FunctionType *FnTy = LLVMRustGetFunctionTypeForCallee(Callee);
+  ArrayRef<OperandBundleDef> Bundles =
+      Bundle ? ArrayRef<OperandBundleDef>(Bundle, Len)
+             : ArrayRef<OperandBundleDef>();
+  return wrap(unwrap(B)->CreateCall(
+      FnTy, Callee, ArrayRef<Value *>(unwrap(Args), NumArgs), Bundles, Name));
+#else
   ArrayRef<OperandBundleDef> Bundles = makeArrayRef(Bundle, Len);
   return wrap(unwrap(B)->CreateCall(
       unwrap(Fn), makeArrayRef(unwrap(Args), NumArgs), Bundles, Name));
+#endif
 }
 
 extern "C" LLVMValueRef LLVMRustBuildCall2(LLVMBuilderRef B, LLVMTypeRef FnTy,
@@ -1507,9 +1791,15 @@ extern "C" LLVMValueRef LLVMRustBuildCall2(LLVMBuilderRef B, LLVMTypeRef FnTy,
                                            const char *Name)
 {
   assert(Bundle == nullptr && "LLVM 7 lacks CreateCall(FunctionType, ..., Bundles)");
+#if LLVM_VERSION_MAJOR >= 19
+  return wrap(unwrap(B)->CreateCall(
+      unwrap<FunctionType>(FnTy), unwrap(Fn),
+      ArrayRef<Value *>(unwrap(Args), NumArgs), Name));
+#else
   return wrap(unwrap(B)->CreateCall(
       unwrap<FunctionType>(FnTy), unwrap(Fn),
       makeArrayRef(unwrap(Args), NumArgs), Name));
+#endif
 }
 
 extern "C" LLVMValueRef
@@ -1519,10 +1809,21 @@ LLVMRustBuildInvoke(LLVMBuilderRef B, LLVMValueRef Fn, LLVMValueRef *Args,
                     const char *Name)
 {
   unsigned Len = Bundle ? 1 : 0;
+#if LLVM_VERSION_MAJOR >= 19
+  Value *Callee = unwrap(Fn);
+  FunctionType *FnTy = LLVMRustGetFunctionTypeForCallee(Callee);
+  ArrayRef<OperandBundleDef> Bundles =
+      Bundle ? ArrayRef<OperandBundleDef>(Bundle, Len)
+             : ArrayRef<OperandBundleDef>();
+  return wrap(unwrap(B)->CreateInvoke(FnTy, Callee, unwrap(Then), unwrap(Catch),
+                                      ArrayRef<Value *>(unwrap(Args), NumArgs),
+                                      Bundles, Name));
+#else
   ArrayRef<OperandBundleDef> Bundles = makeArrayRef(Bundle, Len);
   return wrap(unwrap(B)->CreateInvoke(unwrap(Fn), unwrap(Then), unwrap(Catch),
                                       makeArrayRef(unwrap(Args), NumArgs),
                                       Bundles, Name));
+#endif
 }
 
 extern "C" void LLVMRustPositionBuilderAtStart(LLVMBuilderRef B,
@@ -1648,11 +1949,19 @@ extern "C" bool LLVMRustConstInt128Get(LLVMValueRef CV, bool sext, uint64_t *hig
   APInt AP;
   if (sext)
   {
+#if LLVM_VERSION_MAJOR >= 19
+    AP = C->getValue().sext(128);
+#else
     AP = C->getValue().sextOrSelf(128);
+#endif
   }
   else
   {
+#if LLVM_VERSION_MAJOR >= 19
+    AP = C->getValue().zext(128);
+#else
     AP = C->getValue().zextOrSelf(128);
+#endif
   }
   *low = AP.getLoBits(64).getZExtValue();
   *high = AP.getHiBits(64).getZExtValue();
@@ -1720,14 +2029,20 @@ struct LLVMRustModuleBuffer
 extern "C" LLVMRustModuleBuffer *
 LLVMRustModuleBufferCreate(LLVMModuleRef M)
 {
-  auto Ret = llvm::make_unique<LLVMRustModuleBuffer>();
+  // Longhand form avoids std::make_unique (C++14) so this compiles under
+  // LLVM 7's `-std=c++11` llvm-config cxxflags as well as LLVM 19's C++17.
+  auto Ret = std::unique_ptr<LLVMRustModuleBuffer>(new LLVMRustModuleBuffer());
   {
     raw_string_ostream OS(Ret->data);
+#if LLVM_VERSION_MAJOR >= 19
+    WriteBitcodeToFile(*unwrap(M), OS);
+#else
     {
       legacy::PassManager PM;
       PM.add(createBitcodeWriterPass(OS));
       PM.run(*unwrap(M));
     }
+#endif
   }
   return Ret.release();
 }
@@ -1807,12 +2122,22 @@ LLVMRustBuildVectorReduceMax(LLVMBuilderRef B, LLVMValueRef Src, bool IsSigned)
 extern "C" LLVMValueRef
 LLVMRustBuildVectorReduceFMin(LLVMBuilderRef B, LLVMValueRef Src, bool NoNaN)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  (void)NoNaN;
+  return wrap(unwrap(B)->CreateFPMinReduce(unwrap(Src)));
+#else
   return wrap(unwrap(B)->CreateFPMinReduce(unwrap(Src), NoNaN));
+#endif
 }
 extern "C" LLVMValueRef
 LLVMRustBuildVectorReduceFMax(LLVMBuilderRef B, LLVMValueRef Src, bool NoNaN)
 {
+#if LLVM_VERSION_MAJOR >= 19
+  (void)NoNaN;
+  return wrap(unwrap(B)->CreateFPMaxReduce(unwrap(Src)));
+#else
   return wrap(unwrap(B)->CreateFPMaxReduce(unwrap(Src), NoNaN));
+#endif
 }
 
 #else

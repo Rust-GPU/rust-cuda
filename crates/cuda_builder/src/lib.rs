@@ -550,13 +550,20 @@ fn build_backend_and_find(filename: &str) -> Option<PathBuf> {
 
     let target_dir = workspace_dir.join("target").join("cuda-builder-codegen");
 
-    let status = Command::new("cargo")
-        .args(["build", "-p", "rustc_codegen_nvvm"])
+    let mut cmd = Command::new("cargo");
+    cmd.args(["build", "-p", "rustc_codegen_nvvm"])
         .arg("--target-dir")
         .arg(&target_dir)
-        .current_dir(&workspace_dir)
-        .status()
-        .ok()?;
+        .current_dir(&workspace_dir);
+
+    // Propagate the `llvm19` cargo feature to the nested backend build. Without this
+    // `rustc_codegen_nvvm`'s build script falls through to the prebuilt LLVM 7
+    // download, which the LLVM 19 codegen path can't link against.
+    if cfg!(feature = "llvm19") {
+        cmd.args(["--features", "llvm19"]);
+    }
+
+    let status = cmd.status().ok()?;
 
     if !status.success() {
         return None;

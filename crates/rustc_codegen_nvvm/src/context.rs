@@ -125,7 +125,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
             let void = llvm::LLVMVoidTypeInContext(llcx);
             let llfnty = llvm::LLVMFunctionType(void, null(), 0, llvm::False);
             let name = "__rust_eh_personality";
-            llvm::LLVMRustGetOrInsertFunction(llmod, name.as_ptr().cast(), name.len(), llfnty)
+            llvm::get_or_insert_function(llmod, name.as_ptr().cast(), name.len(), llfnty)
         };
 
         let dbg_cx = if tcx.sess.opts.debuginfo != DebugInfo::None {
@@ -393,7 +393,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         let name = sanitize_global_ident(name);
         trace!("Declaring global `{}`", name);
         unsafe {
-            llvm::LLVMRustGetOrInsertGlobal(
+            llvm::get_or_insert_global(
                 self.llmod,
                 name.as_ptr().cast(),
                 name.len(),
@@ -413,7 +413,7 @@ impl<'ll, 'tcx> CodegenCx<'ll, 'tcx> {
         fn_abi: Option<&FnAbi<'tcx, Ty<'tcx>>>,
     ) -> &'ll Value {
         let llfn = unsafe {
-            llvm::LLVMRustGetOrInsertFunction(self.llmod, name.as_ptr().cast(), name.len(), ty)
+            llvm::get_or_insert_function(self.llmod, name.as_ptr().cast(), name.len(), ty)
         };
 
         trace!("Declaring function `{}` with ty `{:?}`", name, ty);

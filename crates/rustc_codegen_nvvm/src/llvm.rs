@@ -25,7 +25,7 @@ use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::ptr::{self};
 
-use crate::builder::unnamed;
+use crate::{builder::unnamed, common::AsCCharPtr};
 pub use debuginfo::*;
 
 impl PartialEq for Value {
@@ -97,6 +97,11 @@ impl Attribute {
         unsafe { LLVMRustAddFunctionAttribute(llfn, idx.as_uint(), *self) }
     }
 
+    #[cfg(feature = "llvm19")]
+    pub fn apply_llfn_with_type(&self, idx: AttributePlace, llfn: &Value, ty: &Type) {
+        unsafe { LLVMRustAddFunctionAttributeWithType(llfn, idx.as_uint(), *self, ty) }
+    }
+
     pub fn apply_callsite(&self, idx: AttributePlace, callsite: &Value) {
         unsafe { LLVMRustAddCallSiteAttribute(callsite, idx.as_uint(), *self) }
     }
@@ -158,6 +163,29 @@ pub fn last_error() -> Option<String> {
             libc::free(cstr as *mut _);
             Some(err)
         }
+    }
+}
+
+pub(crate) fn verify_module(module: &Module) -> Result<(), String> {
+    unsafe {
+        let mut message = ptr::null_mut();
+        let failed = LLVMVerifyModule(
+            module,
+            LLVMVerifierFailureAction::LLVMReturnStatusAction,
+            &mut message,
+        );
+        if failed == False {
+            return Ok(());
+        }
+
+        let err = if message.is_null() {
+            "LLVM module verification failed".to_string()
+        } else {
+            let err = CStr::from_ptr(message).to_string_lossy().into_owned();
+            LLVMDisposeMessage(message);
+            err
+        };
+        Err(err)
     }
 }
 
@@ -598,11 +626,124 @@ pub mod debuginfo {
     }
 }
 
-// These functions are kind of a hack for the future. They wrap LLVM 7 rust shim functions
-// and turn them into the API that the llvm 12 shim has. This way, if nvidia ever updates their
-// dinosaur llvm version, switching for us should be extremely easy. `Name` is assumed to be
-// a utf8 string
-pub(crate) unsafe fn LLVMRustGetOrInsertFunction<'a>(
+// Keep the LLVM-version-specific symbol shims behind a small Rust helper
+// surface so callers do not have to care which ABI details the C++ layer is
+// preserving for us.
+pub(crate) struct DICompileUnitOptions<'a> {
+    pub lang: c_uint,
+    pub file: &'a DIFile,
+    pub producer: *const c_char,
+    pub producer_len: size_t,
+    pub is_optimized: bool,
+    pub flags: *const c_char,
+    pub runtime_ver: c_uint,
+    pub split_name: *const c_char,
+    pub split_name_len: size_t,
+    pub emission_kind: DebugEmissionKind,
+    pub dwo_id: u64,
+    pub split_debug_inlining: bool,
+}
+
+pub(crate) unsafe fn di_builder_create_compile_unit<'a>(
+    builder: &DIBuilder<'a>,
+    options: DICompileUnitOptions<'a>,
+) -> &'a DIDescriptor {
+    unsafe {
+        LLVMRustDIBuilderCreateCompileUnit(
+            builder,
+            options.lang,
+            options.file,
+            options.producer,
+            options.producer_len,
+            options.is_optimized,
+            options.flags,
+            options.runtime_ver,
+            options.split_name,
+            options.split_name_len,
+            options.emission_kind,
+            options.dwo_id,
+            options.split_debug_inlining,
+        )
+    }
+}
+
+pub(crate) struct DIFunctionOptions<'a> {
+    pub scope: &'a DIDescriptor,
+    pub name: *const c_char,
+    pub linkage_name: *const c_char,
+    pub file: &'a DIFile,
+    pub line_no: c_uint,
+    pub ty: &'a DIType,
+    pub is_local_to_unit: bool,
+    pub is_definition: bool,
+    pub scope_line: c_uint,
+    pub flags: DIFlags,
+    pub is_optimized: bool,
+    pub maybe_fn: Option<&'a Value>,
+    pub template_params: &'a DIArray,
+    pub decl: Option<&'a DIDescriptor>,
+}
+
+pub(crate) unsafe fn di_builder_create_function<'a>(
+    builder: &DIBuilder<'a>,
+    options: DIFunctionOptions<'a>,
+) -> &'a DISubprogram {
+    unsafe {
+        LLVMRustDIBuilderCreateFunction(
+            builder,
+            options.scope,
+            options.name,
+            options.linkage_name,
+            options.file,
+            options.line_no,
+            options.ty,
+            options.is_local_to_unit,
+            options.is_definition,
+            options.scope_line,
+            options.flags,
+            options.is_optimized,
+            options.maybe_fn,
+            options.template_params,
+            options.decl,
+        )
+    }
+}
+
+pub(crate) struct DIVariableOptions<'a> {
+    pub tag: c_uint,
+    pub scope: &'a DIDescriptor,
+    pub name: *const c_char,
+    pub file: &'a DIFile,
+    pub line_no: c_uint,
+    pub ty: &'a DIType,
+    pub always_preserve: bool,
+    pub flags: DIFlags,
+    pub arg_no: c_uint,
+    pub align_in_bits: u32,
+}
+
+pub(crate) unsafe fn di_builder_create_variable<'a>(
+    builder: &DIBuilder<'a>,
+    options: DIVariableOptions<'a>,
+) -> &'a DIVariable {
+    unsafe {
+        LLVMRustDIBuilderCreateVariable(
+            builder,
+            options.tag,
+            options.scope,
+            options.name,
+            options.file,
+            options.line_no,
+            options.ty,
+            options.always_preserve,
+            options.flags,
+            options.arg_no,
+            options.align_in_bits,
+        )
+    }
+}
+
+pub(crate) unsafe fn get_or_insert_function<'a>(
     M: &'a Module,
     Name: *const c_char,
     NameLen: usize,
@@ -615,7 +756,36 @@ pub(crate) unsafe fn LLVMRustGetOrInsertFunction<'a>(
     }
 }
 
-pub(crate) unsafe fn LLVMRustBuildCall<'a>(
+pub(crate) unsafe fn LLVMRustGetOrInsertFunction<'a>(
+    M: &'a Module,
+    Name: *const c_char,
+    NameLen: usize,
+    FunctionTy: &'a Type,
+) -> &'a Value {
+    unsafe { get_or_insert_function(M, Name, NameLen, FunctionTy) }
+}
+
+pub(crate) unsafe fn get_or_insert_global<'a>(
+    M: &'a Module,
+    Name: *const c_char,
+    NameLen: usize,
+    T: &'a Type,
+    AddressSpace: c_uint,
+) -> &'a Value {
+    unsafe { __LLVMRustGetOrInsertGlobal(M, Name, NameLen, T, AddressSpace) }
+}
+
+pub(crate) unsafe fn LLVMRustGetOrInsertGlobal<'a>(
+    M: &'a Module,
+    Name: *const c_char,
+    NameLen: usize,
+    T: &'a Type,
+    AddressSpace: c_uint,
+) -> &'a Value {
+    unsafe { get_or_insert_global(M, Name, NameLen, T, AddressSpace) }
+}
+
+pub(crate) unsafe fn build_call<'a>(
     B: &Builder<'a>,
     Fn: &'a Value,
     Args: *const &'a Value,
@@ -623,6 +793,27 @@ pub(crate) unsafe fn LLVMRustBuildCall<'a>(
     Bundle: Option<&OperandBundleDef<'a>>,
 ) -> &'a Value {
     unsafe { __LLVMRustBuildCall(B, Fn, Args, NumArgs, Bundle, unnamed()) }
+}
+
+pub(crate) unsafe fn LLVMRustBuildCall<'a>(
+    B: &Builder<'a>,
+    Fn: &'a Value,
+    Args: *const &'a Value,
+    NumArgs: c_uint,
+    Bundle: Option<&OperandBundleDef<'a>>,
+) -> &'a Value {
+    unsafe { build_call(B, Fn, Args, NumArgs, Bundle) }
+}
+
+pub(crate) unsafe fn build_call2<'a>(
+    B: &Builder<'a>,
+    FnTy: &'a Type,
+    Fn: &'a Value,
+    Args: *const &'a Value,
+    NumArgs: c_uint,
+    Bundle: Option<&OperandBundleDef<'a>>,
+) -> &'a Value {
+    unsafe { __LLVMRustBuildCall2(B, FnTy, Fn, Args, NumArgs, Bundle, unnamed()) }
 }
 
 pub(crate) unsafe fn LLVMRustBuildCall2<'a>(
@@ -633,7 +824,18 @@ pub(crate) unsafe fn LLVMRustBuildCall2<'a>(
     NumArgs: c_uint,
     Bundle: Option<&OperandBundleDef<'a>>,
 ) -> &'a Value {
-    unsafe { __LLVMRustBuildCall2(B, FnTy, Fn, Args, NumArgs, Bundle, unnamed()) }
+    unsafe { build_call2(B, FnTy, Fn, Args, NumArgs, Bundle) }
+}
+
+pub(crate) unsafe fn set_current_debug_location<'a>(
+    Builder: &Builder<'a>,
+    Context: &'a Context,
+    Location: Option<&'a DILocation>,
+) {
+    unsafe {
+        let location = Location.map(|location| LLVMRustMetadataAsValue(Context, location));
+        LLVMSetCurrentDebugLocation(Builder, location)
+    }
 }
 
 /// LLVMRustCodeGenOptLevel
@@ -671,6 +873,46 @@ pub enum CodeModel {
     Medium,
     Large,
     None,
+}
+
+pub(crate) struct TargetMachineConfig<'a> {
+    pub triple: &'a str,
+    pub cpu: Option<&'a str>,
+    pub features: &'a str,
+    pub code_model: CodeModel,
+    pub reloc_mode: RelocMode,
+    pub opt_level: CodeGenOptLevel,
+    pub use_soft_fp: bool,
+    pub position_independent_executable: bool,
+    pub function_sections: bool,
+    pub data_sections: bool,
+    pub trap_unreachable: bool,
+    pub singlethread: bool,
+}
+
+pub(crate) unsafe fn create_target_machine(
+    config: &TargetMachineConfig<'_>,
+) -> Option<&'static mut TargetMachine> {
+    let cpu = config.cpu.unwrap_or("");
+    unsafe {
+        LLVMRustCreateTargetMachine(
+            config.triple.as_c_char_ptr(),
+            config.triple.len(),
+            cpu.as_c_char_ptr(),
+            cpu.len(),
+            config.features.as_c_char_ptr(),
+            config.features.len(),
+            config.code_model,
+            config.reloc_mode,
+            config.opt_level,
+            config.use_soft_fp,
+            config.position_independent_executable,
+            config.function_sections,
+            config.data_sections,
+            config.trap_unreachable,
+            config.singlethread,
+        )
+    }
 }
 
 unsafe extern "C" {
@@ -723,7 +965,8 @@ unsafe extern "C" {
         DestTy: &'a Type,
         Name: *const c_char,
     ) -> &'a Value;
-    pub(crate) fn LLVMRustGetOrInsertGlobal<'a>(
+    #[link_name = "LLVMRustGetOrInsertGlobal"]
+    fn __LLVMRustGetOrInsertGlobal<'a>(
         M: &'a Module,
         Name: *const c_char,
         NameLen: usize,
@@ -1257,6 +1500,8 @@ unsafe extern "C" {
 
     // Operations on array, pointer, and vector types (sequence types)
     pub(crate) fn LLVMRustArrayType(ElementType: &Type, ElementCount: u64) -> &Type;
+    #[cfg(feature = "llvm19")]
+    pub(crate) fn LLVMPointerTypeInContext(C: &Context, AddressSpace: c_uint) -> &Type;
     pub(crate) fn LLVMPointerType(ElementType: &Type, AddressSpace: c_uint) -> &Type;
     pub(crate) fn LLVMVectorType(ElementType: &Type, ElementCount: c_uint) -> &Type;
 
@@ -1384,6 +1629,13 @@ unsafe extern "C" {
     pub(crate) fn LLVMSetFunctionCallConv(Fn: &Value, CC: c_uint);
     pub(crate) fn LLVMRustAddAlignmentAttr(Fn: &Value, index: c_uint, bytes: u32);
     pub(crate) fn LLVMRustAddFunctionAttribute(Fn: &Value, index: c_uint, attr: Attribute);
+    #[cfg(feature = "llvm19")]
+    pub(crate) fn LLVMRustAddFunctionAttributeWithType(
+        Fn: &Value,
+        index: c_uint,
+        attr: Attribute,
+        ty: &Type,
+    );
     pub(crate) fn LLVMRustAddFunctionAttrStringValue(
         Fn: &Value,
         index: c_uint,
@@ -1642,6 +1894,13 @@ unsafe extern "C" {
         Val: &'a Value,
         Name: *const c_char,
     ) -> &'a Value;
+    #[cfg(feature = "llvm19")]
+    pub(crate) fn LLVMBuildLoad2<'a>(
+        B: &Builder<'a>,
+        Ty: &'a Type,
+        PointerVal: &'a Value,
+        Name: *const c_char,
+    ) -> &'a Value;
     pub(crate) fn LLVMBuildLoad<'a>(
         B: &Builder<'a>,
         PointerVal: &'a Value,
@@ -1894,6 +2153,11 @@ unsafe extern "C" {
     ) -> &'a Value;
 
     pub(crate) fn LLVMDisposeMessage(message: *mut c_char);
+    pub(crate) fn LLVMVerifyModule(
+        M: &Module,
+        Action: LLVMVerifierFailureAction,
+        OutMessage: *mut *mut c_char,
+    ) -> Bool;
 
     /// Returns a string describing the last error caused by an LLVMRust* call.
     pub(crate) fn LLVMRustGetLastError() -> *const c_char;

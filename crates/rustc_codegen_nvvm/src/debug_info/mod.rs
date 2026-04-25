@@ -154,8 +154,7 @@ impl<'ll, 'tcx> DebugInfoBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
 
     fn set_dbg_loc(&mut self, dbg_loc: &'ll DILocation) {
         unsafe {
-            let dbg_loc_as_llval = llvm::LLVMRustMetadataAsValue(self.cx().llcx, dbg_loc);
-            llvm::LLVMSetCurrentDebugLocation(self.llbuilder, Some(dbg_loc_as_llval));
+            llvm::set_current_debug_location(self.llbuilder, self.cx().llcx, Some(dbg_loc));
         }
     }
 
@@ -172,7 +171,7 @@ impl<'ll, 'tcx> DebugInfoBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
 
     fn clear_dbg_loc(&mut self) {
         unsafe {
-            llvm::LLVMSetCurrentDebugLocation(self.llbuilder, None);
+            llvm::set_current_debug_location(self.llbuilder, self.cx().llcx, None);
         }
     }
 
@@ -313,22 +312,24 @@ impl<'ll, 'tcx> DebugInfoCodegenMethods<'tcx> for CodegenCx<'ll, 'tcx> {
         }
 
         unsafe {
-            return llvm::LLVMRustDIBuilderCreateFunction(
+            return llvm::di_builder_create_function(
                 DIB(self),
-                containing_scope.0,
-                name.as_ptr(),
-                linkage_name.as_ptr(),
-                file_metadata,
-                loc.line,
-                function_type_metadata,
-                is_node_local_to_unit(self, def_id),
-                true,
-                scope_line,
-                flags,
-                self.sess().opts.optimize != config::OptLevel::No,
-                maybe_definition_llfn,
-                template_parameters,
-                None,
+                llvm::DIFunctionOptions {
+                    scope: containing_scope.0,
+                    name: name.as_ptr(),
+                    linkage_name: linkage_name.as_ptr(),
+                    file: file_metadata,
+                    line_no: loc.line,
+                    ty: function_type_metadata,
+                    is_local_to_unit: is_node_local_to_unit(self, def_id),
+                    is_definition: true,
+                    scope_line,
+                    flags,
+                    is_optimized: self.sess().opts.optimize != config::OptLevel::No,
+                    maybe_fn: maybe_definition_llfn,
+                    template_params: template_parameters,
+                    decl: None,
+                },
             );
         }
 
@@ -502,18 +503,20 @@ impl<'ll, 'tcx> DebugInfoCodegenMethods<'tcx> for CodegenCx<'ll, 'tcx> {
 
         let name = CString::new(variable_name.as_str()).unwrap();
         unsafe {
-            llvm::LLVMRustDIBuilderCreateVariable(
+            llvm::di_builder_create_variable(
                 DIB(self),
-                dwarf_tag,
-                scope_metadata,
-                name.as_ptr().cast(),
-                file_metadata,
-                loc.line,
-                type_metadata,
-                true,
-                DIFlags::FlagZero,
-                argument_index,
-                align.bytes() as u32,
+                llvm::DIVariableOptions {
+                    tag: dwarf_tag,
+                    scope: scope_metadata,
+                    name: name.as_ptr().cast(),
+                    file: file_metadata,
+                    line_no: loc.line,
+                    ty: type_metadata,
+                    always_preserve: true,
+                    flags: DIFlags::FlagZero,
+                    arg_no: argument_index,
+                    align_in_bits: align.bytes() as u32,
+                },
             )
         }
     }

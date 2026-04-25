@@ -3591,6 +3591,7 @@ version = "0.1.0"
 dependencies = [
  "cuda_builder",
  "cust",
+ "cust_raw",
  "nanorand",
 ]
 
