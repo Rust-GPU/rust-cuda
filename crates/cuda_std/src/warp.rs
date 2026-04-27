@@ -779,6 +779,7 @@ unsafe fn warp_shuffle_32(
     (result.value, result.predicate != 0)
 }
 
+#[gpu_only]
 unsafe fn warp_shuffle_128(
     mode: WarpShuffleMode,
     mask: u32,
@@ -798,6 +799,7 @@ unsafe fn warp_shuffle_128(
     )
 }
 
+#[gpu_only]
 unsafe fn warp_shuffle_64(
     mode: WarpShuffleMode,
     mask: u32,
@@ -816,6 +818,7 @@ unsafe fn warp_shuffle_64(
     )
 }
 
+#[gpu_only]
 unsafe fn warp_shuffle_16(
     mode: WarpShuffleMode,
     mask: u32,
@@ -827,6 +830,7 @@ unsafe fn warp_shuffle_16(
     ((value as u16), oob)
 }
 
+#[gpu_only]
 unsafe fn warp_shuffle_8(
     mode: WarpShuffleMode,
     mask: u32,
