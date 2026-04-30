@@ -766,7 +766,7 @@ unsafe fn warp_shuffle_32(
     }
 
     assert!(
-        width != 0 && (width & (width - 1)) == 0 && width <= 32,
+        width.is_power_of_two() && width <= 32,
         "width must be a power of 2 and less than or equal to 32"
     );
 
