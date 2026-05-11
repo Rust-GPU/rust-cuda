@@ -104,9 +104,14 @@ done
 # important so dependency resolution is reproducible).
 cp "${REPO_DIR}/Cargo.lock" "${INSTALL_PREFIX}/" 2>/dev/null || true
 
-# The wrapper script.
-cp "${REPO_DIR}/contrib/godbolt/rust-cuda-wrapper.sh" "${INSTALL_PREFIX}/bin/"
-chmod +x "${INSTALL_PREFIX}/bin/rust-cuda-wrapper.sh"
+# Build and install the wrapper binary.
+(
+    cd "${REPO_DIR}/contrib/godbolt/rust-cuda-wrapper"
+    cargo build --release
+)
+cp "${REPO_DIR}/contrib/godbolt/rust-cuda-wrapper/target/release/rust-cuda-wrapper" \
+    "${INSTALL_PREFIX}/bin/"
+chmod +x "${INSTALL_PREFIX}/bin/rust-cuda-wrapper"
 
 # Version marker.
 echo "${NIGHTLY}" > "${INSTALL_PREFIX}/rust-toolchain-version"
@@ -121,4 +126,4 @@ echo "==> Installation complete."
 echo ""
 echo "Test with:"
 echo "  RUST_CUDA_ROOT=${INSTALL_PREFIX} CUDA_PATH=${CUDA_PATH} \\"
-echo "    ${INSTALL_PREFIX}/bin/rust-cuda-wrapper.sh contrib/godbolt/test-kernel.rs"
+echo "    ${INSTALL_PREFIX}/bin/rust-cuda-wrapper contrib/godbolt/test-kernel.rs"

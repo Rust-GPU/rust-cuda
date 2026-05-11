@@ -9,8 +9,8 @@ Rust GPU kernel code and see the resulting PTX assembly.
 Compiler Explorer expects a single "compiler" binary that reads source on
 stdin or from a file and writes assembly to stdout.  Since rust-cuda has no
 standalone compiler (the pipeline is `rustc` with a custom codegen backend
-plus `cargo` for dependency resolution), the integration uses a wrapper
-script that:
+plus `cargo` for dependency resolution), the integration uses a small Rust
+wrapper binary that:
 
 1. Accepts a `.rs` file containing `#[kernel]` functions.
 2. Creates a temporary Cargo project that depends on `cuda_std`.
@@ -25,10 +25,10 @@ script that:
 
 | File | Purpose |
 |------|---------|
-| `rust-cuda-wrapper.sh` | The wrapper script CE invokes as the "compiler" |
+| `rust-cuda-wrapper/` | Rust crate for the wrapper binary CE invokes as the "compiler" |
 | `rust-cuda.defaults.properties` | CE configuration (compiler type, flags, defaults) |
 | `rust-cuda.amazon.properties` | CE instance-specific overrides for the AWS fleet |
-| `install.sh` | Installs the pinned nightly, builds the codegen backend, and lays out the prefix |
+| `install.sh` | Installs the pinned nightly, builds the codegen backend and the wrapper, and lays out the prefix |
 | `test-kernel.rs` | Sample kernel with shared memory and thread indexing |
 
 ## Supported flags
@@ -61,7 +61,7 @@ export CUDA_PATH=/usr/local/cuda
 ./contrib/godbolt/install.sh
 
 # Then test:
-./contrib/godbolt/rust-cuda-wrapper.sh contrib/godbolt/test-kernel.rs
+$RUST_CUDA_ROOT/bin/rust-cuda-wrapper contrib/godbolt/test-kernel.rs
 ```
 
 You should see PTX assembly printed to stdout.
@@ -73,8 +73,21 @@ point the wrapper at the repo tree directly:
 
 ```bash
 export RUST_CUDA_ROOT=/path/to/rust-cuda
-# Ensure lib/librustc_codegen_nvvm.so exists at that path, or adjust
-# CODEGEN_SO in the script.
+# Ensure $RUST_CUDA_ROOT/lib/librustc_codegen_nvvm.so exists.
+
+cd contrib/godbolt/rust-cuda-wrapper
+cargo run --release -- ../test-kernel.rs
+```
+
+### Running the integration test
+
+The wrapper crate ships a smoke test that compiles `test-kernel.rs`
+end-to-end and asserts the output looks like PTX:
+
+```bash
+cd contrib/godbolt/rust-cuda-wrapper
+cargo test                                       # skips without RUST_CUDA_ROOT
+RUST_CUDA_ROOT=/path/to/rust-cuda cargo test     # runs the real build
 ```
 
 ## Submitting to Compiler Explorer
