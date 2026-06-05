@@ -1,37 +1,72 @@
+use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 
 use cust::memory::GpuBuffer;
 
 use crate::{CufftError, IntoResult};
 
-/// cuFFT transform type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum FftType {
-    /// Single-precision real-to-complex.
-    R2C,
-    /// Single-precision complex-to-real.
-    C2R,
-    /// Single-precision complex-to-complex.
-    C2C,
-    /// Double-precision real-to-complex.
-    D2Z,
-    /// Double-precision complex-to-real.
-    Z2D,
-    /// Double-precision complex-to-complex.
-    Z2Z,
+mod sealed {
+    pub trait Sealed {}
 }
 
-impl FftType {
-    fn into_raw(self) -> cufft_raw::cufftType {
-        use cufft_raw::cufftType::*;
-        match self {
-            FftType::R2C => CUFFT_R2C,
-            FftType::C2R => CUFFT_C2R,
-            FftType::C2C => CUFFT_C2C,
-            FftType::D2Z => CUFFT_D2Z,
-            FftType::Z2D => CUFFT_Z2D,
-            FftType::Z2Z => CUFFT_Z2Z,
-        }
+pub trait FftType: sealed::Sealed {
+    #[doc(hidden)]
+    fn fft_type() -> cufft_raw::cufftType;
+}
+
+/// Marker type for single-precision complex-to-complex transforms.
+pub struct C2C;
+/// Marker type for single-precision real-to-complex transforms.
+pub struct R2C;
+/// Marker type for single-precision complex-to-real transforms.
+pub struct C2R;
+/// Marker type for double-precision real-to-complex transforms.
+pub struct D2Z;
+/// Marker type for double-precision complex-to-real transforms.
+pub struct Z2D;
+/// Marker type for double-precision complex-to-complex transforms.
+pub struct Z2Z;
+
+impl sealed::Sealed for C2C {}
+impl sealed::Sealed for R2C {}
+impl sealed::Sealed for C2R {}
+impl sealed::Sealed for D2Z {}
+impl sealed::Sealed for Z2D {}
+impl sealed::Sealed for Z2Z {}
+
+impl FftType for C2C {
+    fn fft_type() -> cufft_raw::cufftType {
+        cufft_raw::cufftType::CUFFT_C2C
+    }
+}
+
+impl FftType for R2C {
+    fn fft_type() -> cufft_raw::cufftType {
+        cufft_raw::cufftType::CUFFT_R2C
+    }
+}
+
+impl FftType for C2R {
+    fn fft_type() -> cufft_raw::cufftType {
+        cufft_raw::cufftType::CUFFT_C2R
+    }
+}
+
+impl FftType for D2Z {
+    fn fft_type() -> cufft_raw::cufftType {
+        cufft_raw::cufftType::CUFFT_D2Z
+    }
+}
+
+impl FftType for Z2D {
+    fn fft_type() -> cufft_raw::cufftType {
+        cufft_raw::cufftType::CUFFT_Z2D
+    }
+}
+
+impl FftType for Z2Z {
+    fn fft_type() -> cufft_raw::cufftType {
+        cufft_raw::cufftType::CUFFT_Z2Z
     }
 }
 
@@ -55,25 +90,26 @@ impl Direction {
 
 /// Wrapper for a `cufftHandle`.
 #[derive(Debug)]
-pub struct FftPlan {
-    pub(crate) raw: cufft_raw::cufftHandle,
+pub struct FftPlan<T> {
+    raw: cufft_raw::cufftHandle,
+    _marker: PhantomData<T>,
 }
 
-impl FftPlan {
+impl<T: FftType> FftPlan<T> {
     /// Creates a 1-D FFT plan.
     ///
     /// # Reference
     ///
     /// [cufftPlan1d](https://docs.nvidia.com/cuda/cufft/index.html#cufftplan1d)
-    pub fn plan_1d(nx: i32, fft_type: FftType, batch: i32) -> Result<Self, CufftError> {
+    pub fn plan_1d(nx: i32, batch: i32) -> Result<Self, CufftError> {
         let mut raw = MaybeUninit::uninit();
 
         unsafe {
-            cufft_raw::cufftPlan1d(raw.as_mut_ptr(), nx, fft_type.into_raw(), batch)
-                .into_result()?;
+            cufft_raw::cufftPlan1d(raw.as_mut_ptr(), nx, T::fft_type(), batch).into_result()?;
 
             Ok(Self {
                 raw: raw.assume_init(),
+                _marker: PhantomData,
             })
         }
     }
@@ -83,14 +119,15 @@ impl FftPlan {
     /// # Reference
     ///
     /// [cufftPlan2d](https://docs.nvidia.com/cuda/cufft/index.html#cufftplan2d)
-    pub fn plan_2d(nx: i32, ny: i32, fft_type: FftType) -> Result<Self, CufftError> {
+    pub fn plan_2d(nx: i32, ny: i32) -> Result<Self, CufftError> {
         let mut raw = MaybeUninit::uninit();
 
         unsafe {
-            cufft_raw::cufftPlan2d(raw.as_mut_ptr(), nx, ny, fft_type.into_raw()).into_result()?;
+            cufft_raw::cufftPlan2d(raw.as_mut_ptr(), nx, ny, T::fft_type()).into_result()?;
 
             Ok(Self {
                 raw: raw.assume_init(),
+                _marker: PhantomData,
             })
         }
     }
@@ -100,15 +137,15 @@ impl FftPlan {
     /// # Reference
     ///
     /// [cufftPlan3d](https://docs.nvidia.com/cuda/cufft/index.html#cufftplan3d)
-    pub fn plan_3d(nx: i32, ny: i32, nz: i32, fft_type: FftType) -> Result<Self, CufftError> {
+    pub fn plan_3d(nx: i32, ny: i32, nz: i32) -> Result<Self, CufftError> {
         let mut raw = MaybeUninit::uninit();
 
         unsafe {
-            cufft_raw::cufftPlan3d(raw.as_mut_ptr(), nx, ny, nz, fft_type.into_raw())
-                .into_result()?;
+            cufft_raw::cufftPlan3d(raw.as_mut_ptr(), nx, ny, nz, T::fft_type()).into_result()?;
 
             Ok(Self {
                 raw: raw.assume_init(),
+                _marker: PhantomData,
             })
         }
     }
@@ -128,7 +165,6 @@ impl FftPlan {
         onembed: Option<&[i32]>,
         ostride: i32,
         odist: i32,
-        fft_type: FftType,
         batch: i32,
     ) -> Result<Self, CufftError> {
         let mut raw = MaybeUninit::uninit();
@@ -147,18 +183,19 @@ impl FftPlan {
                 onembed_ptr,
                 ostride,
                 odist,
-                fft_type.into_raw(),
+                T::fft_type(),
                 batch,
             )
             .into_result()?;
 
             Ok(Self {
                 raw: raw.assume_init(),
+                _marker: PhantomData,
             })
         }
     }
 
-    /// Set the CUDA stream for the plan.
+    /// Sets the CUDA stream for the plan.
     ///
     /// # Reference
     ///
@@ -177,13 +214,15 @@ impl FftPlan {
     pub fn as_raw(&self) -> cufft_raw::cufftHandle {
         self.raw
     }
+}
 
+impl FftPlan<C2C> {
     /// Executes a single-precision C2C FFT.
     ///
     /// # Reference
     ///
     /// [cufftExecC2C](https://docs.nvidia.com/cuda/cufft/index.html#cufftexecc2c-and-cufftexecz2z)
-    pub fn exec_c2c(
+    pub fn exec(
         &self,
         idata: &impl GpuBuffer<cufft_raw::cufftComplex>,
         odata: &mut impl GpuBuffer<cufft_raw::cufftComplex>,
@@ -199,13 +238,15 @@ impl FftPlan {
             .into_result()
         }
     }
+}
 
+impl FftPlan<R2C> {
     /// Executes a single-precision R2C FFT.
     ///
     /// # Reference
     ///
     /// [cufftExecR2C](https://docs.nvidia.com/cuda/cufft/index.html#cufftexecr2c-and-cufftexecd2z)
-    pub fn exec_r2c(
+    pub fn exec(
         &self,
         idata: &impl GpuBuffer<cufft_raw::cufftReal>,
         odata: &mut impl GpuBuffer<cufft_raw::cufftComplex>,
@@ -219,13 +260,15 @@ impl FftPlan {
             .into_result()
         }
     }
+}
 
+impl FftPlan<C2R> {
     /// Executes a single-precision C2R inverse FFT.
     ///
     /// # Reference
     ///
     /// [cufftExecC2R](https://docs.nvidia.com/cuda/cufft/index.html#cufftexecc2r-and-cufftexecz2d)
-    pub fn exec_c2r(
+    pub fn exec(
         &self,
         idata: &impl GpuBuffer<cufft_raw::cufftComplex>,
         odata: &mut impl GpuBuffer<cufft_raw::cufftReal>,
@@ -239,13 +282,15 @@ impl FftPlan {
             .into_result()
         }
     }
+}
 
+impl FftPlan<Z2Z> {
     /// Executes a double-precision Z2Z FFT.
     ///
     /// # Reference
     ///
     /// [cufftExecZ2Z](https://docs.nvidia.com/cuda/cufft/index.html#cufftexecc2c-and-cufftexecz2z)
-    pub fn exec_z2z(
+    pub fn exec(
         &self,
         idata: &impl GpuBuffer<cufft_raw::cufftDoubleComplex>,
         odata: &mut impl GpuBuffer<cufft_raw::cufftDoubleComplex>,
@@ -261,13 +306,15 @@ impl FftPlan {
             .into_result()
         }
     }
+}
 
+impl FftPlan<D2Z> {
     /// Executes a double-precision D2Z FFT.
     ///
     /// # Reference
     ///
     /// [cufftExecD2Z](https://docs.nvidia.com/cuda/cufft/index.html#cufftexecr2c-and-cufftexecd2z)
-    pub fn exec_d2z(
+    pub fn exec(
         &self,
         idata: &impl GpuBuffer<cufft_raw::cufftDoubleReal>,
         odata: &mut impl GpuBuffer<cufft_raw::cufftDoubleComplex>,
@@ -281,13 +328,15 @@ impl FftPlan {
             .into_result()
         }
     }
+}
 
+impl FftPlan<Z2D> {
     /// Executes a double-precision Z2D inverse FFT.
     ///
     /// # Reference
     ///
     /// [cufftExecZ2D](https://docs.nvidia.com/cuda/cufft/index.html#cufftexecc2r-and-cufftexecz2d)
-    pub fn exec_z2d(
+    pub fn exec(
         &self,
         idata: &impl GpuBuffer<cufft_raw::cufftDoubleComplex>,
         odata: &mut impl GpuBuffer<cufft_raw::cufftDoubleReal>,
@@ -303,12 +352,12 @@ impl FftPlan {
     }
 }
 
-impl Drop for FftPlan {
+impl<T> Drop for FftPlan<T> {
     /// Destroys the plan.
     ///
     /// # Reference
     ///
-    /// [cufftDestroy)(https://docs.nvidia.com/cuda/cufft/index.html#cufftdestroy)
+    /// [cufftDestroy](https://docs.nvidia.com/cuda/cufft/index.html#cufftdestroy)
     fn drop(&mut self) {
         unsafe {
             let _ = cufft_raw::cufftDestroy(self.raw);
