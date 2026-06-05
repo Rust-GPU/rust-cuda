@@ -1,0 +1,16 @@
+[package]
+name = "cufft_raw"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Rust-GPU/rust-cuda"
+readme = "../../README.md"
+links = "cufft"
+build = "build/main.rs"
+
+[dependencies]
+cust_raw = { version = "0.11.3", path = "../cust_raw", default-features = false, features = ["driver"] }
+cust_core = { version = "0.1.1", path = "../cust_core" }
+
+[build-dependencies]
+bindgen = "0.71.1"
