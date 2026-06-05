@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use cufft::{Direction, FftPlan, FftType};
+use cufft::{C2C, Direction, FftPlan};
 use cufft_raw::float2;
 use cust::memory::{CopyDestination, DeviceBuffer};
 
@@ -26,11 +26,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let device_signal = DeviceBuffer::from_slice(&host_signal)?;
     let mut device_spectrum = unsafe { DeviceBuffer::<float2>::uninitialized(FFT_SIZE)? };
 
-    let plan = FftPlan::plan_1d(FFT_SIZE as i32, FftType::C2C, 1)?;
+    let plan = FftPlan::<C2C>::plan_1d(FFT_SIZE as i32, 1)?;
 
     // Forward FFT.
 
-    plan.exec_c2c(&device_signal, &mut device_spectrum, Direction::Forward)?;
+    plan.exec(&device_signal, &mut device_spectrum, Direction::Forward)?;
 
     let mut host_spectrum = vec![float2 { x: 0.0, y: 0.0 }; FFT_SIZE];
     device_spectrum.copy_to(&mut host_spectrum)?;
@@ -51,13 +51,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("input frequency bin   : {FREQUENCY_BIN}");
     println!("peak frequency bin    : {peak}");
 
-    assert_eq!(peak, FREQUENCY_BIN, "Input frequency bin does not equal peak frequency bin.");
+    assert_eq!(
+        peak, FREQUENCY_BIN,
+        "Input frequency bin does not equal peak frequency bin."
+    );
 
     // Inverse FFT then normalize by FFT_SIZE to recover the original signal.
 
     let mut device_recovered = unsafe { DeviceBuffer::<float2>::uninitialized(FFT_SIZE)? };
 
-    plan.exec_c2c(&device_spectrum, &mut device_recovered, Direction::Inverse)?;
+    plan.exec(&device_spectrum, &mut device_recovered, Direction::Inverse)?;
 
     let mut host_recovered = vec![float2 { x: 0.0, y: 0.0 }; FFT_SIZE];
 
