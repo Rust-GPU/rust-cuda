@@ -47,7 +47,7 @@ pub enum Direction {
 impl Direction {
     pub(crate) fn into_raw(self) -> i32 {
         match self {
-            Direction::Forward => cufft_raw::CUFFT_FORWARD as i32,
+            Direction::Forward => cufft_raw::CUFFT_FORWARD,
             Direction::Inverse => cufft_raw::CUFFT_INVERSE as i32,
         }
     }
