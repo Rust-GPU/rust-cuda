@@ -1,0 +1,11 @@
+[package]
+name = "cufft"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Rust-GPU/rust-cuda"
+readme = "../../README.md"
+
+[dependencies]
+cufft_raw = { version = "0.1.0", path = "../cufft_raw" }
+cust = { version = "0.3.2", path = "../cust" }
