@@ -4,27 +4,12 @@ use std::path;
 fn main() {
     let cuda_include_paths = env::var_os("DEP_CUDA_INCLUDES")
         .map(|s| env::split_paths(s.as_os_str()).collect::<Vec<_>>())
-        .expect("DEP_CUDA_INCLUDES not set; ensure cust_raw is a dependency");
-
-    let cuda_root = env::var("DEP_CUDA_ROOT")
-        .map(path::PathBuf::from)
-        .expect("DEP_CUDA_ROOT not set; ensure cust_raw is a dependency");
+        .expect("Cannot find transitive metadata 'cuda_include' from cust_raw package.");
 
     println!("cargo::rerun-if-changed=build");
 
-    for dir in [
-        cuda_root.join("lib64"),
-        cuda_root.join("lib"),
-        cuda_root.join("targets").join("x86_64-linux").join("lib"),
-    ] {
-        if dir.is_dir() {
-            println!("cargo::rustc-link-search=native={}", dir.display());
-        }
-    }
-
-    println!("cargo::rustc-link-lib=dylib=cufft");
-
     create_cufft_bindings(&cuda_include_paths);
+    println!("cargo::rustc-link-lib=dylib=cufft");
 }
 
 fn create_cufft_bindings(cuda_include_paths: &[path::PathBuf]) {
