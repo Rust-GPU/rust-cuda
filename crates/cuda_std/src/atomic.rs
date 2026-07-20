@@ -252,5 +252,5 @@ atomic_float!(f32, AtomicF32, 4, device, 32);
 atomic_float!(f64, AtomicF64, 8, device, 64);
 atomic_float!(f32, BlockAtomicF32, 4, block, 32, unsafe);
 atomic_float!(f64, BlockAtomicF64, 8, block, 64, unsafe);
-atomic_float!(f32, SystemAtomicF32, 4, device, 32);
-atomic_float!(f64, SystemAtomicF64, 8, device, 64);
+atomic_float!(f32, SystemAtomicF32, 4, system, 32);
+atomic_float!(f64, SystemAtomicF64, 8, system, 64);
