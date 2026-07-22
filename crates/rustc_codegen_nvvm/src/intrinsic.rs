@@ -705,10 +705,11 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                     self.const_bool(true)
                 } else if use_integer_compare {
                     let integer_ty = self.type_ix(layout.size.bits());
-                    let ptr_ty = self.type_ptr_to(integer_ty);
-                    let a_ptr = self.bitcast(a, ptr_ty);
+                    // Keep both operands in their own address space; casting to a generic
+                    // pointer here would make the loads below generic accesses.
+                    let a_ptr = self.pointercast_preserving_addrspace(a, integer_ty);
                     let a_val = self.load(integer_ty, a_ptr, layout.align.abi);
-                    let b_ptr = self.bitcast(b, ptr_ty);
+                    let b_ptr = self.pointercast_preserving_addrspace(b, integer_ty);
                     let b_val = self.load(integer_ty, b_ptr, layout.align.abi);
                     self.icmp(IntPredicate::IntEQ, a_val, b_val)
                 } else {
