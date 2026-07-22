@@ -509,7 +509,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn load(&mut self, ty: &'ll Type, ptr: &'ll Value, align: Align) -> &'ll Value {
         trace!("Load {ty:?} {:?}", ptr);
-        let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
+        let ptr = self.pointercast_preserving_addrspace(ptr, ty);
         unsafe {
             #[cfg(feature = "llvm19")]
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
@@ -522,7 +522,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn volatile_load(&mut self, ty: &'ll Type, ptr: &'ll Value) -> &'ll Value {
         trace!("Volatile load `{:?}`", ptr);
-        let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
+        let ptr = self.pointercast_preserving_addrspace(ptr, ty);
         unsafe {
             #[cfg(feature = "llvm19")]
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
@@ -794,7 +794,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
     fn gep(&mut self, ty: &'ll Type, ptr: &'ll Value, indices: &[&'ll Value]) -> &'ll Value {
         trace!("gep: {ty:?} {:?} with indices {:?}", ptr, indices);
-        let ptr = self.pointercast(ptr, self.cx().type_ptr_to(ty));
+        let ptr = self.pointercast_preserving_addrspace(ptr, ty);
         unsafe {
             llvm::LLVMBuildGEP2(
                 self.llbuilder,
@@ -814,7 +814,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         indices: &[&'ll Value],
     ) -> &'ll Value {
         trace!("gep inbounds: {ty:?} {:?} with indices {:?}", ptr, indices);
-        let ptr = self.pointercast(ptr, self.cx().type_ptr_to(ty));
+        let ptr = self.pointercast_preserving_addrspace(ptr, ty);
         unsafe {
             llvm::LLVMBuildInBoundsGEP2(
                 self.llbuilder,
@@ -1497,17 +1497,35 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
 
     fn noundef_metadata(&mut self, _load: &'ll Value) {}
 
+    /// Casts `ptr` to a pointer to `ty`, leaving it in the address space it already points into.
+    ///
+    /// Use this rather than casting to `type_ptr_to(ty)` for the pointer operand of a GEP or of
+    /// a memory access. `type_ptr_to` always yields a generic (addrspace 0) pointer, so casting
+    /// through it turns every access to an `#[address_space(shared)]` (or `constant`) static
+    /// into a generic access behind an `addrspacecast`. libNVVM's `InferAddressSpaces` pass
+    /// usually folds those back into `ld.shared`/`st.shared`, but it is not obliged to, and
+    /// when it misses one the access is emitted as a generic `ld`/`st` against the raw shared
+    /// window offset -- an out-of-bounds access at runtime, with no diagnostic at compile time.
+    pub(crate) fn pointercast_preserving_addrspace(
+        &mut self,
+        ptr: &'ll Value,
+        ty: &'ll Type,
+    ) -> &'ll Value {
+        let addrspace = pointer_addrspace(self.cx, ptr);
+        self.pointercast(ptr, self.cx.type_ptr_to_ext(ty, addrspace))
+    }
+
     fn check_store(&mut self, val: &'ll Value, ptr: &'ll Value) -> &'ll Value {
         let dest_ptr_ty = self.cx.val_ty(ptr);
         let stored_ty = self.cx.val_ty(val);
-        let stored_ptr_ty = self.cx.type_ptr_to(stored_ty);
-
-        assert_eq!(self.cx.type_kind(dest_ptr_ty), TypeKind::Pointer);
+        let stored_ptr_ty = self
+            .cx
+            .type_ptr_to_ext(stored_ty, pointer_addrspace(self.cx, ptr));
 
         if dest_ptr_ty == stored_ptr_ty {
             ptr
         } else {
-            self.bitcast(ptr, stored_ptr_ty)
+            self.pointercast(ptr, stored_ptr_ty)
         }
     }
 
@@ -1601,7 +1619,11 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
 impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
     /// Implements a standard atomic, using LLVM intrinsics(in `atomic_supported`, if `dst` is in a supported address space)
     /// or emulation(with `emulate_local`, if `dst` points to a thread-local address space).
-    /// FIXME(FractalFir): this code assumess all pointers are generic. Adjust it once we support address spaces.
+    /// `dst` may already be in a specific address space, in which case the `isspacep` checks
+    /// below are redundant: `check_call` casts them to generic for the predicate calls, and the
+    /// atomic itself stays on the original pointer.
+    /// FIXME(FractalFir): skip the runtime predicate dance entirely when the address space of
+    /// `dst` is statically known.
     fn atomic_op(
         &mut self,
         dst: &'ll Value,
@@ -1693,4 +1715,11 @@ impl<'ll, 'tcx, 'a> Builder<'a, 'll, 'tcx> {
             &[supported_bb, local_bb],
         )
     }
+}
+
+/// The address space `ptr` points into.
+fn pointer_addrspace<'ll>(cx: &CodegenCx<'ll, '_>, ptr: &'ll Value) -> AddressSpace {
+    let ty = cx.val_ty(ptr);
+    assert_eq!(cx.type_kind(ty), TypeKind::Pointer);
+    unsafe { AddressSpace(llvm::LLVMGetPointerAddressSpace(ty)) }
 }
