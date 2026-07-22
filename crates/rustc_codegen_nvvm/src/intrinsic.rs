@@ -605,7 +605,7 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                 }
                 let (size, signed) = ty.int_size_and_signed(self.tcx);
                 let width = size.bits();
-                if name == sym::saturating_add || name == sym::saturating_sub {
+                let llret = if name == sym::saturating_add || name == sym::saturating_sub {
                     saturating_intrinsic_impl(
                         self,
                         width as u32,
@@ -673,7 +673,18 @@ impl<'ll, 'tcx> IntrinsicCallBuilderMethods<'tcx> for Builder<'_, 'll, 'tcx> {
                         }
                         _ => unreachable!(),
                     }
-                }
+                };
+                // `ctpop`, `ctlz`, `cttz` and their `_nonzero` variants are declared in `core` as
+                // returning `u32` for *every* operand width, while the corresponding LLVM
+                // intrinsics return a value as wide as their operand. Without this cast the
+                // oversized value is stored into the 4-byte result slot, where it is either
+                // dropped as an out-of-bounds store (`u64`/`u128`, yielding a constant `0`) or
+                // leaves the high bytes uninitialized (`u8`/`u16`).
+                //
+                // Casting to an identical type is a no-op, so the intrinsics in this arm that do
+                // return the operand width (`bswap`, `bitreverse`, `rotate_*`, `saturating_*`)
+                // are unaffected, and any intrinsic added here later is covered automatically.
+                self.intcast(llret, result.layout.llvm_type(self), false)
             }
             sym::raw_eq => {
                 use rustc_codegen_ssa::common::IntPredicate;
