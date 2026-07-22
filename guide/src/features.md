@@ -28,7 +28,7 @@ around to adding it yet.
 | Match | ✔️ |
 | Proc Macros | ✔️ |
 | Try (`?`) | ✔️ |
-| 128 bit integers | 🟨 | Basic ops should work (and are emulated), advanced intrinsics like `ctpop`, `rotate`, etc are unsupported. |
+| 128 bit integers | 🟨 | Basic ops should work (and are emulated). The bit-manipulation intrinsics (`count_ones`, `leading_zeros`, `trailing_zeros`, `swap_bytes`, `reverse_bits`, `rotate_left`/`rotate_right`) are also emulated, over the two 64-bit halves. |
 | Unions | ✔️ |
 | Iterators | ✔️ |
 | Dynamic Dispatch | ✔️ |
