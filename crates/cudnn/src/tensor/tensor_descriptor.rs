@@ -176,6 +176,20 @@ where
     }
 }
 
+impl<T> TensorDescriptor<T>
+where
+    T: DataType,
+{
+    /// Wraps a raw cuDNN tensor descriptor created and configured elsewhere in the crate
+    /// (e.g. by `cudnnDeriveBNTensorDescriptor`).
+    pub(crate) fn from_raw(raw: cudnn_sys::cudnnTensorDescriptor_t) -> Self {
+        Self {
+            raw,
+            data_type: PhantomData,
+        }
+    }
+}
+
 impl<T> Drop for TensorDescriptor<T>
 where
     T: DataType,
