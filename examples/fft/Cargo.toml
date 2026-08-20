@@ -1,0 +1,9 @@
+[package]
+name = "fft"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cufft = { path = "../../crates/cufft" }
+cufft_raw = { path = "../../crates/cufft_raw" }
+cust = { path = "../../crates/cust" }
