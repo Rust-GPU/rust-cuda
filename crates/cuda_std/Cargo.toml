@@ -8,7 +8,7 @@ repository = "https://github.com/Rust-GPU/rust-cuda"
 readme = "../../README.md"
 
 [dependencies]
-glam = { version = ">=0.22", default-features = false, features = ["libm", "cuda", "bytemuck"] }
+glam = { version = ">=0.27", default-features = false, features = ["libm", "cuda", "bytemuck"] }
 vek = { version = "0.17.1", default-features = false, features = ["libm"] }
 cuda_std_macros = { version = "0.2", path = "../cuda_std_macros" }
 half = "2.4.1"

@@ -109,9 +109,12 @@ unsafe fn configure_llvm(sess: &Session) {
         #[cfg(not(feature = "llvm19"))]
         add("-import-cold-multiplier=0.1", false);
 
-        // for arg in sess_args {
-        //     add(&(*arg), true);
-        // }
+        // Forward unroll-threshold if specified in llvm_args
+        for arg in &sess.opts.cg.llvm_args {
+            if arg.starts_with("-unroll-threshold=") {
+                add(arg, true);
+            }
+        }
     }
 
     unsafe { llvm::LLVMInitializePasses() };
