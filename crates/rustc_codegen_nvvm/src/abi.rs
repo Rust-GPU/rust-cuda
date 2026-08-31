@@ -53,38 +53,36 @@ pub(crate) fn readjust_fn_abi<'tcx>(
             arg.mode = PassMode::Pair(ptr_attrs, ArgAttributes::new());
         }
 
-        if arg.layout.ty.is_array() && !matches!(arg.mode, PassMode::Direct { .. }) {
-            arg.mode = PassMode::Direct(ArgAttributes::new());
-        }
+        let is_aggregate = arg.layout.ty.is_array()
+            || arg.layout.ty.is_adt()
+            || matches!(arg.layout.ty.kind(), TyKind::Tuple(_));
+        let align = arg.layout.align.abi.bytes();
 
-        // pass all adts directly as values, ptx wants them to be passed all by value, but rustc's
-        // ptx-kernel abi seems to be wrong, and it's unstable.
-        if arg.layout.ty.is_adt() {
-            let align = arg.layout.align.abi.bytes();
-            if align >= 16 && align.is_power_of_two() {
-                let unit = Reg {
-                    kind: RegKind::Integer,
-                    size: Size::from_bytes(16),
-                };
-                let cast = CastTarget {
-                    prefix: Default::default(),
-                    rest: rustc_target::callconv::Uniform {
-                        unit,
-                        total: arg.layout.size,
-                        is_consecutive: false,
-                    },
-                    rest_offset: Some(Size::ZERO),
-                    attrs: ArgAttributes::new(),
-                };
-                arg.mode = PassMode::Cast {
-                    cast: Box::new(cast),
-                    pad_i32: false,
-                };
-            } else if !matches!(arg.mode, PassMode::Direct { .. }) {
-                let mut attrs = ArgAttributes::new();
-                attrs.pointee_align = Some(arg.layout.align.abi);
-                arg.mode = PassMode::Direct(attrs);
-            }
+        if is_aggregate && align >= 16 && align.is_power_of_two() {
+            let unit = Reg {
+                kind: RegKind::Integer,
+                size: Size::from_bytes(16),
+            };
+            let cast = CastTarget {
+                prefix: Default::default(),
+                rest: rustc_target::callconv::Uniform {
+                    unit,
+                    total: arg.layout.size,
+                    is_consecutive: false,
+                },
+                rest_offset: Some(Size::ZERO),
+                attrs: ArgAttributes::new(),
+            };
+            arg.mode = PassMode::Cast {
+                cast: Box::new(cast),
+                pad_i32: false,
+            };
+        } else if (arg.layout.ty.is_array() || arg.layout.ty.is_adt())
+            && !matches!(arg.mode, PassMode::Direct { .. })
+        {
+            let mut attrs = ArgAttributes::new();
+            attrs.pointee_align = Some(arg.layout.align.abi);
+            arg.mode = PassMode::Direct(attrs);
         }
         arg
     };
