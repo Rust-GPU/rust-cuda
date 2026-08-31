@@ -27,16 +27,15 @@ files] are a good starting point.
 ## CUDA basics
 
 GPU kernels are functions launched from the CPU that run on the GPU. They do not have a return
-value, instead writing data into mutable buffers passed to them. CUDA executes multiple (possibly
-hundreds) of invocations of a GPU kernel at once, each one on a different thread, and each thread
-typically works on only part of the input and output buffers, sometimes just a single element
-thereof.
+value, instead writing data into mutable buffers passed to them. CUDA executes a kernel on
+multiple (possibly hundreds of) threads at once. Each thread typically works on only part of the
+input and output buffers, sometimes just a single element thereof.
 
 The caller decides the *launch dimensions*.
 - **Threads:** A single thread executes the GPU kernel **once**. CUDA makes the thread's index
   available to the kernel.
-- **Blocks:** A single block houses multiple threads that it execute on its own. CUDA also makes
-  the blocks index avaiable to the kernel.
+- **Blocks:** A single block houses multiple threads that execute together. CUDA also makes the
+  block's index available to the kernel.
 
 Block and thread dimensions may be 1D, 2D, or 3D. For example, you can launch 1 block of 6 threads,
 or `6x6` threads, or `6x6x6` threads. Likewise, you can launch 5 or 5x5 or 5x5x5 blocks. This can
@@ -132,19 +131,19 @@ like normal Rust code, but some parts are unusual.
 - The type `T` will be shared with the CPU code in a way that minimizes the chances of certain
   kinds of errors. More on this below.
 - The `#[kernel]` attribute indicates this is code that runs on the GPU. It is similar to
-  `__global__` in CUDA C++. Multiple invocations of this kernel will run in parallel and share
-  `a`, `b`, and `c`.
+  `__global__` in CUDA C++. Many threads will run this kernel in parallel, all sharing `a`, `b`,
+  and `c`.
 - The proc macro that processes the `#[kernel]` attribute marks the kernel as `no_mangle` so that
   the name is obvious in both GPU code and CPU code. The proc macro also checks that the kernel is
   marked `unsafe`, all parameters are `Copy`, and there is no return value.
 - All GPU functions are unsafe because the parallel execution and sharing of data typical for GPU
   kernels is incompatible with safe Rust.
 - The inputs (`a` and `b`) are normal slices but the output (`c`) is a raw pointer. Again, this
-  is because `c` is mutable state shared by multiple kernels executing in parallel. Using `&mut
-  [T]` would incorrectly indicate that it is non-shared mutable state, and therefore Rust CUDA does
-  not allow mutable references as argument to kernels. Raw pointers do not have this restriction.
-  Therefore, we use a pointer and only make a mutable reference once we have an element
-  (`c.add(i)`) that we know won't be touched by other kernel invocations.
+  is because `c` is mutable state shared by the many threads running this kernel in parallel. Using
+  `&mut [T]` would incorrectly indicate that it is non-shared mutable state, and therefore Rust
+  CUDA does not allow mutable references as argument to kernels. Raw pointers do not have this
+  restriction. Therefore, we use a pointer and only make a mutable reference once we have an
+  element (`c.add(i)`) that we know won't be touched by other threads.
 - The `#[allow(improper_ctypes_definitions)]` follows on from this. The kernel boundary is like an
   FFI boundary, and slices are not normally allowed there because they are not guaranteed to be
   passed in a particular way. However, `rustc_codegen_nvvm` *does* guarantee the way in which
@@ -234,7 +233,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     //   block of 4 threads.
     // - The third parameter is the number of bytes of dynamic shared memory.
     //   This is usually zero.
-    // - These threads run in parallel, so each kernel invocation must modify
+    // - These threads run in parallel, so each thread must modify
     //   separate parts of `c_gpu`. It is the kernel author's responsibility to
     //   ensure this.
     // - Immutable slices are passed via pointer/length pairs. This is unsafe
