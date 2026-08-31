@@ -1,0 +1,36 @@
+.visible .entry shared_broadcast(
+    .param .u64 shared_broadcast_param_0,
+    .param .u32 shared_broadcast_param_1
+)
+{
+    .reg .pred     %p<2>;
+    .reg .b32     %r<6>;
+    .reg .b64     %rd<6>;
+    // demoted variable
+    .shared .align 4 .b8 _RNvCs6I4kclYupDO_13shared_memory2SH[128];
+
+    ld.param.u64     %rd2, [shared_broadcast_param_0];
+    ld.param.u32     %r1, [shared_broadcast_param_1];
+    mov.u32     %r2, %tid.x;
+    and.b32      %r3, %r2, 31;
+    shr.u32     %r4, %r2, 5;
+    setp.eq.s32     %p1, %r3, 0;
+    mul.wide.u32     %rd3, %r4, 4;
+    mov.u64     %rd4, _RNvCs6I4kclYupDO_13shared_memory2SH;
+    add.s64     %rd1, %rd4, %rd3;
+    @%p1 bra     $L__BB0_1;
+    bra.uni     $L__BB0_2;
+
+$L__BB0_1:
+    st.shared.u32     [%rd1], %r1;
+
+$L__BB0_2:
+    bar.sync     0;
+    ld.shared.u32     %r5, [%rd1];
+    cvta.to.global.u64     %rd5, %rd2;
+    st.global.u32     [%rd5], %r5;
+    ret;
+
+}
+
+
