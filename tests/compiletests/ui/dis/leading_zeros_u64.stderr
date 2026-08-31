@@ -1,0 +1,22 @@
+.visible .entry leading_zeros_u64(
+    .param .u64 leading_zeros_u64_param_0,
+    .param .u64 leading_zeros_u64_param_1
+)
+{
+    .reg .b32     %r<2>;
+    .reg .b64     %rd<7>;
+
+
+    ld.param.u64     %rd1, [leading_zeros_u64_param_0];
+    ld.param.u64     %rd2, [leading_zeros_u64_param_1];
+    cvta.to.global.u64     %rd3, %rd2;
+    cvta.to.global.u64     %rd4, %rd1;
+    ld.global.u64     %rd5, [%rd4];
+    clz.b64     %r1, %rd5;
+    cvt.u64.u32     %rd6, %r1;
+    st.global.u32     [%rd3], %rd6;
+    ret;
+
+}
+
+
