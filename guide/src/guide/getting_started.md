@@ -198,6 +198,13 @@ The compile target determines which GPU features are available. See the [Compute
 Gating](./compute_capabilities.md) guide for details on writing code that adapts to different GPU
 capabilities.
 
+> **Note:** `CudaBuilder`'s default target is `NvvmArch::Compute75` (Turing and later). If your
+> GPU is older than Turing (Maxwell, Pascal, or Volta — e.g. a GTX 10-series card), the PTX
+> produced by the default will fail to load at runtime with a generic `InvalidPtx` error and no
+> indication that the architecture is the problem. Set `.arch(...)` explicitly to match your GPU,
+> e.g. `.arch(cuda_builder::NvvmArch::Compute61)` for a GTX 1070. You can find your GPU's compute
+> capability with `nvidia-smi --query-gpu=compute_cap --format=csv`.
+
 ### `src/main.rs`
 
 The final file contains `main`, which ties everything together.
