@@ -33,16 +33,16 @@ jobs:
           - name: Ubuntu-24.04/CUDA-12.8.1
             image: "rust-cuda-ubuntu24-cuda12"
             dockerfile: ./container/ubuntu24-cuda12/Dockerfile
-          - name: Ubuntu-24.04/CUDA-13.0.2
+          - name: Ubuntu-24.04/CUDA-13.3.1
             image: "rust-cuda-ubuntu24-cuda13"
             dockerfile: ./container/ubuntu24-cuda13/Dockerfile
-          - name: Ubuntu-24.04/CUDA-13.2.1/LLVM-19.1.7
-            image: "rust-cuda-ubuntu24-cuda13-llvm19"
-            dockerfile: ./container/ubuntu24-cuda13-llvm19/Dockerfile
+          - name: Ubuntu-24.04/CUDA-13.3.1/LLVM-21.1.8
+            image: "rust-cuda-ubuntu24-cuda13-llvm21"
+            dockerfile: ./container/ubuntu24-cuda13-llvm21/Dockerfile
           - name: RockyLinux-9/CUDA-12.8.1
             image: "rust-cuda-rockylinux9-cuda12"
             dockerfile: ./container/rockylinux9-cuda12/Dockerfile
-          - name: RockyLinux-9/CUDA-13.0.2
+          - name: RockyLinux-9/CUDA-13.3.1
             image: "rust-cuda-rockylinux9-cuda13"
             dockerfile: ./container/rockylinux9-cuda13/Dockerfile
     steps:
@@ -161,13 +161,13 @@ jobs:
         variance:
           - name: Ubuntu-24.04/CUDA-12.8.1
             image: "rust-cuda-ubuntu24-cuda12"
-          - name: Ubuntu-24.04/CUDA-13.0.2
+          - name: Ubuntu-24.04/CUDA-13.3.1
             image: "rust-cuda-ubuntu24-cuda13"
-          - name: Ubuntu-24.04/CUDA-13.2.1/LLVM-19.1.7
-            image: "rust-cuda-ubuntu24-cuda13-llvm19"
+          - name: Ubuntu-24.04/CUDA-13.3.1/LLVM-21.1.8
+            image: "rust-cuda-ubuntu24-cuda13-llvm21"
           - name: RockyLinux-9/CUDA-12.8.1
             image: "rust-cuda-rockylinux9-cuda12"
-          - name: RockyLinux-9/CUDA-13.0.2
+          - name: RockyLinux-9/CUDA-13.3.1
             image: "rust-cuda-rockylinux9-cuda13"
     steps:
       - name: Set lowercase repo owner

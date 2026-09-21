@@ -175,6 +175,9 @@ pub enum GraphNodeType {
     /// Conditional node.
     #[cfg(conditional_node)]
     Conditional,
+    /// Reserved by CUDA; this does not represent a supported graph operation.
+    #[cfg(reserved_graph_node_16)]
+    Reserved16,
 }
 
 impl GraphNodeType {
@@ -197,6 +200,8 @@ impl GraphNodeType {
             CU_GRAPH_NODE_TYPE_BATCH_MEM_OP => GraphNodeType::BatchMemoryOperation,
             #[cfg(conditional_node)]
             CU_GRAPH_NODE_TYPE_CONDITIONAL => GraphNodeType::Conditional,
+            #[cfg(reserved_graph_node_16)]
+            CU_GRAPH_NODE_TYPE_RESERVED_16 => GraphNodeType::Reserved16,
         }
     }
 
@@ -219,6 +224,8 @@ impl GraphNodeType {
             Self::BatchMemoryOperation => CU_GRAPH_NODE_TYPE_BATCH_MEM_OP,
             #[cfg(conditional_node)]
             Self::Conditional => CU_GRAPH_NODE_TYPE_CONDITIONAL,
+            #[cfg(reserved_graph_node_16)]
+            Self::Reserved16 => CU_GRAPH_NODE_TYPE_RESERVED_16,
         }
     }
 }
@@ -516,5 +523,28 @@ impl Drop for Graph {
         unsafe {
             driver_sys::cuGraphDestroy(self.raw);
         }
+    }
+}
+
+#[cfg(test)]
+mod node_type_tests {
+    use super::{GraphNodeType, driver_sys::CUgraphNodeType};
+
+    #[test]
+    fn kernel_node_round_trip() {
+        let raw = CUgraphNodeType::CU_GRAPH_NODE_TYPE_KERNEL;
+        assert_eq!(
+            GraphNodeType::from_raw(raw),
+            GraphNodeType::KernelInvocation
+        );
+        assert_eq!(GraphNodeType::from_raw(raw).to_raw(), raw);
+    }
+
+    #[cfg(reserved_graph_node_16)]
+    #[test]
+    fn reserved_node_round_trip() {
+        let raw = CUgraphNodeType::CU_GRAPH_NODE_TYPE_RESERVED_16;
+        assert_eq!(GraphNodeType::from_raw(raw), GraphNodeType::Reserved16);
+        assert_eq!(GraphNodeType::from_raw(raw).to_raw(), raw);
     }
 }

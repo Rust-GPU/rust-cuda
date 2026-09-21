@@ -5,10 +5,10 @@ edition = "2024"
 
 [features]
 default = []
-# Build the kernels crate with the LLVM 19 backend. Forwards to `cuda_builder`,
+# Build the kernels crate with the LLVM 21 backend. Forwards to `cuda_builder`,
 # which propagates the feature to `nvvm` (default arch -> Compute100 / Blackwell)
 # and to its nested `cargo build -p rustc_codegen_nvvm`.
-llvm19 = ["cuda_builder/llvm19"]
+llvm21 = ["cuda_builder/llvm21"]
 
 [dependencies]
 cust = { path = "../../crates/cust" }

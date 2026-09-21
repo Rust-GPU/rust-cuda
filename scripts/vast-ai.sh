@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build vecadd on the Nix-equipped build host, then push it to a vast.ai
-# Blackwell box with CUDA 13.2+ and run it there.
+# Blackwell box with CUDA 13.3+ and run it there.
 
 set -euo pipefail
 
@@ -23,7 +23,7 @@ VAST_SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Lo
 # in the container's glibc + the CUDA driver's libcuda.so.1.
 echo ">> Building on $BUILD_HOST"
 ssh "$BUILD_HOST" "cd '$BUILD_DIR' \
-  && nix develop .#v19 --command cargo build -p vecadd \
+  && nix develop .#v21 --command cargo build -p vecadd \
   && nix shell nixpkgs#patchelf --command patchelf \
        --set-interpreter /lib64/ld-linux-x86-64.so.2 \
        --remove-rpath '$BUILD_BIN'"

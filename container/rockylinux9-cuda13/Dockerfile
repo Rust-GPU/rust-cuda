@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:13.0.2-cudnn-devel-rockylinux9 AS llvm-builder
+FROM nvcr.io/nvidia/cuda:13.3.1-cudnn-devel-rockylinux9 AS llvm-builder
 
 RUN dnf -y install \
     --nobest \
@@ -51,7 +51,7 @@ RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmo
     rm -rf llvm-7.1.0.src* && \
     dnf clean all
 
-FROM nvcr.io/nvidia/cuda:13.0.2-cudnn-devel-rockylinux9
+FROM nvcr.io/nvidia/cuda:13.3.1-cudnn-devel-rockylinux9
 
 RUN dnf -y install \
     --nobest \

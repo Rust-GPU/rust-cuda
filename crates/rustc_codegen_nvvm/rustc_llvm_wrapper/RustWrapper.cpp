@@ -197,7 +197,11 @@ extern "C" LLVMContextRef LLVMRustContextCreate(bool shouldDiscardNames)
 extern "C" void LLVMRustSetNormalizedTarget(LLVMModuleRef M,
                                             const char *Triple)
 {
-  unwrap(M)->setTargetTriple(Triple::normalize(Triple));
+#if LLVM_VERSION_MAJOR >= 21
+  unwrap(M)->setTargetTriple(llvm::Triple(llvm::Triple::normalize(Triple)));
+#else
+  unwrap(M)->setTargetTriple(llvm::Triple::normalize(Triple));
+#endif
 }
 
 extern "C" void LLVMRustPrintPassTimings()
@@ -264,7 +268,11 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind)
   case NoAlias:
     return Attribute::NoAlias;
   case NoCapture:
+#if LLVM_VERSION_MAJOR >= 21
+    return Attribute::Captures;
+#else
     return Attribute::NoCapture;
+#endif
   case NoInline:
     return Attribute::NoInline;
   case NonNull:
@@ -285,7 +293,7 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind)
     return Attribute::SExt;
   case StructRet:
 #if LLVM_VERSION_MAJOR >= 19
-    report_fatal_error("StructRet not supported without a type on LLVM 19+");
+    report_fatal_error("StructRet not supported without a type on LLVM 21+");
 #else
     return Attribute::StructRet;
 #endif
@@ -307,6 +315,17 @@ static Attribute::AttrKind fromRust(LLVMRustAttribute Kind)
   report_fatal_error("bad AttributeKind");
 }
 
+// LLVM 21 replaced the enum attribute nocapture with captures(none).
+// Construct its payload explicitly for both function and call-site attributes.
+static Attribute rustAttribute(LLVMContext &Ctx, LLVMRustAttribute Kind)
+{
+#if LLVM_VERSION_MAJOR >= 21
+  if (Kind == NoCapture)
+    return Attribute::getWithCaptureInfo(Ctx, CaptureInfo::none());
+#endif
+  return Attribute::get(Ctx, fromRust(Kind));
+}
+
 extern "C" void LLVMRustAddCallSiteAttribute(LLVMValueRef Instr, unsigned Index,
                                              LLVMRustAttribute RustAttr)
 {
@@ -314,11 +333,11 @@ extern "C" void LLVMRustAddCallSiteAttribute(LLVMValueRef Instr, unsigned Index,
   CallBase *Call = unwrap<CallBase>(Instr);
   LLVMContext &Ctx = Call->getContext();
   AttrBuilder B(Ctx);
-  B.addAttribute(Attribute::get(Ctx, fromRust(RustAttr)));
+  B.addAttribute(rustAttribute(Ctx, RustAttr));
   Call->setAttributes(Call->getAttributes().addAttributesAtIndex(Ctx, Index, B));
 #else
   CallSite Call = CallSite(unwrap<Instruction>(Instr));
-  Attribute Attr = Attribute::get(Call->getContext(), fromRust(RustAttr));
+  Attribute Attr = rustAttribute(Call->getContext(), RustAttr);
 #if LLVM_VERSION_GE(5, 0)
   Call.addAttribute(Index, Attr);
 #else
@@ -412,11 +431,11 @@ extern "C" void LLVMRustAddFunctionAttribute(LLVMValueRef Fn, unsigned Index,
   Function *A = unwrap<Function>(Fn);
   LLVMContext &Ctx = A->getContext();
   AttrBuilder B(Ctx);
-  B.addAttribute(Attribute::get(Ctx, fromRust(RustAttr)));
+  B.addAttribute(rustAttribute(Ctx, RustAttr));
   A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
 #else
   Function *A = unwrap<Function>(Fn);
-  Attribute Attr = Attribute::get(A->getContext(), fromRust(RustAttr));
+  Attribute Attr = rustAttribute(A->getContext(), RustAttr);
   AttrBuilder B(Attr);
 #if LLVM_VERSION_GE(5, 0)
   A->addAttributes(Index, B);
@@ -439,16 +458,16 @@ extern "C" void LLVMRustAddFunctionAttributeWithType(LLVMValueRef Fn, unsigned I
   } else if (RustAttr == ByVal) {
     B.addByValAttr(unwrap(Ty));
   } else {
-    B.addAttribute(Attribute::get(Ctx, fromRust(RustAttr)));
+    B.addAttribute(rustAttribute(Ctx, RustAttr));
   }
   A->setAttributes(A->getAttributes().addAttributesAtIndex(Ctx, Index, B));
 #else
   // LLVM 7's StructRet/ByVal are plain attribute kinds with no type payload,
-  // so the Ty argument is only meaningful on the LLVM 19 path above. Fall through
+  // so the Ty argument is only meaningful on the LLVM 21 path above. Fall through
   // to the kind-only add on legacy LLVM.
   (void)Ty;
   Function *A = unwrap<Function>(Fn);
-  Attribute Attr = Attribute::get(A->getContext(), fromRust(RustAttr));
+  Attribute Attr = rustAttribute(A->getContext(), RustAttr);
   AttrBuilder B(Attr);
 #if LLVM_VERSION_GE(5, 0)
   A->addAttributes(Index, B);
@@ -557,7 +576,7 @@ extern "C" void LLVMRustRemoveFunctionAttributes(LLVMValueRef Fn,
   F->setAttributes(PALNew);
 #else
   Function *F = unwrap<Function>(Fn);
-  Attribute Attr = Attribute::get(F->getContext(), fromRust(RustAttr));
+  Attribute Attr = rustAttribute(F->getContext(), RustAttr);
   AttrBuilder B(Attr);
   auto PAL = F->getAttributes();
 #if LLVM_VERSION_GE(5, 0)
@@ -588,7 +607,7 @@ LLVMRustBuildAtomicLoad(LLVMBuilderRef B, LLVMValueRef Source, const char *Name,
                         LLVMAtomicOrdering Order)
 {
 #if LLVM_VERSION_MAJOR >= 19
-  report_fatal_error("LLVMRustBuildAtomicLoad requires a type-aware LLVM 19 wrapper");
+  report_fatal_error("LLVMRustBuildAtomicLoad requires a type-aware LLVM 21 wrapper");
 #else
   LoadInst *LI = new LoadInst(unwrap(Source), 0);
   LI->setAtomic(fromRust(Order));
@@ -1643,8 +1662,10 @@ extern "C" LLVMTypeKind LLVMRustGetTypeKind(LLVMTypeRef Ty)
   case Type::VectorTyID:
     return LLVMVectorTypeKind;
 #endif
+#if LLVM_VERSION_MAJOR < 21
   case Type::X86_MMXTyID:
     return LLVMX86_MMXTypeKind;
+#endif
   case Type::TokenTyID:
     return LLVMTokenTypeKind;
   }
@@ -1743,7 +1764,7 @@ static FunctionType *LLVMRustGetFunctionTypeForCallee(Value *Callee)
   if (Function *Fn = dyn_cast<Function>(Callee->stripPointerCasts()))
     return Fn->getFunctionType();
 
-  report_fatal_error("LLVMRustBuildCall requires an explicit callee type on LLVM 19");
+  report_fatal_error("LLVMRustBuildCall requires an explicit callee type on LLVM 21");
 }
 #endif
 
@@ -2030,7 +2051,7 @@ extern "C" LLVMRustModuleBuffer *
 LLVMRustModuleBufferCreate(LLVMModuleRef M)
 {
   // Longhand form avoids std::make_unique (C++14) so this compiles under
-  // LLVM 7's `-std=c++11` llvm-config cxxflags as well as LLVM 19's C++17.
+  // LLVM 7's `-std=c++11` llvm-config cxxflags as well as LLVM 21's C++17.
   auto Ret = std::unique_ptr<LLVMRustModuleBuffer>(new LLVMRustModuleBuffer());
   {
     raw_string_ostream OS(Ret->data);
@@ -2263,3 +2284,36 @@ extern "C" LLVMValueRef LLVMBuildInBoundsGEP2(LLVMBuilderRef B, LLVMTypeRef Ty,
 }
 
 #endif
+
+// LLVM 21 upgrades NVVM kernel metadata to PTX_Kernel while reading bitcode.
+// Keep the legacy annotations used by internalization and the NVVM handoff.
+extern "C" void LLVMRustRestoreNvvmKernelAnnotations(LLVMModuleRef Mod) {
+#if LLVM_VERSION_MAJOR >= 21
+  Module &M = *unwrap(Mod);
+  auto *Annotations = M.getOrInsertNamedMetadata("nvvm.annotations");
+  for (Function &F : M) {
+    if (F.getCallingConv() != CallingConv::PTX_Kernel)
+      continue;
+    bool Found = false;
+    for (MDNode *Node : Annotations->operands()) {
+      if (Node->getNumOperands() < 2)
+        continue;
+      auto *Value = dyn_cast_or_null<ValueAsMetadata>(Node->getOperand(0));
+      auto *Kind = dyn_cast_or_null<MDString>(Node->getOperand(1));
+      if (Value && Value->getValue() == &F && Kind && Kind->getString() == "kernel") {
+        Found = true;
+        break;
+      }
+    }
+    if (!Found) {
+      Metadata *Fields[] = {ValueAsMetadata::get(&F),
+                            MDString::get(M.getContext(), "kernel"),
+                            ConstantAsMetadata::get(ConstantInt::get(
+                                Type::getInt32Ty(M.getContext()), 1))};
+      Annotations->addOperand(MDNode::get(M.getContext(), Fields));
+    }
+  }
+#else
+  (void)Mod;
+#endif
+}

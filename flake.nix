@@ -27,29 +27,29 @@
           # ---- CUDA toolkit (Nix-managed) ----
           # Toolkit pin chooses what PTX version NVVM emits, which then dictates
           # the minimum host driver version at runtime:
-          #   CUDA 13.2 → NVVM 22.0 → PTX 9.2 → needs driver 580.x+ (CUDA 13)
+          #   CUDA 13.3.1 → modern LLVM 21 dialect → PTX 9.3 → needs driver 580.x+ (CUDA 13)
           #   CUDA 12.9 → NVVM 21.x → PTX 8.x → runs on CUDA 12.x drivers
           # `cudatoolkit` is the kitchen-sink symlinkJoin maintained by nixpkgs —
           # every header path and lib layout is already wired correctly. The host
           # NVIDIA driver (libcuda.so.1) is needed at runtime; it is *not* shimmed
           # in here — supply it via the system or extend LD_LIBRARY_PATH yourself
           # before running CUDA programs.
-          cuda19Root = pkgs.cudaPackages_13_2.cudatoolkit;
+          cuda21Root = pkgs.cudaPackages_13_3.cudatoolkit;
           cuda7Root = pkgs.cudaPackages_12_9.cudatoolkit;
 
           toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
 
-          # ---- LLVM 19 (from current nixpkgs) ----
-          llvm19 = pkgs.llvmPackages_19;
-          llvm19Bin = lib.getBin llvm19.llvm;
-          llvm19Dev = lib.getDev llvm19.llvm;
-          llvm19CompatTools = pkgs.symlinkJoin {
-            name = "llvm19-compat-tools";
+          # ---- LLVM 21 (from current nixpkgs) ----
+          llvm21 = pkgs.llvmPackages_21;
+          llvm21Bin = lib.getBin llvm21.llvm;
+          llvm21Dev = lib.getDev llvm21.llvm;
+          llvm21CompatTools = pkgs.symlinkJoin {
+            name = "llvm21-compat-tools";
             paths = [
-              (pkgs.writeShellScriptBin "opt-19" ''exec ${llvm19Bin}/bin/opt "$@"'')
-              (pkgs.writeShellScriptBin "llvm-as-19" ''exec ${llvm19Bin}/bin/llvm-as "$@"'')
-              (pkgs.writeShellScriptBin "llvm-dis-19" ''exec ${llvm19Bin}/bin/llvm-dis "$@"'')
-              (pkgs.writeShellScriptBin "llc-19" ''exec ${llvm19Bin}/bin/llc "$@"'')
+              (pkgs.writeShellScriptBin "opt-21" ''exec ${llvm21Bin}/bin/opt "$@"'')
+              (pkgs.writeShellScriptBin "llvm-as-21" ''exec ${llvm21Bin}/bin/llvm-as "$@"'')
+              (pkgs.writeShellScriptBin "llvm-dis-21" ''exec ${llvm21Bin}/bin/llvm-dis "$@"'')
+              (pkgs.writeShellScriptBin "llc-21" ''exec ${llvm21Bin}/bin/llc "$@"'')
             ];
           };
 
@@ -75,10 +75,10 @@
             pkgs.cmake
             pkgs.ninja
           ];
-          # The v19 shell uses unstable's runtime libs (modern glibc). The v7 shell has
+          # The v21 shell uses unstable's runtime libs (modern glibc). The v7 shell has
           # to match LLVM 7's glibc generation (23.05), otherwise ncurses/libstdc++ from
           # unstable demand GLIBC_2.38+ symbols LLVM 7's linked glibc 2.37 doesn't have.
-          v19BuildInputs = [
+          v21BuildInputs = [
             pkgs.openssl
             pkgs.libxml2
             pkgs.zlib
@@ -116,7 +116,7 @@
             buildInputs = v7BuildInputs;
             LLVM_CONFIG = "${llvm7Dev}/bin/llvm-config";
             # Give bindgen an explicit libclang (matched to 23.05's glibc) so it doesn't
-            # fall back to scanning system paths and pick up an apt-installed LLVM 19
+            # fall back to scanning system paths and pick up an apt-installed LLVM 21
             # with deps the v7 shell's LD_LIBRARY_PATH doesn't satisfy.
             LIBCLANG_PATH = "${pkgsLlvm7.lib.getLib pkgsLlvm7.llvmPackages_7.libclang}/lib";
             shellHook = ''
@@ -129,33 +129,33 @@
             '';
           });
 
-          # ---- LLVM 19-only shell (CUDA 13.2 toolkit, the active-work shell) ----
-          v19Shell = pkgs.mkShell ((mkCudaEnv cuda19Root) // {
+          # ---- LLVM 21-only shell (CUDA 13.3.1 toolkit, the active-work shell) ----
+          v21Shell = pkgs.mkShell ((mkCudaEnv cuda21Root) // {
             nativeBuildInputs = commonNativeInputs ++ [
-              cuda19Root
-              llvm19.clang
-              llvm19.libclang
-              llvm19Bin
-              llvm19Dev
-              llvm19CompatTools
+              cuda21Root
+              llvm21.clang
+              llvm21.libclang
+              llvm21Bin
+              llvm21Dev
+              llvm21CompatTools
             ];
-            buildInputs = v19BuildInputs;
-            LLVM_CONFIG_19 = "${llvm19Dev}/bin/llvm-config";
-            LIBCLANG_PATH = "${lib.getLib llvm19.libclang}/lib";
+            buildInputs = v21BuildInputs;
+            LLVM_CONFIG_21 = "${llvm21Dev}/bin/llvm-config";
+            LIBCLANG_PATH = "${lib.getLib llvm21.libclang}/lib";
             shellHook = ''
-              export PATH="${llvm19CompatTools}/bin:${llvm19Bin}/bin:${llvm19Dev}/bin:${cuda19Root}/bin:${cuda19Root}/nvvm/bin:$PATH"
-              export LD_LIBRARY_PATH="${cuda19Root}/nvvm/lib:${cuda19Root}/nvvm/lib64:${cuda19Root}/lib64:${cuda19Root}/lib:${pkgs.ncurses.out}/lib:${pkgs.libxml2.out}/lib:${pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              export PATH="${llvm21CompatTools}/bin:${llvm21Bin}/bin:${llvm21Dev}/bin:${cuda21Root}/bin:${cuda21Root}/nvvm/bin:$PATH"
+              export LD_LIBRARY_PATH="${cuda21Root}/nvvm/lib:${cuda21Root}/nvvm/lib64:${cuda21Root}/lib64:${cuda21Root}/lib:${pkgs.ncurses.out}/lib:${pkgs.libxml2.out}/lib:${pkgs.zlib.out}/lib:${pkgs.stdenv.cc.cc.lib}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-              echo "rust-cuda llvm19 shell (${system})"
+              echo "rust-cuda llvm21 shell (${system})"
               echo "  CUDA_HOME=$CUDA_HOME"
-              echo "  LLVM_CONFIG_19=$LLVM_CONFIG_19"
+              echo "  LLVM_CONFIG_21=$LLVM_CONFIG_21"
             '';
           });
         in
         {
-          default = v19Shell;
+          default = v21Shell;
           v7 = v7Shell;
-          v19 = v19Shell;
+          v21 = v21Shell;
         };
     in
     {

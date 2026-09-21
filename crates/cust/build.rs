@@ -10,6 +10,11 @@ fn main() {
     if driver_version >= 12030 {
         println!("cargo::rustc-cfg=conditional_node");
     }
+    // CUDA 13.3 headers add a reserved graph node discriminant.
+    println!("cargo::rustc-check-cfg=cfg(reserved_graph_node_16)");
+    if driver_version >= 13030 {
+        println!("cargo::rustc-cfg=reserved_graph_node_16");
+    }
     // In CUDA 13.0 several pairs/trios of functions were merged:
     // ```
     // CUresult cuMemAdvise(CUdeviceptr devPtr, size_t count, CUmem_advise advice, CUdevice device);

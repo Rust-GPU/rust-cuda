@@ -556,11 +556,11 @@ fn build_backend_and_find(filename: &str) -> Option<PathBuf> {
         .arg(&target_dir)
         .current_dir(&workspace_dir);
 
-    // Propagate the `llvm19` cargo feature to the nested backend build. Without this
+    // Propagate the `llvm21` cargo feature to the nested backend build. Without this
     // `rustc_codegen_nvvm`'s build script falls through to the prebuilt LLVM 7
-    // download, which the LLVM 19 codegen path can't link against.
-    if cfg!(feature = "llvm19") {
-        cmd.args(["--features", "llvm19"]);
+    // download, which the LLVM 21 codegen path can't link against.
+    if cfg!(feature = "llvm21") {
+        cmd.args(["--features", "llvm21"]);
     }
 
     let status = cmd.status().ok()?;

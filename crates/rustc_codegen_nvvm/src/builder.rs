@@ -231,7 +231,7 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 v = transmute_llval(self.llbuilder, self.cx, v, new_ty);
             }
 
-            #[cfg(not(feature = "llvm19"))]
+            #[cfg(not(feature = "llvm21"))]
             {
                 // Get the return type.
                 let sig = llvm::LLVMGetElementType(self.val_ty(self.llfn()));
@@ -511,9 +511,9 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         trace!("Load {ty:?} {:?}", ptr);
         let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
         unsafe {
-            #[cfg(feature = "llvm19")]
+            #[cfg(feature = "llvm21")]
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
-            #[cfg(not(feature = "llvm19"))]
+            #[cfg(not(feature = "llvm21"))]
             let load = llvm::LLVMBuildLoad(self.llbuilder, ptr, UNNAMED);
             llvm::LLVMSetAlignment(load, align.bytes() as c_uint);
             load
@@ -524,9 +524,9 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         trace!("Volatile load `{:?}`", ptr);
         let ptr = self.pointercast(ptr, self.cx.type_ptr_to(ty));
         unsafe {
-            #[cfg(feature = "llvm19")]
+            #[cfg(feature = "llvm21")]
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
-            #[cfg(not(feature = "llvm19"))]
+            #[cfg(not(feature = "llvm21"))]
             let load = llvm::LLVMBuildLoad(self.llbuilder, ptr, UNNAMED);
             llvm::LLVMSetVolatile(load, llvm::True);
             load
@@ -1230,11 +1230,11 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 // Local space is only accessible to the current thread.
                 // So, there are no synchronization issues, and we can emulate it using a simple load / compare / store.
                 let load: &'ll Value = unsafe {
-                    #[cfg(feature = "llvm19")]
+                    #[cfg(feature = "llvm21")]
                     {
                         llvm::LLVMBuildLoad2(builder.llbuilder, builder.val_ty(cmp), dst, UNNAMED)
                     }
-                    #[cfg(not(feature = "llvm19"))]
+                    #[cfg(not(feature = "llvm21"))]
                     {
                         llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED)
                     }
@@ -1290,11 +1290,11 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 // Local space is only accessible to the current thread. So, there are no
                 // synchronization issues, and we can emulate it using a simple load/compare/store.
                 let load: &'ll Value = unsafe {
-                    #[cfg(feature = "llvm19")]
+                    #[cfg(feature = "llvm21")]
                     {
                         llvm::LLVMBuildLoad2(builder.llbuilder, builder.val_ty(src), dst, UNNAMED)
                     }
-                    #[cfg(not(feature = "llvm19"))]
+                    #[cfg(not(feature = "llvm21"))]
                     {
                         llvm::LLVMBuildLoad(builder.llbuilder, dst, UNNAMED)
                     }
@@ -1362,16 +1362,16 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     }
 
     fn lifetime_start(&mut self, ptr: &'ll Value, size: Size) {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         self.call_lifetime_intrinsic("llvm.lifetime.start.p0", ptr, size);
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         self.call_lifetime_intrinsic("llvm.lifetime.start.p0i8", ptr, size);
     }
 
     fn lifetime_end(&mut self, ptr: &'ll Value, size: Size) {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         self.call_lifetime_intrinsic("llvm.lifetime.end.p0", ptr, size);
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         self.call_lifetime_intrinsic("llvm.lifetime.end.p0i8", ptr, size);
     }
 
@@ -1389,9 +1389,9 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         self.cx.last_call_llfn.set(None);
         let args = self.check_call("call", llty, llfn, args);
 
-        // On LLVM 7 we must ensure the callee has a pointer-to-FnTy type; LLVM 19's
+        // On LLVM 7 we must ensure the callee has a pointer-to-FnTy type; LLVM 21's
         // opaque pointers make this a no-op, so skip the cast on that path entirely.
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         let llfn = unsafe {
             let llfn_ptr_ty = llvm::LLVMPointerType(llty, 0);
             if self.val_ty(llfn) == llfn_ptr_ty {
@@ -1417,11 +1417,11 @@ impl<'ll, 'tcx, 'a> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
 
         // bitcast return type if the type was remapped
         let map = self.cx.remapped_integer_args.borrow();
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         let fn_ty = llty;
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         let mut fn_ty = self.val_ty(llfn);
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         while self.cx.type_kind(fn_ty) == TypeKind::Pointer {
             fn_ty = self.cx.element_type(fn_ty);
         }

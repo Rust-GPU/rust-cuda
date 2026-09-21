@@ -354,13 +354,13 @@ impl<'ll> StaticCodegenMethods for CodegenCx<'ll, '_> {
             let mut val_llty = self.val_ty(v);
             let v = if val_llty == self.type_i1() {
                 val_llty = self.type_i8();
-                #[cfg(feature = "llvm19")]
+                #[cfg(feature = "llvm21")]
                 {
                     let const_int = v as *const llvm::Value as *const llvm::ConstantInt;
                     let const_val = llvm::LLVMConstIntGetZExtValue(&*const_int);
                     llvm::LLVMConstInt(val_llty, const_val, 0)
                 }
-                #[cfg(not(feature = "llvm19"))]
+                #[cfg(not(feature = "llvm21"))]
                 {
                     llvm::LLVMConstZExt(v, val_llty)
                 }

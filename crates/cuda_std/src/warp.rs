@@ -744,7 +744,7 @@ pub enum WarpShuffleMode {
 // The libintrinsics.ll wrappers pack their (value, predicate) result into a
 // single i64: low 32 bits = value, bit 32 = predicate. Returning a primitive
 // integer avoids the small-aggregate ABI path where rustc attaches `align N`
-// to the call's return value — an attribute LLVM 19's verifier rejects on
+// to the call's return value — an attribute LLVM 21's verifier rejects on
 // non-pointer returns.
 // Unused on host targets — every caller is `#[gpu_only]`.
 #[allow(dead_code)]

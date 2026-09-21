@@ -214,7 +214,7 @@ pub(crate) unsafe fn codegen(
     let _bc_timer =
         prof.generic_activity_with_arg("NVVM_module_codegen_make_bitcode", &module.name[..]);
 
-    #[cfg(feature = "llvm19")]
+    #[cfg(feature = "llvm21")]
     if let Err(err) = llvm::verify_module(llmod) {
         return Err(dcx.fatal(format!(
             "LLVM module verification failed for {module_name}: {err}"

@@ -6,7 +6,7 @@
 ; LLVM 7 path, regenerate the .bc with `llvm-as-7` (older or newer llvm-as will emit a
 ; bitcode format libnvvm rejects).
 ;
-; The LLVM 19 path assembles this same source at build time with `llvm-as-19`; no
+; The LLVM 21 path assembles this same source at build time with `llvm-as-19`; no
 ; regeneration required, just edit and rebuild.
 source_filename = "libintrinsics"
 ; This data layout must match `DATA_LAYOUT` in `crates/rustc_codegen_nvvm/src/target.rs`.
@@ -156,7 +156,7 @@ declare {i16, i1} @llvm.umul.with.overflow.i16(i16, i16) #0
 ; small two-field aggregate — produces { i32, i8 }, which libnvvm rejects. We
 ; used to bridge by re-packing into { i32, i8 } here, but that aggregate return
 ; causes rustc's call-site ABI to attach `align N` to the return value, which
-; LLVM 19's verifier rejects (align is only valid on pointer returns). So we
+; LLVM 21's verifier rejects (align is only valid on pointer returns). So we
 ; pack into a plain i64 instead: low 32 bits = value, bit 32 = predicate.
 ; Primitive integer return ⇒ no struct ABI ⇒ no spurious return-attribute.
 

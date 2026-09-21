@@ -97,7 +97,7 @@ impl Attribute {
         unsafe { LLVMRustAddFunctionAttribute(llfn, idx.as_uint(), *self) }
     }
 
-    #[cfg(feature = "llvm19")]
+    #[cfg(feature = "llvm21")]
     pub fn apply_llfn_with_type(&self, idx: AttributePlace, llfn: &Value, ty: &Type) {
         unsafe { LLVMRustAddFunctionAttributeWithType(llfn, idx.as_uint(), *self, ty) }
     }
@@ -1500,7 +1500,7 @@ unsafe extern "C" {
 
     // Operations on array, pointer, and vector types (sequence types)
     pub(crate) fn LLVMRustArrayType(ElementType: &Type, ElementCount: u64) -> &Type;
-    #[cfg(feature = "llvm19")]
+    #[cfg(feature = "llvm21")]
     pub(crate) fn LLVMPointerTypeInContext(C: &Context, AddressSpace: c_uint) -> &Type;
     pub(crate) fn LLVMPointerType(ElementType: &Type, AddressSpace: c_uint) -> &Type;
     pub(crate) fn LLVMVectorType(ElementType: &Type, ElementCount: c_uint) -> &Type;
@@ -1629,7 +1629,7 @@ unsafe extern "C" {
     pub(crate) fn LLVMSetFunctionCallConv(Fn: &Value, CC: c_uint);
     pub(crate) fn LLVMRustAddAlignmentAttr(Fn: &Value, index: c_uint, bytes: u32);
     pub(crate) fn LLVMRustAddFunctionAttribute(Fn: &Value, index: c_uint, attr: Attribute);
-    #[cfg(feature = "llvm19")]
+    #[cfg(feature = "llvm21")]
     pub(crate) fn LLVMRustAddFunctionAttributeWithType(
         Fn: &Value,
         index: c_uint,
@@ -1894,7 +1894,7 @@ unsafe extern "C" {
         Val: &'a Value,
         Name: *const c_char,
     ) -> &'a Value;
-    #[cfg(feature = "llvm19")]
+    #[cfg(feature = "llvm21")]
     pub(crate) fn LLVMBuildLoad2<'a>(
         B: &Builder<'a>,
         Ty: &'a Type,
@@ -2216,6 +2216,8 @@ unsafe extern "C" {
     pub(crate) fn LLVMRustPrepareThinLTOResolveWeak(Data: &ThinLTOData, Module: &Module) -> bool;
     pub(crate) fn LLVMRustPrepareThinLTOInternalize(Data: &ThinLTOData, Module: &Module) -> bool;
     pub(crate) fn LLVMRustFreeThinLTOData(Data: &'static mut ThinLTOData);
+    pub(crate) fn LLVMRustRestoreNvvmKernelAnnotations(M: &Module);
+
     pub(crate) fn LLVMRustParseBitcodeForLTO(
         Context: &Context,
         Data: *const u8,

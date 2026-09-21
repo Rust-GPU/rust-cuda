@@ -24,6 +24,28 @@ files] are a good starting point.
 
 [Docker files]: https://github.com/Rust-GPU/rust-cuda/tree/main/container
 
+## LLVM 21 download override
+
+With the `llvm21` feature, set `LLVM_CONFIG_21` to an installed LLVM 21
+`llvm-config`, or let the backend download an archive. `PREBUILT_LLVM_URL`
+overrides the archive directory; a trailing slash is optional. The backend
+appends `linux-x86_64.tar.xz`, `linux-aarch64.tar.xz`, or
+`windows-x86_64.tar.xz` for the host platform.
+
+```sh
+export PREBUILT_LLVM_URL=https://github.com/brandonros/rustc_codegen_nvvm-llvm/releases/download/llvm-21.1.8
+USE_PREBUILT_LLVM=1 cargo build -p rustc_codegen_nvvm --features llvm21
+```
+
+`USE_PREBUILT_LLVM=1` bypasses local LLVM discovery. Without it, the URL is
+used only if local discovery fails. Select archives matching the backend's
+LLVM version; the override also applies to LLVM 7 builds.
+
+Linux CI accepts the same directory through the repository Actions variable
+`PREBUILT_LLVM_URL`. Its LLVM 21 jobs default to the release above, whose
+three archives match the artifacts from
+[run 34781677658](https://github.com/brandonros/rustc_codegen_nvvm-llvm/actions/runs/34781677658).
+
 ## CUDA basics
 
 GPU kernels are functions launched from the CPU that run on the GPU. They do not have a return
@@ -374,9 +396,9 @@ After installing the CUDA Toolkit, verify the following directories are on your 
 
 ```powershell
 # CUDA 13.x
-$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin"
-$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin\x64"
-$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\nvvm\bin\x64"
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\bin"
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\bin\x64"
+$env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\nvvm\bin\x64"
 
 # CUDA 12.x -- replace v12.x with your installed version
 $env:PATH += ";C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9\bin"

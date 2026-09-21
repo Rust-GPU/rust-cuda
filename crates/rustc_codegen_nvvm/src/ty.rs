@@ -56,12 +56,12 @@ impl Type {
 impl<'ll> CodegenCx<'ll, '_> {
     pub(crate) fn voidp(&self) -> &'ll Type {
         // llvm uses i8* for void ptrs, void* is invalid
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         {
             self.type_ptr_ext(AddressSpace::ZERO)
         }
 
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         {
             let i8_ty = self.type_i8();
             self.type_ptr_to_ext(i8_ty, AddressSpace::ZERO)
@@ -105,12 +105,12 @@ impl<'ll> CodegenCx<'ll, '_> {
     }
 
     pub(crate) fn type_i8p_ext(&self, address_space: AddressSpace) -> &'ll Type {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         {
             self.type_ptr_ext(address_space)
         }
 
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         {
             self.type_ptr_to_ext(self.type_i8(), address_space)
         }
@@ -126,13 +126,13 @@ impl<'ll> CodegenCx<'ll, '_> {
     }
 
     pub(crate) fn type_ptr_to(&self, ty: &'ll Type) -> &'ll Type {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         {
             let _ = ty;
             self.type_ptr_ext(AddressSpace::ZERO)
         }
 
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         {
             assert_ne!(
                 self.type_kind(ty),
@@ -145,13 +145,13 @@ impl<'ll> CodegenCx<'ll, '_> {
     }
 
     pub(crate) fn type_ptr_to_ext(&self, ty: &'ll Type, address_space: AddressSpace) -> &'ll Type {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         {
             let _ = ty;
             self.type_ptr_ext(address_space)
         }
 
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         {
             unsafe { llvm::LLVMPointerType(ty, address_space.0) }
         }
@@ -245,24 +245,24 @@ impl<'ll, 'tcx> BaseTypeCodegenMethods for CodegenCx<'ll, 'tcx> {
     }
 
     fn type_ptr(&self) -> Self::Type {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         unsafe {
             return llvm::LLVMPointerTypeInContext(self.llcx, AddressSpace::ZERO.0);
         }
 
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         {
             self.type_ptr_ext(AddressSpace::ZERO)
         }
     }
 
     fn type_ptr_ext(&self, address_space: AddressSpace) -> Self::Type {
-        #[cfg(feature = "llvm19")]
+        #[cfg(feature = "llvm21")]
         unsafe {
             return llvm::LLVMPointerTypeInContext(self.llcx, address_space.0);
         }
 
-        #[cfg(not(feature = "llvm19"))]
+        #[cfg(not(feature = "llvm21"))]
         {
             self.type_ptr_to_ext(self.type_i8(), address_space)
         }

@@ -310,13 +310,13 @@ pub enum NvvmArch {
     Compute73,
     /// This default value of 7.5 corresponds to Turing and later devices. We default to this
     /// because it is the minimum supported by CUDA 13.0 while being in the middle of the range
-    /// supported by CUDA 12.x. Selected as the default only when the `llvm19` feature is off;
-    /// the LLVM 19 NVVM dialect can't target pre-Blackwell archs.
+    /// supported by CUDA 12.x. Selected as the default only when the `llvm21` feature is off;
+    /// the LLVM 21 NVVM dialect can't target pre-Blackwell archs.
     // WARNING: If you change the default, consider updating:
     // - The `--target-arch` values used for compiletests in `ci_linux.yml` and
     //   `.github/workflows/ci_{linux,windows}.yml`.
     // - The CUDA versions used in `setup_cuda_environment` in `compiletests`.
-    #[cfg_attr(not(feature = "llvm19"), default)]
+    #[cfg_attr(not(feature = "llvm21"), default)]
     Compute75,
     Compute80,
     Compute86,
@@ -326,11 +326,11 @@ pub enum NvvmArch {
     Compute90,
     Compute90a,
     /// First Blackwell arch and the cutoff for NVVM's modern IR dialect — everything at
-    /// or above this capability uses the LLVM 19-flavored bitcode accepted by CUDA 12.9+
+    /// or above this capability uses the LLVM 21-flavored bitcode accepted by CUDA 12.9+
     /// `libnvvm`. See [`NvvmArch::uses_modern_ir_dialect`]. Selected as the default when
-    /// the `llvm19` feature is enabled, since the LLVM 7 dialect can't target this and
-    /// the LLVM 19 dialect can't target anything below it.
-    #[cfg_attr(feature = "llvm19", default)]
+    /// the `llvm21` feature is enabled, since the LLVM 7 dialect can't target this and
+    /// the LLVM 21 dialect can't target anything below it.
+    #[cfg_attr(feature = "llvm21", default)]
     Compute100,
     Compute100f,
     Compute100a,
@@ -758,7 +758,7 @@ impl NvvmProgram {
 
     /// Like [`verify`](Self::verify), but runs the verifier with the same `NvvmOption`s that will
     /// be passed to [`compile`](Self::compile). Passing the user-selected `-arch=compute_XXX` in
-    /// particular matters for CUDA 12.9+ / LLVM 19 bitcode: without it the verifier can fall back
+    /// particular matters for CUDA 12.9+ / LLVM 21 bitcode: without it the verifier can fall back
     /// to the legacy LLVM 7 parser and reject modern-dialect bitcode that would otherwise compile
     /// fine.
     pub fn verify_with_options(&self, options: &[NvvmOption]) -> Result<(), NvvmError> {

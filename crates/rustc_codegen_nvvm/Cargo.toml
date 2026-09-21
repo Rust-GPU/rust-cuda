@@ -16,7 +16,7 @@ crate-type = ["dylib"]
 
 [features]
 default = []
-llvm19 = []
+llvm21 = []
 
 [dependencies]
 nvvm = { version = "0.1", path = "../nvvm" }

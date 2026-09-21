@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:13.2.1-cudnn-devel-ubuntu24.04 AS llvm-builder
+FROM nvcr.io/nvidia/cuda:13.3.1-cudnn-devel-ubuntu24.04 AS llvm-builder
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     build-essential \
@@ -18,13 +18,13 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     zlib1g-dev && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /data/llvm19
+WORKDIR /data/llvm21
 
-# Download and build LLVM 19.1.7 (the active LLVM 19 pin used by `rustc_codegen_nvvm`).
+# Download and build LLVM 21.1.8 (the active LLVM 21 pin used by `rustc_codegen_nvvm`).
 # LLVM 8+ ships as a monorepo tarball; cmake source root is the `llvm/` subdir.
-RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/llvm-project-19.1.7.src.tar.xz && \
-    tar -xf llvm-project-19.1.7.src.tar.xz && \
-    cd llvm-project-19.1.7.src && \
+RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/llvm-project-21.1.8.src.tar.xz && \
+    tar -xf llvm-project-21.1.8.src.tar.xz && \
+    cd llvm-project-21.1.8.src && \
     mkdir build && cd build && \
     ARCH=$(dpkg --print-architecture) && \
     if [ "$ARCH" = "amd64" ]; then \
@@ -44,14 +44,14 @@ RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmo
         -DLLVM_INCLUDE_BENCHMARKS=OFF \
         -DLLVM_ENABLE_ZLIB=ON \
         -DLLVM_ENABLE_TERMINFO=ON \
-        -DCMAKE_INSTALL_PREFIX=/opt/llvm-19 \
+        -DCMAKE_INSTALL_PREFIX=/opt/llvm-21 \
         ../llvm && \
     ninja -j$(nproc) && \
     ninja install && \
     cd ../.. && \
-    rm -rf llvm-project-19.1.7.src*
+    rm -rf llvm-project-21.1.8.src*
 
-FROM nvcr.io/nvidia/cuda:13.2.1-cudnn-devel-ubuntu24.04
+FROM nvcr.io/nvidia/cuda:13.3.1-cudnn-devel-ubuntu24.04
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     build-essential \
@@ -59,6 +59,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     curl \
     libssl-dev \
     libtinfo-dev \
+    libxml2-dev \
     pkg-config \
     xz-utils \
     zlib1g-dev \
@@ -71,10 +72,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     libxrandr-dev && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=llvm-builder /opt/llvm-19 /opt/llvm-19
-RUN ln -s /opt/llvm-19/bin/llvm-config /usr/bin/llvm-config && \
-    ln -s /opt/llvm-19/bin/llvm-config /usr/bin/llvm-config-19 && \
-    ln -s /opt/llvm-19/bin/llvm-as /usr/bin/llvm-as-19
+COPY --from=llvm-builder /opt/llvm-21 /opt/llvm-21
+RUN ln -s /opt/llvm-21/bin/llvm-config /usr/bin/llvm-config && \
+    ln -s /opt/llvm-21/bin/llvm-config /usr/bin/llvm-config-21 && \
+    ln -s /opt/llvm-21/bin/llvm-as /usr/bin/llvm-as-21
 
 # Get Rust (install rustup; toolchain installed from rust-toolchain.toml below)
 RUN curl -sSf -L https://sh.rustup.rs | bash -s -- -y --profile minimal --default-toolchain none
@@ -85,15 +86,15 @@ WORKDIR /data/rust-cuda
 RUN --mount=type=bind,source=rust-toolchain.toml,target=/data/rust-cuda/rust-toolchain.toml \
     rustup show
 
-# Add nvvm + LLVM 19 dylib to the runtime linker path.
-ENV LD_LIBRARY_PATH="/opt/llvm-19/lib:/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
+# Add nvvm + LLVM 21 dylib to the runtime linker path.
+ENV LD_LIBRARY_PATH="/opt/llvm-21/lib:/usr/local/cuda/nvvm/lib64:${LD_LIBRARY_PATH}"
 
-# `rustc_codegen_nvvm`'s build.rs probes `LLVM_CONFIG_19` to locate the LLVM 19
-# toolchain when the `llvm19` cargo feature is on. The feature itself is gated;
+# `rustc_codegen_nvvm`'s build.rs probes `LLVM_CONFIG_21` to locate the LLVM 21
+# toolchain when the `llvm21` cargo feature is on. The feature itself is gated;
 # downstream crates that depend on `cuda_builder` must build with
-# `--features llvm19` for this to take effect — that propagates through to
-# `nvvm/llvm19` (default `NvvmArch` = Blackwell) and `rustc_codegen_nvvm/llvm19`
-# (LLVM 19 codegen path) per crates/cuda_builder/Cargo.toml.
-ENV LLVM_CONFIG_19=/opt/llvm-19/bin/llvm-config
+# `--features llvm21` for this to take effect — that propagates through to
+# `nvvm/llvm21` (default `NvvmArch` = Blackwell) and `rustc_codegen_nvvm/llvm21`
+# (LLVM 21 codegen path) per crates/cuda_builder/Cargo.toml.
+ENV LLVM_CONFIG_21=/opt/llvm-21/bin/llvm-config
 ENV LLVM_LINK_STATIC=1
 ENV RUST_LOG=info

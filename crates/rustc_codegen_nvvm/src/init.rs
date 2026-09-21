@@ -105,8 +105,8 @@ unsafe fn configure_llvm(sess: &Session) {
         );
 
         // This tuning flag isn't guaranteed to be registered in the dylib-loaded
-        // LLVM19 backend configuration, and it is not required for correctness.
-        #[cfg(not(feature = "llvm19"))]
+        // LLVM21 backend configuration, and it is not required for correctness.
+        #[cfg(not(feature = "llvm21"))]
         add("-import-cold-multiplier=0.1", false);
 
         // for arg in sess_args {

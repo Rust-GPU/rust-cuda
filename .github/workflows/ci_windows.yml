@@ -42,7 +42,7 @@ jobs:
               ]
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            cuda: "13.0.2"
+            cuda: "13.3.1"
             nvvm-dll-dir: "nvvm\\bin\\x64"
             sub-packages:
               [
@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install CUDA
-        uses: Jimver/cuda-toolkit@v0.2.29
+        uses: Jimver/cuda-toolkit@v0.2.36
         id: cuda-toolkit
         with:
           cuda: ${{ matrix.cuda }}
@@ -123,8 +123,8 @@ jobs:
             --exclude blastoff --exclude cudnn --exclude cudnn-sys --exclude cust
 
       # Exclude crates that require cuDNN, not available on Windows CI: cudnn, cudnn-sys.
-      # The `llvm19` feature on `nvvm` / `cuda_builder` / `rustc_codegen_nvvm` requires
-      # an LLVM 19 toolchain that isn't in the CI image, so we can't run a single
+      # The `llvm21` feature on `nvvm` / `cuda_builder` / `rustc_codegen_nvvm` requires
+      # an LLVM 21 toolchain that isn't in the CI image, so we can't run a single
       # `--all-features` pass over the whole workspace. Doc those three crates with
       # default features (the LLVM 7 path the CI image already supports) and the rest
       # of the workspace with `--all-features`.

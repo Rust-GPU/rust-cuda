@@ -22,7 +22,7 @@ A clear and concise description of what you expected to happen.
 
 - OS: [e.g. Windows 11, Ubuntu 22.04]
 - GPU: [e.g. RTX 3060]
-- CUDA Toolkit version: [e.g. 13.2]
+- CUDA Toolkit version: [e.g. 13.3]
 - cuDNN version (if applicable): [e.g. 9.x]
 - Rust toolchain: [output of `rustc --version`]
 

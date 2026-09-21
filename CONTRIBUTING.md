@@ -33,7 +33,7 @@ For questions, clarifications, and general help:
 ### Windows-Specific Notes
 
 - Ensure the CUDA Toolkit `bin` directory is on your `PATH` (e.g.
-  `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2\bin`).
+  `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.3\bin`).
 - The MSVC build tools are required. Install via
   [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/) with the
   "Desktop development with C++" workload.

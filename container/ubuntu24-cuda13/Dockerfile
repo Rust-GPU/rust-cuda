@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04 AS llvm-builder
+FROM nvcr.io/nvidia/cuda:13.3.1-cudnn-devel-ubuntu24.04 AS llvm-builder
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     build-essential \
@@ -50,7 +50,7 @@ RUN curl -sSf -L -O https://github.com/llvm/llvm-project/releases/download/llvmo
     cd ../.. && \
     rm -rf llvm-7.1.0.src*
 
-FROM nvcr.io/nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
+FROM nvcr.io/nvidia/cuda:13.3.1-cudnn-devel-ubuntu24.04
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get -qq -y install \
     build-essential \

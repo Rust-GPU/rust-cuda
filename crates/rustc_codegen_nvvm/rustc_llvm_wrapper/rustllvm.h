@@ -49,7 +49,11 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/IPO.h"
+// Only the legacy pass registry uses the instrumentation umbrella header.
+// LLVM 21 removed it; modern pipelines use PassBuilder instead.
+#if LLVM_VERSION_MAJOR < 19
 #include "llvm/Transforms/Instrumentation.h"
+#endif
 #include "llvm/Transforms/Scalar.h"
 #if LLVM_VERSION_MAJOR < 19
 #include "llvm/Transforms/Vectorize.h"

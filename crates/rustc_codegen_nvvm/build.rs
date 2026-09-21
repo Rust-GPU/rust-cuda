@@ -26,21 +26,22 @@ const LLVM7: LlvmFlavor = LlvmFlavor {
     prebuilt_url: PREBUILT_LLVM_URL_LLVM7,
 };
 
-const LLVM19: LlvmFlavor = LlvmFlavor {
-    major: 19,
-    config_env: "LLVM_CONFIG_19",
-    default_binary: "llvm-config-19",
+const LLVM21: LlvmFlavor = LlvmFlavor {
+    major: 21,
+    config_env: "LLVM_CONFIG_21",
+    default_binary: "llvm-config-21",
     probe_cuda_home: true,
-    prebuilt_url: PREBUILT_LLVM_URL_LLVM19,
+    prebuilt_url: PREBUILT_LLVM_URL_LLVM21,
 };
 
 static PREBUILT_LLVM_URL_LLVM7: &str =
     "https://github.com/rust-gpu/rustc_codegen_nvvm-llvm/releases/download/llvm-7.1.0/";
-static PREBUILT_LLVM_URL_LLVM19: &str =
-    "https://github.com/rust-gpu/rustc_codegen_nvvm-llvm/releases/download/llvm-19.1.7/";
+
+static PREBUILT_LLVM_URL_LLVM21: &str =
+    "https://github.com/rust-gpu/rustc_codegen_nvvm-llvm/releases/download/llvm-21.1.8/";
 
 fn main() {
-    let flavor = if llvm19_enabled() { &LLVM19 } else { &LLVM7 };
+    let flavor = if llvm21_enabled() { &LLVM21 } else { &LLVM7 };
     rustc_llvm_build(flavor);
 }
 
@@ -66,8 +67,8 @@ pub fn output(cmd: &mut Command) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-fn llvm19_enabled() -> bool {
-    tracked_env_var_os("CARGO_FEATURE_LLVM19").is_some()
+fn llvm21_enabled() -> bool {
+    tracked_env_var_os("CARGO_FEATURE_LLVM21").is_some()
 }
 
 fn command_version(path: &Path) -> Option<String> {
@@ -97,7 +98,7 @@ fn sibling_llvm_tool(llvm_config: &Path, tool_prefix: &str) -> Option<PathBuf> {
     // into /usr/bin/ but the rest of the toolchain stays in the install prefix
     // (e.g. /usr/bin/llvm-config -> /opt/llvm-7/bin/llvm-config, with /opt/llvm-7/bin
     // off PATH). It also handles source-built toolchains where tool names are
-    // unsuffixed (`llvm-as`) versus apt-packaged ones (`llvm-as-19`).
+    // unsuffixed (`llvm-as`) versus apt-packaged ones (`llvm-as-21`).
     let output = Command::new(llvm_config).arg("--bindir").output().ok()?;
     if !output.status.success() {
         return None;
@@ -112,7 +113,7 @@ fn target_to_llvm_prebuilt(target: &str) -> String {
         "x86_64-unknown-linux-gnu" => "linux-x86_64",
         "aarch64-unknown-linux-gnu" => "linux-aarch64",
         _ => panic!(
-            "Unsupported target with no matching prebuilt LLVM: `{target}`, install LLVM and set LLVM_CONFIG (or LLVM_CONFIG_19 when the `llvm19` feature is enabled)"
+            "Unsupported target with no matching prebuilt LLVM: `{target}`, install LLVM and set LLVM_CONFIG (or LLVM_CONFIG_21 when the `llvm21` feature is enabled)"
         ),
     };
     format!("{base}.tar.xz")
@@ -120,7 +121,7 @@ fn target_to_llvm_prebuilt(target: &str) -> String {
 
 fn download_prebuilt_llvm(target: &str, base_url: &str) -> PathBuf {
     let prebuilt_name = target_to_llvm_prebuilt(target);
-    let url = format!("{base_url}{prebuilt_name}");
+    let url = format!("{}/{prebuilt_name}", base_url.trim_end_matches('/'));
 
     println!("cargo:warning=Downloading prebuilt LLVM from {url}");
 
@@ -202,7 +203,7 @@ fn find_llvm_config(target: &str, flavor: &LlvmFlavor) -> PathBuf {
 
     let url = tracked_env_var_os("PREBUILT_LLVM_URL")
         .map(|x| x.to_string_lossy().to_string())
-        .unwrap_or_else(|| flavor.prebuilt_url.to_string());
+        .unwrap_or_else(|| flavor.prebuilt_url.to_owned());
     download_prebuilt_llvm(target, &url)
 }
 
