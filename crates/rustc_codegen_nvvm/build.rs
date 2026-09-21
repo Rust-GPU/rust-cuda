@@ -38,6 +38,12 @@ static PREBUILT_LLVM_URL_LLVM7: &str =
     "https://github.com/rust-gpu/rustc_codegen_nvvm-llvm/releases/download/llvm-7.1.0/";
 static PREBUILT_LLVM_URL_LLVM19: &str =
     "https://github.com/rust-gpu/rustc_codegen_nvvm-llvm/releases/download/llvm-19.1.7/";
+static CUDA_ROOT_ENVS: &[&str] = &[
+    "CUDA_HOME",
+    "CUDA_PATH",
+    "CUDA_ROOT",
+    "CUDA_TOOLKIT_ROOT_DIR",
+];
 
 fn main() {
     let flavor = if llvm19_enabled() { &LLVM19 } else { &LLVM7 };
@@ -174,12 +180,15 @@ fn find_llvm_config(target: &str, flavor: &LlvmFlavor) -> PathBuf {
 
         candidates.push(PathBuf::from(flavor.default_binary));
 
-        if flavor.probe_cuda_home
-            && let Some(cuda_home) = tracked_env_var_os("CUDA_HOME")
-        {
-            let cuda_home = PathBuf::from(cuda_home);
-            candidates.push(cuda_home.join("nvvm").join("bin").join("llvm-config"));
-            candidates.push(cuda_home.join("bin").join("llvm-config"));
+        if flavor.probe_cuda_home {
+            for cuda_root in CUDA_ROOT_ENVS
+                .iter()
+                .filter_map(tracked_env_var_os)
+                .map(PathBuf::from)
+            {
+                candidates.push(cuda_root.join("nvvm").join("bin").join("llvm-config"));
+                candidates.push(cuda_root.join("bin").join("llvm-config"));
+            }
         }
 
         for candidate in &candidates {
