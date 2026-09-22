@@ -272,7 +272,7 @@ macro_rules! impl_match {
                     }
                     unsafe fn match_all(mask: u32, value: Self) -> Option<u32> {
                         let (val, pred) = unsafe { [<match_all_ $width>](mask, value as [<u $width>]) };
-                        pred.then(|| val)
+                        pred.then_some(val)
                     }
                 }
             }
@@ -285,8 +285,26 @@ impl_match! {
     i64, 64,
     u32, 32,
     u64, 64,
-    f32, 32,
-    f64, 64,
+}
+
+impl WarpMatchValue for f32 {
+    unsafe fn match_any(mask: u32, value: Self) -> u32 {
+        unsafe { match_any_32(mask, value.to_bits()) }
+    }
+    unsafe fn match_all(mask: u32, value: Self) -> Option<u32> {
+        let (val, pred) = unsafe { match_all_32(mask, value.to_bits()) };
+        pred.then_some(val)
+    }
+}
+
+impl WarpMatchValue for f64 {
+    unsafe fn match_any(mask: u32, value: Self) -> u32 {
+        unsafe { match_any_64(mask, value.to_bits()) }
+    }
+    unsafe fn match_all(mask: u32, value: Self) -> Option<u32> {
+        let (val, pred) = unsafe { match_all_64(mask, value.to_bits()) };
+        pred.then_some(val)
+    }
 }
 
 #[gpu_only]
