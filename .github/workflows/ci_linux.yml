@@ -131,7 +131,7 @@ jobs:
         if: matrix.variance.llvm == 21
         env:
           LLVM_ARCH: ${{ matrix.variance.artifact }}
-          PREBUILT_LLVM_URL: ${{ vars.PREBUILT_LLVM_URL || 'https://github.com/brandonros/rustc_codegen_nvvm-llvm/releases/download/llvm-21.1.8' }}
+          PREBUILT_LLVM_URL: ${{ vars.PREBUILT_LLVM_URL || 'https://github.com/Rust-GPU/rustc_codegen_nvvm-llvm/releases/download/llvm-21.1.8' }}
         run: |
           mkdir -p llvm-prebuilt
           curl --fail --location --retry 3 \

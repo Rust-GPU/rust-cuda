@@ -33,7 +33,7 @@ appends `linux-x86_64.tar.xz`, `linux-aarch64.tar.xz`, or
 `windows-x86_64.tar.xz` for the host platform.
 
 ```sh
-export PREBUILT_LLVM_URL=https://github.com/brandonros/rustc_codegen_nvvm-llvm/releases/download/llvm-21.1.8
+export PREBUILT_LLVM_URL=https://github.com/Rust-GPU/rustc_codegen_nvvm-llvm/releases/download/llvm-21.1.8
 USE_PREBUILT_LLVM=1 cargo build -p rustc_codegen_nvvm --features llvm21
 ```
 
@@ -42,9 +42,8 @@ used only if local discovery fails. Select archives matching the backend's
 LLVM version; the override also applies to LLVM 7 builds.
 
 Linux CI accepts the same directory through the repository Actions variable
-`PREBUILT_LLVM_URL`. Its LLVM 21 jobs default to the release above, whose
-three archives match the artifacts from
-[run 34781677658](https://github.com/brandonros/rustc_codegen_nvvm-llvm/actions/runs/34781677658).
+`PREBUILT_LLVM_URL`. Its LLVM 21 jobs default to the release above, which is
+also the backend's built-in default.
 
 ## CUDA basics
 
