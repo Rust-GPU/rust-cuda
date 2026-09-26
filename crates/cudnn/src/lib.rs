@@ -131,6 +131,7 @@
 
 mod activation;
 mod attention;
+mod batchnorm;
 mod backend;
 mod context;
 mod convolution;
@@ -150,6 +151,7 @@ mod w_grad_mode;
 
 pub use activation::*;
 pub use attention::*;
+pub use batchnorm::*;
 pub use context::*;
 pub use convolution::*;
 pub use data_type::*;
