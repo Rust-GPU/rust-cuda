@@ -17,6 +17,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     permissions:
+      actions: read
       contents: write
       pages: write
       id-token: write
