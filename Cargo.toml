@@ -7,6 +7,8 @@ members = [
   "crates/cuda_std_macros",
   "crates/cudnn",
   "crates/cudnn-sys",
+  "crates/cufft",
+  "crates/cufft_raw",
   "crates/cust",
   "crates/cust_core",
   "crates/cust_derive",
@@ -49,6 +51,7 @@ members = [
   "examples/i128_demo/kernels",
   "examples/sha2_crates_io",
   "examples/sha2_crates_io/kernels",
+  "examples/fft",
   "examples/vecadd",
   "examples/vecadd/kernels",
 
