@@ -1,0 +1,14 @@
+[package]
+name = "rust-cuda-wrapper"
+version = "0.1.0"
+edition = "2024"
+
+# Stand-alone workspace so this crate is independent of the rust-cuda
+# workspace's pinned nightly. CE may update it on its own cadence.
+[workspace]
+
+[dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.6.1", features = ["derive"] }
+serde_json = "1.0.149"
+tempfile = "3.27.0"

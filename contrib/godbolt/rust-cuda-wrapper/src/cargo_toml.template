@@ -1,0 +1,10 @@
+[package]
+name = "gpu_kernel"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cuda_std = { path = "__CUDA_STD_PATH__" }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
