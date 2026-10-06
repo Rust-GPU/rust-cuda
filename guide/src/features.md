@@ -61,7 +61,7 @@ around to adding it yet.
 | Convolution | ✔️ | Forward, bias+activation fused, backward data/filter, workspace query, grouped conv |
 | Dropout | ✔️ | Forward and backward, state management |
 | Normalization (Layer / Instance / Group) | ❌ | Not yet wrapped |
-| Batch Normalization | ❌ | Not yet wrapped |
+| Batch Normalization | ✔️ | Forward inference, forward training and backward |
 | Pooling (max, average) | ✔️ | Forward and backward, N-dimensional |
 | Reduction (sum, max, norm, etc.) | ✔️ | With workspace and indices support |
 | RNN (LSTM, GRU, vanilla) | ✔️ | v8 API: forward, backward data, backward weights |
