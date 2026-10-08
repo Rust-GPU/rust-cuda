@@ -264,3 +264,27 @@ jobs:
         run: shopt -s globstar && rustfmt --check tests/compiletests/ui/**/*.rs
       - name: Compiletest
         run: cargo run -p compiletests --release --no-default-features -- --target-arch compute_61,compute_75,compute_90
+
+  # cust's tests need a GPU, so the jobs above exclude them. PantheonSim
+  # simulates one on the runner's CPU and they run there. It checks results,
+  # not performance.
+  test-cust-simulated-gpu:
+    name: Test cust / simulated GPU
+    # Reads the repository only; the simulator's action uses no token or secrets.
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up CUDA and a simulated GPU
+        uses: pantheongpu/setup-pantheonsim@06648b8c0cb091584196678593215db2e16bd7eb # v0.1.2
+        with:
+          gpu: nvidia/t4
+          cuda-toolkit: '12.8'
+      - name: Install libclang for bindgen
+        run: sudo apt-get install -y libclang-dev
+      - name: Test cust
+        env:
+          CUDA_PATH: /usr/local/cuda-12.8
+        run: cargo test -p cust
