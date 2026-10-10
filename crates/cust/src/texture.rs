@@ -238,11 +238,6 @@ impl ResourceViewFormat {
         format_impl!(num_channels, I16, I16x1, I16x2, I16x4);
         format_impl!(num_channels, I32, I32x1, I32x2, I32x4);
         format_impl!(num_channels, F32, F32x1, F32x2, F32x4);
-        assert_ne!(
-            format,
-            ArrayFormat::F64,
-            "CUDA Does not have 64 bit float textures, you can instead use int textures with 2 channels then cast the ints to a double in the kernel"
-        );
         unreachable!()
     }
 }
