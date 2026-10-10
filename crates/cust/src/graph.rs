@@ -110,7 +110,7 @@ impl KernelInvocation {
         Self {
             func: raw.func,
             grid_dim: GridSize::xyz(raw.gridDimX, raw.gridDimY, raw.gridDimZ),
-            block_dim: BlockSize::xyz(raw.blockDimX, raw.gridDimY, raw.gridDimZ),
+            block_dim: BlockSize::xyz(raw.blockDimX, raw.blockDimY, raw.blockDimZ),
             params: Box::from_raw(raw.kernelParams),
             shared_mem_bytes: raw.sharedMemBytes,
             params_len: None,
