@@ -56,6 +56,8 @@ members = [
   "samples/introduction/async_api/kernels",
   "samples/introduction/matmul",
   "samples/introduction/matmul/kernels",
+  "samples/introduction/simple_atomic_intrinsics",
+  "samples/introduction/simple_atomic_intrinsics/kernels",
 
   "tests/compiletests",
   "tests/compiletests/deps-helper",

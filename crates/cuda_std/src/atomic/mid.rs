@@ -310,3 +310,33 @@ macro_rules! impl_cas {
 impl_cas! {
     u32, u64, i32, i64, f32, f64
 }
+
+#[gpu_only]
+#[allow(clippy::missing_safety_doc)]
+/// Performs a bounded increment like CUDA's atomicInc: if *ptr >= bound then 0 else *ptr+1, returns old value.
+pub unsafe fn atomic_inc_bounded_relaxed_u32_device(ptr: *mut u32, bound: u32) -> u32 {
+    loop {
+        let old = intrinsics::atomic_load_relaxed_32_device(ptr);
+        let new = if old >= bound { 0 } else { old + 1 };
+        if intrinsics::atomic_fetch_cas_relaxed_u32_device(ptr, old, new) == old {
+            return old;
+        }
+    }
+}
+
+#[gpu_only]
+#[allow(clippy::missing_safety_doc)]
+/// Performs a bounded decrement like CUDA's atomicDec: if *ptr == 0 || *ptr > bound then bound else *ptr-1, returns old value.
+pub unsafe fn atomic_dec_bounded_relaxed_u32_device(ptr: *mut u32, bound: u32) -> u32 {
+    loop {
+        let old = intrinsics::atomic_load_relaxed_32_device(ptr);
+        let new = if old == 0 || old > bound {
+            bound
+        } else {
+            old - 1
+        };
+        if intrinsics::atomic_fetch_cas_relaxed_u32_device(ptr, old, new) == old {
+            return old;
+        }
+    }
+}
