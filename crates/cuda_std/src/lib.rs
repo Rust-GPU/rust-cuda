@@ -42,6 +42,7 @@ pub mod mem;
 pub mod misc;
 // WIP
 // pub mod rt;
+pub mod async_copy;
 pub mod atomic;
 pub mod ptr;
 pub mod shared;
