@@ -20,7 +20,7 @@ pub fn dynamic_shared_mem<T>() -> *mut T {
         #[allow(improper_ctypes)]
         // mangle it a bit to make sure nobody makes the same thing
         #[link_name = "_Zcuda_std_dyn_shared"]
-        static DYN_SHARED: ::core::cell::UnsafeCell<u128>;
+        static DYN_SHARED: ::core::cell::UnsafeCell<[u128; 0]>;
     }
 
     // SAFETY: extern statics is how dynamic shared mem is done in CUDA. This will turn into

@@ -1,0 +1,7 @@
+.version 8.7
+.target sm_XX
+.address_size 64
+.extern .shared .align 16 .b8 _Zcuda_std_dyn_shared[];
+.visible .entry dynamic_shared( { ... }
+
+
